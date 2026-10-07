@@ -91,9 +91,10 @@ case "$cmd" in
         fi
         ;;
       --terminal-token)
-        # Compare against deployed token in credentials.json
-        deployed=""
-        if [ -r "$CREDS_FILE" ]; then
+        # Compare against the deployed invoker token. Env-first (OpenShell vault
+        # injects NEMOCLAW_INVOKER_TOKEN); fall back to the creds file if present.
+        deployed="${NEMOCLAW_INVOKER_TOKEN:-}"
+        if [ -z "$deployed" ] && [ -r "$CREDS_FILE" ]; then
           deployed="$(python3 -c "import json,sys; print(json.load(open('$CREDS_FILE')).get('NEMOCLAW_INVOKER_TOKEN',''))" 2>/dev/null)"
         fi
         if [ -n "$deployed" ] && [ -n "$val" ] && [ "$val" = "$deployed" ]; then
