@@ -72,6 +72,69 @@ non-cred state from our backup (NOT the cred file) → vault env-injects the 7 c
 `localhost:8080` (TLS/plaintext mismatch) — the openshell cluster context must be
 selected before any pod operation.
 
+## ✅ Platform upgrade executed (2026-10-07) — reversible work done; one destructive step staged
+
+**Done + verified (all reversible):**
+- Host `openshell` CLI upgraded **0.0.36 → 0.0.116** (Homebrew tap `nvidia/openshell`,
+  `scripts/install-openshell.sh`; our fork pins OpenShell to exactly 0.0.116).
+  Old binary saved at `backups/openshell-0.0.36-rollback` for rollback.
+- `~/.local/bin/openshell` repointed to the 0.0.116 brew binary; `openshell gateway
+  select nemoclaw` done.
+- Blueprint pins flipped 0.0.32–0.0.36 → **0.0.116** (`nemoclaw-blueprint/blueprint.yaml`).
+- Complete verified state backup: `backups/chad-full-preupgrade-20261007T154729Z.tar.gz`
+  (28M; .gbrain + .openclaw [minus regenerable plugin-runtime-deps] + .openclaw-data +
+  .nemoclaw; all critical files present).
+- Re-provision state captured: `backups/provider-list-preupgrade.txt`,
+  `inference-preupgrade.txt`, `gateway-info-preupgrade.txt`. 7 creds in
+  `backups/creds/credentials.json.premerge`.
+
+**Key facts discovered:**
+- The 0.0.116 CLI is **wire-incompatible** with the running 0.0.20 gateway
+  (`sandbox list` → Protobuf decode error). chad's pod still serves users
+  independently, but the host CLI cannot manage it until the gateway is recreated.
+- chad's sandbox is a **custom image built from the nemoclaw source `Dockerfile`**
+  (`onboard --from`; registry `imageTag: openshell/sandbox-from:…`), NOT the stock
+  pinned digest. The source Dockerfile already targets **OpenClaw 2026.9.2**.
+- `nemoclaw onboard` rewrites the source `Dockerfile` in place (ARG substitution) and
+  is driven by env: `NEMOCLAW_PROVIDER`, `NEMOCLAW_MODEL`, `NVIDIA_API_KEY`,
+  `NEMOCLAW_ENDPOINT_URL`, `NEMOCLAW_SANDBOX_NAME`, `NEMOCLAW_RECREATE_SANDBOX=1`,
+  `NEMOCLAW_POLICY_MODE`/`NEMOCLAW_POLICY_PRESETS`.
+- The lifecycle registry (`~/.nemoclaw/sandboxes.json`) entry for chad is incomplete
+  (missing openshellVersion/gatewayName/etc.) — doctor says "re-register or re-onboard
+  before lifecycle commands." The saved `onboard-session.json` is stale (all pending).
+
+### THE DESTRUCTIVE STEP (run to finish the upgrade) — takes live chad down
+```bash
+cd /Users/r/.nemoclaw/source
+# NVIDIA_API_KEY from backups/creds/credentials.json.premerge
+NEMOCLAW_PROVIDER=nvidia \
+NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b \
+NVIDIA_API_KEY="$(python3 -c "import json;print(json.load(open('/Users/r/.nemoclaw/backups/creds/credentials.json.premerge'))['NVIDIA_API_KEY'])")" \
+NEMOCLAW_SANDBOX_NAME=chad \
+NEMOCLAW_RECREATE_SANDBOX=1 \
+nemoclaw onboard --from Dockerfile --agent openclaw --sandbox-gpu \
+  --non-interactive --yes --yes-i-accept-third-party-software
+```
+This rebuilds the 2026.9.2 image, recreates the gateway at 0.0.116, and recreates the
+chad sandbox. **Note:** onboard creates a *fresh* openclaw.json — chad's real config,
+policies, cron, identity, gbrain are restored from the backup in the NEXT step.
+
+### POST-ONBOARD (Claude completes these — no human needed)
+1. Re-register vault creds + inference (gateway recreate wipes them):
+   `openshell inference set --provider nvidia-prod --model nvidia/nemotron-3-super-120b-a12b`
+   then the 8 `openshell provider create` registrations (see provider-list-preupgrade.txt;
+   values from credentials.json.premerge) — **but NOT a /sandbox/.nemoclaw/credentials.json**.
+2. Restore non-cred state from `chad-full-preupgrade-*.tar.gz`: `.gbrain`, `.openclaw`
+   (openclaw.json, identity, devices, cron, workspace, agents/sessions), `.openclaw-data`,
+   `.nemoclaw/blueprints` — NOT `credentials.json` (migrated to the vault).
+3. `chad-deploy.sh --push` (redeploy env-first scripts) + `chad-ops recover`
+   (gateway/shim/tunnel/cron).
+4. Verify: `nemoclaw chad doctor`, gbrain search, OpenWebUI round-trip, crons, backup/restore.
+
+### Rollback (if onboard fails badly, before re-provisioning)
+`cp backups/openshell-0.0.36-rollback ~/.local/bin/openshell` (break the symlink first),
+redeploy the 0.0.20 gateway, restore the backup. chad returns to the pre-upgrade state.
+
 ## Migration plan (phased, reversible until step 6)
 1. **Register** the operational creds as generic vault entries (env-injected). *Additive.*
 2. **Rewire** chad's scripts to read from env (via a `chad-cred` helper, env-first).
