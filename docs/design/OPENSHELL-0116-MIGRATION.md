@@ -72,6 +72,44 @@ non-cred state from our backup (NOT the cred file) → vault env-injects the 7 c
 `localhost:8080` (TLS/plaintext mismatch) — the openshell cluster context must be
 selected before any pod operation.
 
+## ⛔ BLOCKED (2026-10-07) — 0.0.116 gateway model is incompatible with our onboard
+
+The destructive recreate was attempted and **stopped before any teardown** when the
+blocker surfaced. chad never went down; CLI rolled back to 0.0.36; gateway 0.0.20 still
+healthy and manageable.
+
+**Root cause:** OpenShell 0.0.116 changed the gateway deployment model.
+- The `openshell gateway` CLI **removed `start`/`destroy`** (0.0.116 has only
+  add/remove/login/logout/select/info/list). The local gateway is now a standalone
+  `openshell-gateway` gRPC/HTTP **server** (run via the Homebrew service
+  `openshell-gateway-homebrew-service` or `brew services`, auto-detecting its
+  driver), which you then register with `openshell gateway add <endpoint> --local`.
+- Our fork's `bin/lib/onboard.js` still calls `openshell gateway start` (line ~2039)
+  and `gateway destroy` (~1633, ~1790). Against the 0.0.116 CLI those fail, so
+  `nemoclaw onboard` would abort **mid-teardown** — the worst possible time.
+- Secondary: the brew gateway service defaults to name `openshell` / port `17670`,
+  while our whole topology (chad-shim, cloudflared tunnel, OpenWebUI) is wired to
+  gateway `nemoclaw` / port `8080`. The 0.0.116 deploy must be pinned to that
+  name+port (via `openshell-gateway` flags) or the topology breaks.
+- Also confirmed en route: the 0.0.116 CLI is Protobuf-wire-incompatible with a
+  0.0.20 gateway (`sandbox list` fails), so a half-upgraded CLI cannot manage the
+  old gateway — which is why the CLI was rolled back.
+
+**Path forward (a tested dev task, NOT a blind destructive run):**
+1. First check whether upstream's `onboard.js` already deploys the gateway via the
+   0.0.116 `openshell-gateway` service + `gateway add` (i.e. our merge kept the old
+   `gateway start` calls by mistake). If so, this is a merge reconciliation, not new code.
+2. Otherwise patch `startGatewayWithOptions`/destroy paths in `bin/lib/onboard.js` to
+   launch `openshell-gateway` (driver=docker, `--port 8080`, state dir, pinned
+   `OPENSHELL_CLUSTER_IMAGE`=cluster:0.0.116) named `nemoclaw`, then `gateway add`.
+3. Dry-run onboard against a THROWAWAY sandbox/gateway first to validate the 0.0.116
+   deploy end-to-end before touching chad.
+4. Only then: run the staged recreate below + post-onboard restore.
+
+**Staged assets remain valid** (backup, rollback binary, re-provision state, the
+onboard command). The blueprint pins were reverted to the live 0.0.32-0.0.36 range so
+the running system stays self-consistent until the binary upgrade actually lands.
+
 ## ✅ Platform upgrade executed (2026-10-07) — reversible work done; one destructive step staged
 
 **Done + verified (all reversible):**
