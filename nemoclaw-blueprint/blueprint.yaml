@@ -2,11 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 version: "0.1.0"
-# NOTE(chad): pinned to chad's live OpenShell range (0.0.32-0.0.36). Upstream now
-# requires OpenShell 0.0.116 (MCP/JSON-RPC L7 policy support, NVIDIA/OpenShell#1865);
-# bump these to "0.0.116" AFTER upgrading the pod's OpenShell binary (see TODO).
-min_openshell_version: "0.0.32"
-max_openshell_version: "0.0.36"
+# NOTE(chad): pinned to OpenShell 0.0.116 (MCP/JSON-RPC L7 policy support,
+# NVIDIA/OpenShell#1865). Host CLI + gateway upgraded 0.0.36→0.0.116 on 2026-10-07
+# (see docs/design/OPENSHELL-0116-MIGRATION.md). Our fork pins OpenShell to exactly
+# 0.0.116 (install-openshell.sh MIN=MAX=PIN).
+min_openshell_version: "0.0.116"
+max_openshell_version: "0.0.116"
 min_openclaw_version: "2026.4.24"
 # Mirrors the components.sandbox.image manifest digest below. Lets a
 # downstream consumer (or release tooling) verify the blueprint declares
