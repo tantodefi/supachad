@@ -72,43 +72,51 @@ non-cred state from our backup (NOT the cred file) → vault env-injects the 7 c
 `localhost:8080` (TLS/plaintext mismatch) — the openshell cluster context must be
 selected before any pod operation.
 
-## ⛔ BLOCKED (2026-10-07) — 0.0.116 gateway model is incompatible with our onboard
+## ✅ VALIDATED (2026-10-07) — initial "blocker" was DEAD CODE; cutover path proven
 
-The destructive recreate was attempted and **stopped before any teardown** when the
-blocker surfaced. chad never went down; CLI rolled back to 0.0.36; gateway 0.0.20 still
-healthy and manageable.
+**Correction to the earlier blocked note:** the `openshell gateway start`/`destroy`
+calls that looked like a blocker live in `bin/lib/onboard.js`, which is an **orphaned
+legacy file** — nothing in the active runtime requires it. The real `nemoclaw onboard`
+is the TS-migrated `dist/lib/onboard.js`, which is **version-aware**: it checks
+`supportsLifecycle(...)` and, on macOS, `startGatewayWithOptions` (src/lib/onboard/
+gateway/start.ts:103-142) **reuses an already-running gateway** rather than starting it
+(the Linux-docker-driver auto-start branch is skipped on macOS). So onboard will NOT
+fail on `gateway start`.
 
-**Root cause:** OpenShell 0.0.116 changed the gateway deployment model.
-- The `openshell gateway` CLI **removed `start`/`destroy`** (0.0.116 has only
-  add/remove/login/logout/select/info/list). The local gateway is now a standalone
-  `openshell-gateway` gRPC/HTTP **server** (run via the Homebrew service
-  `openshell-gateway-homebrew-service` or `brew services`, auto-detecting its
-  driver), which you then register with `openshell gateway add <endpoint> --local`.
-- Our fork's `bin/lib/onboard.js` still calls `openshell gateway start` (line ~2039)
-  and `gateway destroy` (~1633, ~1790). Against the 0.0.116 CLI those fail, so
-  `nemoclaw onboard` would abort **mid-teardown** — the worst possible time.
-- Secondary: the brew gateway service defaults to name `openshell` / port `17670`,
-  while our whole topology (chad-shim, cloudflared tunnel, OpenWebUI) is wired to
-  gateway `nemoclaw` / port `8080`. The 0.0.116 deploy must be pinned to that
-  name+port (via `openshell-gateway` flags) or the topology breaks.
-- Also confirmed en route: the 0.0.116 CLI is Protobuf-wire-incompatible with a
-  0.0.20 gateway (`sandbox list` fails), so a half-upgraded CLI cannot manage the
-  old gateway — which is why the CLI was rolled back.
+**The real 0.0.116 model (confirmed on this Mac):** the gateway is the native
+`openshell-gateway` gRPC/HTTP server, configured by flags / `gateway.toml` / env, TLS at
+`/opt/homebrew/var/openshell/tls/`, using a **docker compute driver** that pulls
+`ghcr.io/nvidia/openshell/supervisor:0.0.116` and manages sandbox containers directly
+(no more `cluster:x` container). You register the CLI to it with
+`openshell gateway add <endpoint> --local`, then `nemoclaw onboard` reuses it.
 
-**Path forward (a tested dev task, NOT a blind destructive run):**
-1. First check whether upstream's `onboard.js` already deploys the gateway via the
-   0.0.116 `openshell-gateway` service + `gateway add` (i.e. our merge kept the old
-   `gateway start` calls by mistake). If so, this is a merge reconciliation, not new code.
-2. Otherwise patch `startGatewayWithOptions`/destroy paths in `bin/lib/onboard.js` to
-   launch `openshell-gateway` (driver=docker, `--port 8080`, state dir, pinned
-   `OPENSHELL_CLUSTER_IMAGE`=cluster:0.0.116) named `nemoclaw`, then `gateway add`.
-3. Dry-run onboard against a THROWAWAY sandbox/gateway first to validate the 0.0.116
-   deploy end-to-end before touching chad.
-4. Only then: run the staged recreate below + post-onboard restore.
+**End-to-end validated NON-destructively** (throwaway gateway on port 18080, temp state,
+docker driver — torn down after; chad untouched throughout):
+- 0.0.116 `openshell-gateway` starts healthy on this Mac (TLS/mTLS, docker driver,
+  supervisor:0.0.116 pulled, workspace created, `healthz` 200).
+- 0.0.116 CLI → 0.0.116 gateway: `gateway add` ✓, `sandbox list` ✓ (**no protobuf skew**).
+- Confirmed isolatable: old `openshell-cluster-nemoclaw` + chad sandbox + OpenWebUI all
+  stayed up the entire time.
 
-**Staged assets remain valid** (backup, rollback binary, re-provision state, the
-onboard command). The blueprint pins were reverted to the live 0.0.32-0.0.36 range so
-the running system stays self-consistent until the binary upgrade actually lands.
+### CUTOVER RUNBOOK (destructive — chad down during it; every component pre-validated)
+1. Re-activate 0.0.116 CLI: point `~/.local/bin/openshell` back at `/opt/homebrew/bin/openshell`.
+2. **Persistent gateway service**: configure `openshell-gateway` as a durable service
+   (launchd via `brew services`, or a `dev.nemoclaw.openshell-gateway.plist`) with
+   `--name nemoclaw --port 8080 --bind-address 127.0.0.1 --drivers docker` + the TLS
+   certs, so it survives reboots like the old docker gateway did. Write the config to
+   `~/.config/openshell/gateway.{toml,env}`.
+3. Stop the old 0.0.20 gateway (`docker stop openshell-cluster-nemoclaw`) and start the
+   0.0.116 service; `openshell gateway add https://127.0.0.1:8080 --local --name nemoclaw`.
+4. `nemoclaw onboard --from Dockerfile ...` (env-driven, see staged command below) —
+   reuses the running gateway, builds the 2026.9.2 image, creates the chad sandbox.
+5. Re-provision vault creds + inference; restore non-cred state from the backup; redeploy
+   env-first scripts; `chad-ops recover`; verify (doctor, gbrain, OWUI, crons).
+   Re-flip blueprint pins to 0.0.116 once the sandbox is live on it.
+
+**Remaining pre-cutover item:** finalize + test the persistent gateway service config
+(step 2) — a launchd plist wrapping `openshell-gateway` for nemoclaw:8080, so the
+always-on gateway survives reboots. All other components are proven. Staged assets
+(backup, rollback binary, re-provision state) remain valid.
 
 ## ✅ Platform upgrade executed (2026-10-07) — reversible work done; one destructive step staged
 
