@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 version: "0.1.0"
-# NOTE(chad): still pinned to chad's LIVE range (0.0.32-0.0.36). The 0.0.116
-# upgrade is BLOCKED (see docs/design/OPENSHELL-0116-MIGRATION.md): the 0.0.116
-# CLI removed `gateway start`/`destroy`, which bin/lib/onboard.js still calls, so
-# onboard would fail mid-teardown. Keep these at the live range until onboard's
-# gateway deploy is reconciled with the 0.0.116 `openshell-gateway` service model;
-# only then bump to "0.0.116".
+# NOTE(chad): still pinned to chad's LIVE range (0.0.32-0.0.36) while the 0.0.116
+# cutover is pending. The 0.0.116 path is VALIDATED (see docs/design/OPENSHELL-0116-
+# MIGRATION.md): the earlier "gateway start removed" blocker was dead code in the
+# orphaned bin/lib/onboard.js; the active onboard reuses an externally-started
+# openshell-gateway, which was proven to come up healthy on this Mac. Bump these to
+# "0.0.116" as the final step of the cutover (after onboard creates chad on 0.0.116).
 min_openshell_version: "0.0.32"
 max_openshell_version: "0.0.36"
 min_openclaw_version: "2026.4.24"
