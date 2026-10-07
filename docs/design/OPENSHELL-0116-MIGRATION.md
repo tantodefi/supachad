@@ -44,6 +44,34 @@ READMEs). Because the vault injects each generic cred under its **own key name**
 (env) instead of `credentials.json['GITHUB_TOKEN']`. A tiny `chad-cred` helper (env-first,
 file-fallback during transition) keeps everything working until the file is removed.
 
+## ⚠️ Scope finding (2026-10-07) — this is a PLATFORM upgrade, not a pin flip
+Two discoveries change phase 6 from "`nemoclaw chad rebuild`" into a bigger operation:
+
+1. **Version skew requires a host/cluster upgrade first.** The blueprint comment is
+   explicit: *"bump these to 0.0.116 AFTER upgrading the pod's OpenShell binary."* The
+   host `openshell` CLI is **0.0.36**; the pod runs the OpenShell binary the 0.0.36
+   host/cluster provisions. Getting **0.0.116 into the pod requires upgrading the host
+   OpenShell CLI (0.0.36 → 0.0.116) and its cluster**, then recreating the pod — *then*
+   flipping the pins. This is a host-platform upgrade, with its own risk surface, not a
+   sandbox-only change.
+2. **The rebuild scanner surface spans many state files, not just `credentials.json`.**
+   A content scan of `/sandbox` shows secret-bearing files across the tree:
+   `.gbrain/config.json` (holds the NVIDIA key), `.openclaw/openclaw.json` (device/gateway
+   creds), chad-premium preset, and session trajectories (may contain secrets Chad
+   handled). The **transactional** (export-based) rebuild would reject these one by one —
+   whack-a-mole. The clean path is a **fresh pod recreate + selective restore from our own
+   backup** (the cold-start runbook), which never runs the export scanner. That path
+   depends on the host/cluster already being 0.0.116 (point 1).
+
+**Revised recommended mechanism for phase 6:** upgrade host CLI + cluster to 0.0.116 →
+recreate the chad pod on the new platform (gets OpenShell 0.0.116) → restore gbrain +
+non-cred state from our backup (NOT the cred file) → vault env-injects the 7 creds →
+`chad-ops recover`. The transactional `nemoclaw chad rebuild` is the wrong tool here.
+
+**Also note:** kubectl in the current host shell is pointing at the default
+`localhost:8080` (TLS/plaintext mismatch) — the openshell cluster context must be
+selected before any pod operation.
+
 ## Migration plan (phased, reversible until step 6)
 1. **Register** the operational creds as generic vault entries (env-injected). *Additive.*
 2. **Rewire** chad's scripts to read from env (via a `chad-cred` helper, env-first).
@@ -54,11 +82,34 @@ file-fallback during transition) keeps everything working until the file is remo
 7. **Restore** gbrain + non-cred state; `chad-ops recover` for gateway/shim/tunnel/cron.
 8. **Verify** functionality (doctor, gbrain search, OpenWebUI, crons, backup/restore).
 
-## CONSEQUENCES LOG (what broke / needs rewiring / needs re-provisioning)
-_Populated as we execute._
+## Progress
+- ✅ **Phase 1 (2026-10-07):** registered 6 generic vault creds — `chad-github`,
+  `chad-proton-user`, `chad-proton-pass`, `chad-invoker`, `chad-anthropic`,
+  `chad-nvidia-scripts` — alongside the pre-existing `nvidia-prod` + `chad-brave-search`.
+  All 7 operational creds are now in the gateway vault; they env-inject on next
+  sandbox start (additive + reversible via `openshell provider delete`).
 
-- [pending] Host `chad-ops creds-sync` currently pushes the file → must become vault registration.
-- [pending] ~15 in-sandbox scripts read `credentials.json` → env rewire (via `chad-cred` helper).
-- [pending] The chad **shim** (host-side `chad-shim.py`) reads `CHAD_OPERATOR_ALLOWLIST` from the pod creds file — confirm whether it's host-side (host creds) or needs the vault.
-- [pending] `NVIDIA_API_KEY` is both a provider (inference) AND read by scripts → register generic too.
-- [open question] Does the rebuild preserve `.openclaw-data` (channel creds, cron, identity), or do those also trip the scanner? Test `backup-all` after the file is gone.
+## CONSEQUENCES LOG (what broke / needs rewiring / needs re-provisioning)
+
+- ✅ **Good news — scripts were already env-first.** `chad-backup/restore/clone`
+  (GITHUB_TOKEN), `chad-premium-client` (ANTHROPIC), `chad-moshi-notify` (MOSHI) all
+  use env before the file. Since the vault now injects those env vars, they work
+  without the file. **No mass rewire needed.**
+- ✅ **Fixed:** `chad-auth-context` now reads `NEMOCLAW_INVOKER_TOKEN` env-first
+  (commit 190561609f).
+- ✅ host-side + env-first, unaffected by pod file removal: `chad-shim.py`
+  (CHAD_OPERATOR_ALLOWLIST from host env), `chad-smithers/*` (host creds).
+- ⚠️ **TODO — `chad-ops creds-sync` rewrites the pod file** (`cmd_creds_sync`,
+  chad-ops.sh:159). It MUST stop writing `/sandbox/.nemoclaw/credentials.json` (that
+  re-introduces the scanner blocker) and instead register/refresh vault providers.
+  **Blocking:** until fixed, the next creds-sync undoes the migration.
+- ⚠️ **TODO — `chad-webui` is deployed IN the sandbox** (`/sandbox/.openclaw-data/bin/chad-webui`)
+  and reads creds from the file — notably it needs `OPENWEBUI_API_KEY`, which is NOT one
+  of the 7 pod creds today. If chad-webui is used in-sandbox, `OPENWEBUI_API_KEY` must be
+  added to the vault (generic) too. Verify its exact key usage.
+- ⚠️ **OPEN for the rebuild — other credential files under `/sandbox`.** The scanner
+  rejects ANY credential-bearing file, not just `credentials.json`. `.openclaw-data`
+  likely holds channel creds (whatsapp/proton session, gateway tokens). The transactional
+  rebuild's export may flag these too. **Must test `backup-all`/rebuild export after the
+  main file is gone and handle each flagged file** (move its cred into the vault, or
+  confirm it's regenerated, not archived).
