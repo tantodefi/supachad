@@ -72,6 +72,45 @@ non-cred state from our backup (NOT the cred file) → vault env-injects the 7 c
 `localhost:8080` (TLS/plaintext mismatch) — the openshell cluster context must be
 selected before any pod operation.
 
+## ⛔ CUTOVER ATTEMPT 2 (2026-10-08) — reached sandbox-Ready; blocked on docker-driver settlement
+
+Got MUCH further than attempt 1. chad restored + serving on 0.0.20 after rollback.
+Sequence that now WORKS end-to-end: activate 0.0.116 CLI → `docker stop` old gateway →
+launchd `openshell-gateway` (nemoclaw:8080, docker driver) → `gateway add/select` (brew
+certs match) → `nemoclaw onboard --fresh --from Dockerfile` → **image builds clean** →
+**sandbox 'chad' reaches Ready**.
+
+**Two real blockers resolved along the way:**
+1. ✅ **mcporter audit gate** (the real attempt-1 "build failure", NOT memory): the
+   sandbox-base build's `verify-mcporter-audit.sh` blocked on 2 high+ advisories
+   (GHSA-jqcg-44mw-7w3h critical proxy-addr, GHSA-6qxp-vccf-f47h high MCP SDK). Fixed by
+   bumping mcporter-runtime proxy-addr 2.0.7→2.0.8 + @modelcontextprotocol/sdk
+   1.29.0→1.32.1 (non-breaking, lockfile-only, commit 96927d3200). Build now clean.
+   **The Docker memory bump was never needed** (settings-store.json edits are reverted by
+   Docker Desktop anyway; build succeeds on 7.75 GiB).
+2. ✅ **Docker/registry hygiene**: cleared stale forward pid, pruned stale sandbox
+   registry entries (test-sb/my-sb + old 0.0.20 chad), provider key is `build` (not
+   `nvidia`) for NVIDIA-hosted inference (integrate.api.nvidia.com/v1).
+
+**THE REMAINING BLOCKER — `settlement-incomplete` (reproducible):** after the sandbox
+reaches Ready, onboard's finalization (`src/lib/onboard/created-sandbox-finalization.ts`,
+`sandbox-readiness-tracing.ts`) requires OpenShell to return "one exact durable sandbox
+identity" for the create. The 0.0.116 **docker-driver** gateway does NOT return it
+(`identityWasUnavailable: true`) → onboard errors + writes a retained-recovery record.
+No bypass env/flag exists. Likely the finalization assumes **kubernetes-driver** behavior
+(the old 0.0.20 gateway was k3s). Each failed attempt leaves
+`~/.nemoclaw/retained-sandbox-recovery.json` which then blocks destroy AND onboard
+(catch-22); cleared manually after verifying the sandbox is truly absent (gateway empty,
+no container, identity null = nothing durably created).
+
+**Fix paths for next session (pick one):**
+- (a) Patch onboard finalization to accept a docker-driver sandbox that reached Ready
+  without the durable-identity response (treat Ready as success when driver=docker), OR
+- (b) deploy the 0.0.116 gateway with `--drivers kubernetes` against a k3s (match the old
+  model so the identity IS returned), OR
+- (c) determine the gateway/driver config that makes the docker driver return the durable
+  identity. Then re-run the proven sequence above → restore state → recover → verify.
+
 ## ✅ VALIDATED (2026-10-07) — initial "blocker" was DEAD CODE; cutover path proven
 
 **Correction to the earlier blocked note:** the `openshell gateway start`/`destroy`
