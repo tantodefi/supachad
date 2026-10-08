@@ -72,6 +72,41 @@ non-cred state from our backup (NOT the cred file) → vault env-injects the 7 c
 `localhost:8080` (TLS/plaintext mismatch) — the openshell cluster context must be
 selected before any pod operation.
 
+## ✅ CUTOVER ATTEMPT 3 (2026-10-08) — OpenShell layer SOLVED; onboard reaches [7/8]
+
+The settlement blocker is cracked — the root cause was NOT settlement-code strictness (that
+patch was wrong + reverted). It was **the gateway deployed without sandbox-JWT auth**. The
+0.0.116 docker driver requires gateway-minted sandbox JWT; without it, sandboxes are created
+("reach Ready") but never register → `sandbox list` is empty → settlement times out.
+Confirmed via SETTLE_DIAG instrumentation (selector AND no-selector list both `[]`).
+
+**Gateway deployment recipe that works (host config, no code change):**
+- launchd plist runs `openshell-gateway` **directly** (NOT the `…-homebrew-service` bash
+  wrapper — onboard's process-identity preflight must see the real binary with `--name`):
+  `openshell-gateway --name nemoclaw --bind-address 127.0.0.1 --port 8080 --health-port 8090
+  --tls-cert/key/client-ca <LTD>/… --drivers docker`
+- with env **`OPENSHELL_LOCAL_TLS_DIR=/Users/r/.local/state/openshell/homebrew/tls`** — that
+  dir has `jwt/signing.pem` (→ "gateway-minted sandbox JWT enabled") and lives under $HOME so
+  Docker Desktop can bind-mount it into sandbox containers. (The homebrew-service launcher
+  populates that dir; we reuse it but invoke the binary directly.)
+- `~/.config/openshell/gateway.env`: `OPENSHELL_GATEWAY_NAME=nemoclaw`, `OPENSHELL_SERVER_PORT=8080`,
+  `OPENSHELL_HEALTH_PORT=8090`, `OPENSHELL_DRIVERS=docker`.
+- Gateway log must show BOTH `mTLS user authentication enabled` AND `gateway-minted sandbox
+  JWT enabled`. Both present ⇒ onboard reaches **`✓ Sandbox 'chad' created`** and settles.
+
+**Remaining blocker (task #38) — OpenClaw AGENT gateway, a different layer:** onboard [7/8]
+"Setting up OpenClaw inside sandbox" fails — the OpenClaw agent gateway inside the sandbox is
+unreachable (`ws://127.0.0.1:18789` ECONNREFUSED on restart), sandbox → phase Error. Prime
+suspect: bonjour/mDNS plugin crashing the OpenClaw gateway (known chad gotcha) and/or the
+sandbox-writable `.openclaw/{devices,workspace/state,identity,cron}` subpaths. Fix likely =
+disable bonjour in the sandbox image's default openclaw.json (Dockerfile) / ensure subpaths,
+so [7/8] gateway restart succeeds → [8/8] → state restore → chad-ops recover → verify.
+
+Also resolved: the k8s route is the WRONG path for chad (OpenShell docs: Docker is the
+supported local/single-machine driver; the k8s path is experimental + needs the Agent Sandbox
+CRDs + a NetworkPolicy-enforcing CNI that Docker Desktop's kind lacks). Docker Desktop k8s was
+enabled during investigation but isn't needed; can be turned back off.
+
 ## ⛔ CUTOVER ATTEMPT 2 (2026-10-08) — reached sandbox-Ready; blocked on docker-driver settlement
 
 Got MUCH further than attempt 1. chad restored + serving on 0.0.20 after rollback.
