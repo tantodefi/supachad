@@ -4224,6 +4224,51 @@ launch_openclaw_gateway_non_root() {
   echo "[gateway] openclaw gateway launched (pid $GATEWAY_PID)" >&2
 }
 
+# Bounded first-run convergence respawn. OpenClaw 2026.9.2 refuses to report the
+# gateway ready and exits when plugin-migration inputs change during startup
+# convergence (#4710), printing "Restart OpenClaw so state migrations run against
+# the final config and plugin inventory." The first launch of a freshly onboarded
+# sandbox hits this because onboard writes the final config/plugin inventory just
+# before [7/8]. Without a respawn the gateway's exit ends this script's `wait`, the
+# container's main process exits, and onboard's [7/8] `openclaw gateway restart`
+# (run inside the sandbox) finds no listener (ws://127.0.0.1:<port> ECONNREFUSED).
+# Relaunching lets migrations settle against the now-final config so the next launch
+# reports ready and stays up. Bounded so a genuinely wedged gateway cannot crash-loop.
+_NEMOCLAW_GATEWAY_CONVERGENCE_MAX="${NEMOCLAW_GATEWAY_CONVERGENCE_MAX:-6}"
+
+# True when the just-exited gateway printed the first-run convergence refusal. The
+# message is emitted immediately before exit, and /tmp/gateway.log is recreated at
+# each launch (truncate mode), so a match reflects only the current launch.
+gateway_exited_for_convergence() {
+  grep -qE 'refusing to report the gateway ready|migration inputs changed during startup convergence' \
+    /tmp/gateway.log 2>/dev/null
+}
+
+# Wait on the gateway; on a first-run convergence exit, relaunch (bounded) until it
+# stays up ready. $1 is the launch function to re-invoke (root vs non-root). Returns
+# the gateway's final exit status once it is no longer a convergence exit (or the cap
+# is reached). The one-shot log tail, persistent mirror, and auto-pair watcher started
+# by the caller keep working across relaunches (tail -F re-follows; auto-pair polls).
+wait_openclaw_gateway_with_convergence_respawn() {
+  local relaunch="$1"
+  local attempts=0 rc
+  while :; do
+    wait "$GATEWAY_PID"
+    rc=$?
+    if gateway_exited_for_convergence \
+      && [ "$attempts" -lt "$_NEMOCLAW_GATEWAY_CONVERGENCE_MAX" ]; then
+      attempts=$((attempts + 1))
+      echo "[gateway] first-run convergence exit (rc=${rc}); relaunching to settle migrations (attempt ${attempts}/${_NEMOCLAW_GATEWAY_CONVERGENCE_MAX})" >&2
+      "$relaunch" || return 1
+      # shellcheck disable=SC2034  # read by cleanup_on_signal from sandbox-init.sh
+      SANDBOX_WAIT_PID="$GATEWAY_PID"
+      refresh_openclaw_supervised_child_pids
+      continue
+    fi
+    return "$rc"
+  done
+}
+
 openclaw_supervised_aux_pid_is_live() {
   local pid="$1"
   local expected_identity="$2"
@@ -5266,7 +5311,7 @@ if [ "$(id -u)" -ne 0 ]; then
   SANDBOX_WAIT_PID="$GATEWAY_PID"
   print_dashboard_urls
 
-  wait "$GATEWAY_PID"
+  wait_openclaw_gateway_with_convergence_respawn launch_openclaw_gateway_non_root
   exit $?
 fi
 
@@ -5447,4 +5492,4 @@ refresh_openclaw_supervised_child_pids
 SANDBOX_WAIT_PID="$GATEWAY_PID"
 print_dashboard_urls
 
-wait "$GATEWAY_PID"
+wait_openclaw_gateway_with_convergence_respawn launch_openclaw_gateway
