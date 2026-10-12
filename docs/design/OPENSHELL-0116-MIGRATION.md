@@ -72,6 +72,39 @@ non-cred state from our backup (NOT the cred file) → vault env-injects the 7 c
 `localhost:8080` (TLS/plaintext mismatch) — the openshell cluster context must be
 selected before any pod operation.
 
+## 🔬 [7/8] DEEP-DIVE (2026-10-12) — staging harness; blocker is the docker-driver forward
+
+Investigated onboard [7/8] on a **staging harness so chad is never touched** (chad stays on
+0.0.20): a second 0.0.116 gateway `nemoclaw-8081`→`nemoclaw-18080` on a spare port, driven by
+`NEMOCLAW_GATEWAY_PORT=18080` + `NEMOCLAW_OPENSHELL_BIN=/opt/homebrew/opt/openshell/bin/openshell`
++ a throwaway `stage` sandbox. Reusable; chad's gateway/CLI untouched throughout.
+
+**What we proved:**
+- The OpenClaw 2026.9.2 agent gateway **does reach ready inside the sandbox** — a converge
+  pass logged `[gateway] ready`, 14 plugins, and `device pairing auto-approved role=operator`.
+- First-run it applies state migrations and, with `gateway.reload=off` (#4710), **refuses ready
+  + exits** until restarted. A first-run converge pass (run `gateway run` once, stop on ready so
+  migrations persist) resolves that specific refusal.
+- **BUT even with the in-sandbox gateway ready, onboard (on the HOST) still gets
+  `ws://127.0.0.1:18789 ECONNREFUSED`.** The real wall is the **host→sandbox port-forward** for
+  the dashboard/gateway port under the 0.0.116 docker driver — the same failure class as attempt
+  1's "Cannot allocate dashboard port: could not prove OpenShell forward ownership." The gateway
+  is fine; onboard can't *reach* it.
+
+**Tried and reverted (none fixed [7/8], all working-tree only, now reverted):** settlement-metadata
+relax (wrong branch — reverted), plugin pre-install (plugin is already baked; `plugins install
+/opt/nemoclaw` fails — no package.json), first-run converge pass in nemoclaw-start (loopback +
+kill-on-ready — does converge the migration but doesn't fix the forward), `gateway.bind:loopback`
+(WRONG: loopback isn't forward-reachable from the host → guarantees ECONNREFUSED), `bind:auto`.
+
+**Conclusion / next:** the remaining blocker is onboard's **docker-driver host↔sandbox port
+forward** (host 18789 → sandbox 18789), not the agent gateway. Fixing it needs work in onboard's
+docker-driver forward path (and likely NemoClaw/OpenShell upstream guidance for the 0.0.116 local
+docker-driver model, which is still maturing — see NVIDIA/OpenShell#1314). The converge-pass idea
+is sound and can be re-applied once the forward works. The only committed change from this whole
+effort is the mcporter security bump (96927d3200); everything else is reverted — chad is safe and
+serving on 0.0.20.
+
 ## ✅ CUTOVER ATTEMPT 3 (2026-10-08) — OpenShell layer SOLVED; onboard reaches [7/8]
 
 The settlement blocker is cracked — the root cause was NOT settlement-code strictness (that
