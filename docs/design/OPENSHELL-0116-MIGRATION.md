@@ -4,9 +4,71 @@
 # OpenShell 0.0.116 upgrade — credential migration + consequences log
 
 **Goal:** Chad running on OpenShell 0.0.116 with config/files/functionality preserved.
-**Status (2026-10-07):** chad healthy on 0.0.36; migration in progress. Backups current
-(host tarball `pre-openshell-bump-20261007T071918Z.tar.gz` + GitHub chad-state +
+**Status (2026-10-13):** latest upstream merged + on `main`; whole migration validated end-to-end on
+a parallel `chad-next` container (0.0.116); live chad serving normally on 0.0.20. Remaining =
+execute the cutover runbook below (destructive) + the durable gbrain bake. Backups current
+(`backups/chad-precutover-20261012T154219Z.tar.gz` + GitHub chad-state +
 `backups/creds/credentials.json.premerge`).
+
+---
+
+## ✅ VALIDATED CUTOVER RUNBOOK (2026-10-13) — every step proven on chad-next
+
+This supersedes the earlier dated attempts below. The whole migration was validated end-to-end
+against a parallel `chad-next` sandbox (gateway `nemoclaw-8088` on spare port 8088) while live chad
+stayed on 0.0.20 — merged upstream code onboards, container ops work, gbrain runs, serving forwards.
+Latest upstream is merged + on `main` (commit lineage f3537ddce7 → d340b81bcd). chad's sandbox moves
+from a k8s **pod** (cluster:0.0.20) to a native-gateway **docker-driver container** — the cluster
+model is gone in 0.0.116.
+
+### Proven primitives (container model)
+- **exec (non-root uid 998):** `openshell -g <gw> sandbox exec -n <name> --timeout N -- sh -c '…'`
+- **root exec:** `docker exec -u 0 <container> sh -c '…'` (needed for /usr/local/bin writes)
+- **file push:** `docker cp src <container>:/tmp/x` → root exec `mv+chown` (bypasses landlock)
+- **serving:** `openshell -g <gw> forward service --target-port <p> --local 127.0.0.1:<hp> <name>`
+  (gRPC loopback forward; replaces the pod `ssh -L` tunnel) — gateway 18791 forwarded = HTTP 200
+- container name = `openshell-default--<sandbox>-<uuid>` (`docker ps | grep`)
+
+### Cutover sequence (destructive — live chad down during it; rollback = restart the 0.0.20 cluster)
+1. **Fresh backup** of live chad `/sandbox` (gbrain + .openclaw + .openclaw-data + .nemoclaw) via
+   `docker exec cluster kubectl exec chad -- tar … | gzip` (see `backups/chad-precutover-*.tar.gz`).
+   Also tar out the gbrain+bun RUNTIME: `tar c /usr/local/lib/gbrain /usr/local/bin/bun`.
+2. **Quiet watchdogs:** `launchctl bootout` chad-gateway/shim/tunnel-watchdog.
+3. **Free 8080:** `docker stop openshell-cluster-nemoclaw` (live chad goes down here).
+4. **Promote gateway:** `launchctl bootstrap … dev.nemoclaw.openshell-gateway` (native 0.0.116 on
+   8080, `--drivers docker`, `OPENSHELL_LOCAL_TLS_DIR` with jwt/ → logs "mTLS … enabled" +
+   "gateway-minted sandbox JWT enabled"). Re-enroll CLI: `openshell gateway add https://127.0.0.1:8080
+   --name nemoclaw --local`.
+5. **Clear stale registry** (else onboard throws "predates native NVIDIA provider attachments"):
+   remove any `chad` entry from `~/.nemoclaw/gateways/8080/sandboxes.json` + `onboard-session.json`.
+6. **Onboard** (merged tree): `NVIDIA_API_KEY=… NEMOCLAW_YES=1 NEMOCLAW_PROVIDER=build
+   NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b NEMOCLAW_IGNORE_RUNTIME_RESOURCES=1
+   NEMOCLAW_OPENSHELL_BIN=/opt/homebrew/opt/openshell/bin/openshell nemoclaw onboard
+   --non-interactive --yes --yes-i-accept-third-party-software --recreate-sandbox --name chad
+   --from /Users/r/.nemoclaw/source/Dockerfile` → expect [1/8]..[8/8] "Deployment verified"
+   (the #38 convergence-respawn in nemoclaw-start.sh makes [7/8] pass).
+7. **Deploy custom layer:** `CHAD_DEPLOY_VIA=container CHAD_SANDBOX=chad chad-deploy.sh --push`.
+8. **gbrain runtime:** docker cp the gbrain+bun tar into the container, extract as root (durable TODO:
+   bake a `bun install github:tantodefi/gbrain` + patches layer into the chad Dockerfile).
+9. **Recover:** `CHAD_SANDBOX_MODE=container CHAD_SANDBOX=chad chad-ops.sh recover` (chown, gbrain-fix,
+   gate-sync, cron-reload, skills-register, gbrain-config, creds-sync).
+10. **Restore memory:** docker cp chad's `brain.pglite` + apply the **halfvec/2048 schema fix**
+    (NOT a naive `gbrain init` — fresh init re-runs `CREATE INDEX hnsw` on vector(2048) → FAILS; see
+    [[project_gbrain_embed_stack]]); embed-backfill.
+11. **Serving:** ensure chad-shim running in-container (8901); `forward service --target-port 8901
+    --local 127.0.0.1:8901 chad` (persistent via launchd); point OWUI/nvidia-proxy at host:8901.
+    Retire the SSH-tunnel + pod-gateway watchdogs (container self-supervises the gateway).
+12. **Verify:** OWUI 200, chad responds, gbrain health, operator-allowlist gate denies/allows.
+    **Rollback:** `launchctl bootout` the 0.0.116 gateway → `docker start openshell-cluster-nemoclaw`
+    → reload watchdogs; chad back on 0.0.20 in ~1–2 min (the cluster is stopped, not deleted).
+
+### Still TODO before/around the cutover
+- Durable gbrain+bun Dockerfile layer (reviewed-install conventions) — step 8 is a runtime copy today.
+- Container-adapt chad-setup.sh gbrain runtime + the watchdogs (tunnel/gateway ones are obsoleted).
+- #49 beyond-upstream bumps (OpenClaw 2026.9.2→2026.10.2, mcporter 0.7.3→0.14.3) are SEPARATE
+  (upstream still pins the old versions) — not required for the cutover.
+
+---
 
 ## Why this is a migration, not a bump
 The 0.0.116 transactional rebuild (`nemoclaw chad rebuild` / `backup-all`) **scans the
