@@ -38,6 +38,12 @@ REMOTE_HOST="openshell-${SANDBOX}"
 DOCKER_HOST="${CHAD_DOCKER_HOST:-openshell-cluster-nemoclaw}"
 K8S_NS="${CHAD_K8S_NAMESPACE:-openshell}"
 
+# Container-model (OpenShell 0.0.116 docker driver) support. When
+# CHAD_DEPLOY_VIA=container, every manifest entry is pushed via `docker cp` +
+# root `docker exec` into the sandbox container instead of kubectl/ssh — the
+# non-root (uid 998) gateway exec cannot write /usr/local/bin. See #42.
+DEPLOY_VIA_OVERRIDE="${CHAD_DEPLOY_VIA:-}"
+
 MODE="verify"
 DRY_RUN=0
 FORCE_ALL=0
@@ -45,14 +51,17 @@ FILTER_SRC=""
 
 # ── Output helpers ─────────────────────────────────────────────────────
 RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[1;33m'
-BLUE='\033[0;34m' CYAN='\033[0;36m' DIM='\033[2m' RESET='\033[0m'
+BLUE='\033[0;34m' DIM='\033[2m' RESET='\033[0m'
 
 step() { printf '%b==>%b %s\n' "$BLUE" "$RESET" "$*"; }
-ok()   { printf '  %b✓%b %s\n' "$GREEN" "$RESET" "$*"; }
+ok() { printf '  %b✓%b %s\n' "$GREEN" "$RESET" "$*"; }
 warn() { printf '  %b!%b %s\n' "$YELLOW" "$RESET" "$*"; }
-err()  { printf '  %b✗%b %s\n' "$RED" "$RESET" "$*"; }
-dim()  { printf '    %b%s%b\n' "$DIM" "$*" "$RESET"; }
-fail() { err "$*"; exit 1; }
+err() { printf '  %b✗%b %s\n' "$RED" "$RESET" "$*"; }
+dim() { printf '    %b%s%b\n' "$DIM" "$*" "$RESET"; }
+fail() {
+  err "$*"
+  exit 1
+}
 
 usage() {
   sed -n '4,28p' "$0" | sed 's|^# *||'
@@ -62,13 +71,31 @@ usage() {
 # ── Arg parsing ────────────────────────────────────────────────────────
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --verify)  MODE="verify";  shift ;;
-    --push)    MODE="push";    shift ;;
-    --all)     FORCE_ALL=1;    shift ;;
-    --dry-run) DRY_RUN=1;      shift ;;
-    --file)    FILTER_SRC="$2"; shift 2 ;;
-    -h|--help) usage 0 ;;
-    *) echo "chad-deploy: unknown arg: $1" >&2; usage 2 ;;
+    --verify)
+      MODE="verify"
+      shift
+      ;;
+    --push)
+      MODE="push"
+      shift
+      ;;
+    --all)
+      FORCE_ALL=1
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --file)
+      FILTER_SRC="$2"
+      shift 2
+      ;;
+    -h | --help) usage 0 ;;
+    *)
+      echo "chad-deploy: unknown arg: $1" >&2
+      usage 2
+      ;;
   esac
 done
 
@@ -88,16 +115,33 @@ resolve_sandbox_pod() {
   printf '%s' "$pod"
 }
 
+# Resolve the docker-driver sandbox container (openshell-default--<name>-<uuid>).
+resolve_sandbox_container() {
+  docker ps --format '{{.Names}}' 2>/dev/null \
+    | grep -E "^openshell-default--${SANDBOX}-" | head -1
+}
+
 SANDBOX_POD=""
+SANDBOX_CONTAINER=""
 if [ "$DRY_RUN" -eq 0 ]; then
-  if ! command -v docker >/dev/null 2>&1; then
-    warn "docker not on PATH — kubectl-mode pushes will fail"
+  if [ "$DEPLOY_VIA_OVERRIDE" = "container" ]; then
+    if ! command -v docker >/dev/null 2>&1; then
+      warn "docker not on PATH — container-mode pushes will fail"
+    else
+      SANDBOX_CONTAINER="$(resolve_sandbox_container)"
+      [ -n "$SANDBOX_CONTAINER" ] \
+        || warn "could not resolve sandbox container 'openshell-default--${SANDBOX}-*' — container-mode pushes will fail"
+    fi
   else
-    SANDBOX_POD="$(resolve_sandbox_pod)"
-    [ -n "$SANDBOX_POD" ] || warn "could not resolve sandbox pod — kubectl-mode pushes will fail"
+    if ! command -v docker >/dev/null 2>&1; then
+      warn "docker not on PATH — kubectl-mode pushes will fail"
+    else
+      SANDBOX_POD="$(resolve_sandbox_pod)"
+      [ -n "$SANDBOX_POD" ] || warn "could not resolve sandbox pod — kubectl-mode pushes will fail"
+    fi
+    ssh -o ConnectTimeout=5 "$REMOTE_HOST" 'true' >/dev/null 2>&1 \
+      || warn "ssh ${REMOTE_HOST} unreachable — ssh-mode pushes will fail"
   fi
-  ssh -o ConnectTimeout=5 "$REMOTE_HOST" 'true' >/dev/null 2>&1 \
-    || warn "ssh ${REMOTE_HOST} unreachable — ssh-mode pushes will fail"
 fi
 
 # ── Checksum helpers ───────────────────────────────────────────────────
@@ -110,7 +154,10 @@ md5_local() {
 }
 
 md5_pod_kubectl() {
-  [ -n "$SANDBOX_POD" ] || { echo "MISSING-POD"; return; }
+  [ -n "$SANDBOX_POD" ] || {
+    echo "MISSING-POD"
+    return
+  }
   docker exec "$DOCKER_HOST" kubectl exec -n "$K8S_NS" "$SANDBOX_POD" -- \
     sh -c "md5sum '$1' 2>/dev/null || echo 'ABSENT  ABSENT'" </dev/null 2>/dev/null | awk '{print $1}'
 }
@@ -127,12 +174,22 @@ push_kubectl() {
     dim "[dry-run] kubectl-push: $src → $dst (mode $mode)"
     return 0
   fi
-  [ -n "$SANDBOX_POD" ] || { err "no sandbox pod"; return 1; }
-  ssh "$REMOTE_HOST" "cat > '/tmp/${name}.deploy'" < "$src" \
-    || { err "stage to /tmp failed: $src"; return 1; }
+  [ -n "$SANDBOX_POD" ] || {
+    err "no sandbox pod"
+    return 1
+  }
+  # shellcheck disable=SC2029  # intentional client-side expansion of the staged temp name
+  ssh "$REMOTE_HOST" "cat > '/tmp/${name}.deploy'" <"$src" \
+    || {
+      err "stage to /tmp failed: $src"
+      return 1
+    }
   docker exec "$DOCKER_HOST" kubectl exec -n "$K8S_NS" "$SANDBOX_POD" -- \
     sh -c "mkdir -p '$(dirname "$dst")' && cp '/tmp/${name}.deploy' '$dst' && chmod $mode '$dst' && rm -f '/tmp/${name}.deploy'" \
-    || { err "kubectl install failed: $dst"; return 1; }
+    || {
+      err "kubectl install failed: $dst"
+      return 1
+    }
   return 0
 }
 
@@ -144,8 +201,49 @@ push_ssh() {
     return 0
   fi
   # Stage to a sibling temp, then atomically mv into place + chmod.
-  ssh "$REMOTE_HOST" "mkdir -p '$(dirname "$dst")' && cat > '${dst}.deploy.$$' && chmod $mode '${dst}.deploy.$$' && mv '${dst}.deploy.$$' '$dst'" < "$src" \
-    || { err "ssh install failed: $dst"; return 1; }
+  # shellcheck disable=SC2029  # intentional client-side expansion of dst/mode into the remote command
+  ssh "$REMOTE_HOST" "mkdir -p '$(dirname "$dst")' && cat > '${dst}.deploy.$$' && chmod $mode '${dst}.deploy.$$' && mv '${dst}.deploy.$$' '$dst'" <"$src" \
+    || {
+      err "ssh install failed: $dst"
+      return 1
+    }
+  return 0
+}
+
+md5_container() {
+  [ -n "$SANDBOX_CONTAINER" ] || {
+    echo "MISSING-CONTAINER"
+    return
+  }
+  docker exec "$SANDBOX_CONTAINER" \
+    sh -c "md5sum '$1' 2>/dev/null || echo 'ABSENT  ABSENT'" </dev/null 2>/dev/null | awk '{print $1}'
+}
+
+# Push via docker cp (daemon-level, bypasses the sandbox landlock) to a /tmp
+# staging path, then root docker exec to install into place + chmod — required
+# because /usr/local/bin is root-owned and the gateway exec runs as uid 998.
+push_container() {
+  local src="$1" dst="$2" mode="$3" name
+  name="$(basename "$dst")"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    dim "[dry-run] container-push: $src → $dst (mode $mode)"
+    return 0
+  fi
+  [ -n "$SANDBOX_CONTAINER" ] || {
+    err "no sandbox container"
+    return 1
+  }
+  docker cp "$src" "$SANDBOX_CONTAINER:/tmp/${name}.deploy" \
+    || {
+      err "docker cp failed: $src"
+      return 1
+    }
+  docker exec -u 0 "$SANDBOX_CONTAINER" \
+    sh -c "mkdir -p '$(dirname "$dst")' && cp '/tmp/${name}.deploy' '$dst' && chmod $mode '$dst' && rm -f '/tmp/${name}.deploy'" </dev/null \
+    || {
+      err "container install failed: $dst"
+      return 1
+    }
   return 0
 }
 
@@ -183,10 +281,18 @@ while IFS=$'\t' read -r SRC DST MODE_FLAG VIA; do
 
   local_md5="$(md5_local "$src_abs")"
 
+  # Global override: force every entry through one transport (e.g. container).
+  [ -n "$DEPLOY_VIA_OVERRIDE" ] && VIA="$DEPLOY_VIA_OVERRIDE"
+
   case "$VIA" in
     kubectl) pod_md5="$(md5_pod_kubectl "$DST")" ;;
-    ssh)     pod_md5="$(md5_pod_ssh "$DST")"     ;;
-    *)       err "unknown via='$VIA' for $SRC"; FAIL_COUNT=$((FAIL_COUNT + 1)); continue ;;
+    ssh) pod_md5="$(md5_pod_ssh "$DST")" ;;
+    container) pod_md5="$(md5_container "$DST")" ;;
+    *)
+      err "unknown via='$VIA' for $SRC"
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      continue
+      ;;
   esac
 
   matched=0
@@ -219,14 +325,25 @@ while IFS=$'\t' read -r SRC DST MODE_FLAG VIA; do
 
   step "push $DST  (via $VIA, mode $MODE_FLAG)"
   case "$VIA" in
-    kubectl) push_kubectl "$src_abs" "$DST" "$MODE_FLAG" || { FAIL_COUNT=$((FAIL_COUNT + 1)); continue; } ;;
-    ssh)     push_ssh     "$src_abs" "$DST" "$MODE_FLAG" || { FAIL_COUNT=$((FAIL_COUNT + 1)); continue; } ;;
+    kubectl) push_kubectl "$src_abs" "$DST" "$MODE_FLAG" || {
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      continue
+    } ;;
+    ssh) push_ssh "$src_abs" "$DST" "$MODE_FLAG" || {
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      continue
+    } ;;
+    container) push_container "$src_abs" "$DST" "$MODE_FLAG" || {
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      continue
+    } ;;
   esac
 
   if [ "$DRY_RUN" -eq 0 ]; then
     case "$VIA" in
       kubectl) post_md5="$(md5_pod_kubectl "$DST")" ;;
-      ssh)     post_md5="$(md5_pod_ssh "$DST")" ;;
+      ssh) post_md5="$(md5_pod_ssh "$DST")" ;;
+      container) post_md5="$(md5_container "$DST")" ;;
     esac
     if [ "$post_md5" = "$local_md5" ]; then
       ok "verified $DST ($(printf '%.8s' "$post_md5"))"
