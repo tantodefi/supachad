@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { validateDgxStationDispatchBoundary } from "./dgx-station-workflow-boundary.mts";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
@@ -199,6 +200,7 @@ const COMMON_SECRET_ENV_NAMES = [
   "GITHUB_TOKEN",
 ];
 const FREE_STANDING_SELECTOR_SPECIAL_CASES = new Set([
+  "dgx-station-express",
   "hermes-e2e",
   "hermes-gpu-startup",
   "jetson-nvmap-gpu",
@@ -212,6 +214,7 @@ const FREE_STANDING_SELECTOR_SPECIAL_CASES = new Set([
 const ADAPTER_MANAGED_INFERENCE_JOBS = new Set(["hermes-e2e"]);
 const PUBLIC_NVIDIA_ENDPOINT_KEY_JOBS = new Set(["model-router-provider-routed-inference"]);
 const NO_IMAGE_E2E_JOBS = new Set([
+  "dgx-station-express",
   "external-gateway-health",
   "staging-brev-launchable",
   "staging-brev-launchable-identity",
@@ -261,6 +264,7 @@ const CATALOGUE_ROUTED_JOB_NAMES = [
   "catalogue-standard",
   "catalogue-nvidia-api",
   "catalogue-nvidia-inference",
+  "catalogue-hosted-inference",
   "catalogue-github-read",
 ] as const;
 const CATALOGUE_RUNNER_EXPRESSION =
@@ -1261,7 +1265,10 @@ function isReviewedLocalAction(jobName: string, step: WorkflowStep): boolean {
       step.uses === REVIEWED_HERMES_PLATFORM_ACTION) ||
     (jobName === "managed-image-protected-runtime" &&
       step.name === "Reuse or refresh reviewed audit evidence before the offline build" &&
-      step.uses === "./.github/actions/ci-reviewed-npm-audit")
+      step.uses === "./.github/actions/ci-reviewed-npm-audit") ||
+    (jobName === "managed-image-protected-runtime" &&
+      step.name === "Install reviewed OpenShell SDK from trusted controller" &&
+      step.uses === "./.github/actions/install-reviewed-openshell-sdk")
   );
 }
 
@@ -2104,7 +2111,7 @@ function validateFullE2eConcurrency(errors: string[], workflow: WorkflowRecord):
   }
   if (
     concurrency["cancel-in-progress"] !==
-    "${{ inputs.checkout_sha != '' && !inputs.allow_jetson_dispatch && !contains(format(',{0},', inputs.jobs), ',staging-brev-launchable,') && !contains(format(',{0},', inputs.jobs), ',staging-brev-launchable-identity,') && !inputs.include_staging_brev_launchable }}"
+    "${{ inputs.checkout_sha != '' && !inputs.allow_jetson_dispatch && !contains(format(',{0},{1},', inputs.jobs, inputs.targets), ',dgx-station-express,') && !contains(format(',{0},', inputs.jobs), ',staging-brev-launchable,') && !contains(format(',{0},', inputs.jobs), ',staging-brev-launchable-identity,') && !inputs.include_staging_brev_launchable }}"
   ) {
     errors.push("workflow concurrency must not cancel an active Jetson or Launchable dispatch");
   }
@@ -2648,7 +2655,7 @@ const PRE_CANDIDATE_RUN_SHA256: Readonly<Record<string, string>> = {
     "ee0b2e6c6aa4552b228bd1cc3ba4e1f9cd72701c30b81f7d5fbf9bc011fb51c7",
   "Authorize Launchable E2E maintainer dispatch":
     "bbf442a006b47016eda56133eb400a48c6931c55364c1220b84327b5ffd6f171",
-  "Generate E2E target matrix": "7b250c79a05973c6bc2f904195c174ddd6ffee80c62a2ff3362d7362e075b0ef",
+  "Generate E2E target matrix": "38d815704e195bc7bd923da65b2accd49aee88d909842cddbea7e13de077fb29",
 };
 
 function requirePreCandidateEnvironment(
@@ -2692,6 +2699,7 @@ function validatePreCandidateActions(
     "Authorize Launchable E2E maintainer dispatch",
     "Install trusted E2E planner dependencies",
     "Generate E2E target matrix",
+    "Resolve reviewed candidate OpenShell version",
   ]);
   const seen = new Set<string>();
   for (const step of steps.slice(0, candidateCheckout ? steps.indexOf(candidateCheckout) : 0)) {
@@ -2799,6 +2807,22 @@ function validateTrustedE2ePlannerBoundary(
     : -1;
   const generateIndex = generate ? generateSteps.indexOf(generate) : -1;
   const candidateCheckoutIndex = candidateCheckout ? generateSteps.indexOf(candidateCheckout) : -1;
+  const version = requireStep(
+    errors,
+    generateSteps,
+    "Resolve reviewed candidate OpenShell version",
+  );
+  const versionIndex = version ? generateSteps.indexOf(version) : -1;
+  if (
+    versionIndex <= generateIndex ||
+    versionIndex >= candidateCheckoutIndex ||
+    version?.id !== "openshell_version" ||
+    version?.run !== "node --no-warnings tools/e2e/candidate-openshell-version.mts"
+  ) {
+    errors.push(
+      "candidate OpenShell selection must use the trusted verifier before candidate checkout",
+    );
+  }
   if (
     trustedPlannerIndex < 0 ||
     trustedSetupIndex <= trustedPlannerIndex ||
@@ -2965,6 +2989,7 @@ export function validateE2eWorkflow(workflowValue: unknown): string[] {
     errors.push("workflow run-name must expose the unique manual-dispatch correlation ID");
   }
   errors.push(...validateJetsonDispatchBoundary(workflow));
+  errors.push(...validateDgxStationDispatchBoundary(workflow));
   const { errors: inventoryErrors, inventory: freeStandingInventory } =
     deriveFreeStandingJobsInventoryFromJobs(jobs);
   errors.push(...inventoryErrors);
@@ -2984,6 +3009,15 @@ export function validateE2eWorkflow(workflowValue: unknown): string[] {
   }
   if (generateOutputs.test_matrix !== "${{ steps.matrix.outputs.test_matrix }}") {
     errors.push("generate-matrix job must expose test_matrix output");
+  }
+  if (generateOutputs.openshell_version !== "${{ steps.openshell_version.outputs.version }}") {
+    errors.push("generate-matrix must expose the reviewed candidate OpenShell version");
+  }
+  if (
+    asRecord(asRecord(jobs["external-gateway-health"]).env).NEMOCLAW_OPENSHELL_PIN_VERSION !==
+    "${{ needs.generate-matrix.outputs.openshell_version }}"
+  ) {
+    errors.push("external-gateway-health must use the reviewed candidate OpenShell version");
   }
   if (generateOutputs.hermes_selected !== "${{ steps.matrix.outputs.hermes_selected }}") {
     errors.push("generate-matrix job must expose hermes_selected output");
