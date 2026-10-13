@@ -15,5 +15,14 @@
     "types": ["node"]
   },
   "include": ["bin/**/*.js", "scripts/**/*.js", "test/**/*.js"],
-  "exclude": ["node_modules", "**/node_modules", "nemoclaw", "docs"]
+  "exclude": [
+    "node_modules",
+    "**/node_modules",
+    "nemoclaw",
+    "docs",
+    "scripts/openwebui",
+    "scripts/openwebui/**",
+    "scripts/chad-smithers",
+    "scripts/chad-smithers/**"
+  ]
 }
