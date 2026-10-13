@@ -52,35 +52,77 @@ ALLOWLIST_FILE="/sandbox/.openclaw-data/state/operator-allowlist"
 INBOX="/sandbox/.openclaw-data/state/agent-inbox.jsonl"
 GUI="gui/$(id -u)"
 
+# Container-model (OpenShell 0.0.116 docker driver) support. CHAD_SANDBOX_MODE=
+# container routes kx() (root ops) through `docker exec -u 0 <container>` and
+# sshp() (sandbox-user ops) through gateway-mediated `openshell sandbox exec`,
+# instead of the pod's kubectl/ssh path. See #42.
+SANDBOX_MODE="${CHAD_SANDBOX_MODE:-pod}"
+SANDBOX_NAME="${CHAD_SANDBOX:-$POD}"
+GW_NAME="${CHAD_GATEWAY:-nemoclaw-8088}"
+OPENSHELL_BIN="${CHAD_OPENSHELL_BIN:-/opt/homebrew/opt/openshell/bin/openshell}"
+SANDBOX_CONTAINER=""
+if [ "$SANDBOX_MODE" = container ]; then
+  SANDBOX_CONTAINER="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "^openshell-default--${SANDBOX_NAME}-" | head -1)"
+  # Thread the mode to sub-scripts (chad-deploy reads CHAD_DEPLOY_VIA/CHAD_SANDBOX).
+  export CHAD_DEPLOY_VIA=container
+  export CHAD_SANDBOX="$SANDBOX_NAME"
+fi
+
 # ── Output helpers ──────────────────────────────────────────────────────────
 RED='\033[0;31m' GRN='\033[0;32m' YEL='\033[1;33m' BLU='\033[0;34m' DIM='\033[2m' RST='\033[0m'
 step() { printf '%b==>%b %s\n' "$BLU" "$RST" "$*"; }
-ok()   { printf '  %b✓%b %s\n' "$GRN" "$RST" "$*"; }
+ok() { printf '  %b✓%b %s\n' "$GRN" "$RST" "$*"; }
 warn() { printf '  %b!%b %s\n' "$YEL" "$RST" "$*"; }
-bad()  { printf '  %b✗%b %s\n' "$RED" "$RST" "$*"; }
-dim()  { printf '    %b%s%b\n' "$DIM" "$*" "$RST"; }
+bad() { printf '  %b✗%b %s\n' "$RED" "$RST" "$*"; }
+dim() { printf '    %b%s%b\n' "$DIM" "$*" "$RST"; }
 
-kx()  { docker exec "$DOCKER_HOST" kubectl exec -n "$K8S_NS" "$POD" -- sh -c "$1" </dev/null 2>&1 | grep -viE 'UNDICI|trace-warnings'; }
-sshp(){ ssh -n -o BatchMode=yes -o ConnectTimeout=12 "$SSH_HOST" "$1" 2>&1 | grep -viE 'UNDICI|trace-warnings'; }
+kx() {
+  if [ "$SANDBOX_MODE" = container ]; then
+    docker exec -u 0 "$SANDBOX_CONTAINER" sh -c "$1" </dev/null 2>&1 | grep -viE 'UNDICI|trace-warnings'
+  else
+    docker exec "$DOCKER_HOST" kubectl exec -n "$K8S_NS" "$POD" -- sh -c "$1" </dev/null 2>&1 | grep -viE 'UNDICI|trace-warnings'
+  fi
+}
+sshp() {
+  if [ "$SANDBOX_MODE" = container ]; then
+    "$OPENSHELL_BIN" --gateway "$GW_NAME" sandbox exec -n "$SANDBOX_NAME" --timeout 60 -- sh -c "$1" </dev/null 2>&1 | grep -viE 'UNDICI|trace-warnings'
+  else
+    ssh -n -o BatchMode=yes -o ConnectTimeout=12 "$SSH_HOST" "$1" 2>&1 | grep -viE 'UNDICI|trace-warnings'
+  fi
+}
 
 wait_port_host() { # $1 port, $2 label — wait for host-tunnel port to answer 200 on /v1/models
-  local i code
-  for i in $(seq 1 "${3:-10}"); do
+  local code
+  for _ in $(seq 1 "${3:-10}"); do
     code=$(curl -sS -o /dev/null -w '%{http_code}' -m 6 "http://127.0.0.1:$1/v1/models" 2>/dev/null)
-    [ "$code" = "200" ] && { ok "$2 up on :$1"; return 0; }
+    [ "$code" = "200" ] && {
+      ok "$2 up on :$1"
+      return 0
+    }
     sleep 4
   done
-  bad "$2 did not come up on :$1"; return 1
+  bad "$2 did not come up on :$1"
+  return 1
 }
 
 # ── Atomic subcommands ──────────────────────────────────────────────────────
-cmd_verify()  { step "verify (binary/config drift)"; ( cd "$HERE" && ./chad-deploy.sh --verify ); }
-cmd_deploy()  { step "deploy (push binaries/config)"; ( cd "$HERE" && ./chad-deploy.sh --push "$@" ); }
+cmd_verify() {
+  step "verify (binary/config drift)"
+  (cd "$HERE" && ./chad-deploy.sh --verify)
+}
+cmd_deploy() {
+  step "deploy (push binaries/config)"
+  (cd "$HERE" && ./chad-deploy.sh --push "$@")
+}
 
 cmd_chown() {
   step "chown /sandbox/.openclaw → sandbox (post-restart ownership reset)"
-  local n; n=$(kx 'find /sandbox/.openclaw ! -user sandbox 2>/dev/null | wc -l' | tr -d ' ')
-  if [ "${n:-0}" = "0" ]; then ok "already sandbox-owned"; return 0; fi
+  local n
+  n=$(kx 'find /sandbox/.openclaw ! -user sandbox 2>/dev/null | wc -l' | tr -d ' ')
+  if [ "${n:-0}" = "0" ]; then
+    ok "already sandbox-owned"
+    return 0
+  fi
   warn "$n entries root-owned — chowning"
   kx 'chown -R sandbox:sandbox /sandbox/.openclaw && mkdir -p /sandbox/.openclaw/workspace/state && chown sandbox:sandbox /sandbox/.openclaw/workspace/state' >/dev/null
   n=$(kx 'find /sandbox/.openclaw ! -user sandbox 2>/dev/null | wc -l' | tr -d ' ')
@@ -89,7 +131,10 @@ cmd_chown() {
 
 cmd_gbrain_fix() {
   step "gbrain-fix (ensure gbrain-bin stub the wrapper execs)"
-  if kx 'test -x /usr/local/bin/gbrain-bin && echo ok' | grep -q ok; then ok "gbrain-bin present"; return 0; fi
+  if kx 'test -x /usr/local/bin/gbrain-bin && echo ok' | grep -q ok; then
+    ok "gbrain-bin present"
+    return 0
+  fi
   # The image ships the real gbrain as a bun-CLI stub; chad-setup copies it to
   # gbrain-bin so the env-injecting wrapper can wrap it. A pod restart drops the
   # copy — recreate the identical stub pointing at the image's gbrain code.
@@ -106,7 +151,10 @@ cmd_restart_shim() {
 
 cmd_bonjour_off() {
   step "bonjour-off (the mDNS plugin crashes the pod gateway ~20s after start → 1006)"
-  if sshp 'openclaw plugins list 2>/dev/null | grep -i bonjour | grep -qi disabled && echo d'; then ok "bonjour already disabled"; return 0; fi
+  if sshp 'openclaw plugins list 2>/dev/null | grep -i bonjour | grep -qi disabled && echo d'; then
+    ok "bonjour already disabled"
+    return 0
+  fi
   sshp 'openclaw plugins disable bonjour 2>&1 | grep -i disabled | head -1' >/dev/null
   ok "bonjour disabled (gateway restart applies it)"
 }
@@ -137,8 +185,12 @@ PY'
 
 cmd_skills_register() {
   step "skills-register (skills.load.extraDirs → Chad's skill dir; a restart drops it)"
-  local cur; cur=$(sshp 'python3 -c "import json;print(json.load(open(\"/sandbox/.openclaw/openclaw.json\")).get(\"skills\",{}).get(\"load\",{}).get(\"extraDirs\"))"')
-  if echo "$cur" | grep -q "openclaw-data/skills"; then ok "extraDirs already set"; return 0; fi
+  local cur
+  cur=$(sshp 'python3 -c "import json;print(json.load(open(\"/sandbox/.openclaw/openclaw.json\")).get(\"skills\",{}).get(\"load\",{}).get(\"extraDirs\"))"')
+  if echo "$cur" | grep -q "openclaw-data/skills"; then
+    ok "extraDirs already set"
+    return 0
+  fi
   sshp 'openclaw config set skills.load.extraDirs --strict-json "[\"/sandbox/.openclaw-data/skills\"]" 2>&1 | grep -i updated | head -1' >/dev/null
   ok "extraDirs set (gateway restart applies it)"
 }
@@ -147,10 +199,13 @@ cmd_restart_gateway() {
   step "restart-gateway (wait :$GW_PORT on pod)"
   kx 'pkill -9 -f "openclaw.*gateway" 2>/dev/null; pkill -9 -f openclaw-gateway 2>/dev/null; true' >/dev/null
   launchctl kickstart -k "$GUI/dev.nemoclaw.chad-gateway-watchdog" 2>/dev/null || true
-  local i up
-  for i in $(seq 1 12); do
+  local up
+  for _ in $(seq 1 12); do
     up=$(sshp "ss -tln 2>/dev/null | grep -q ':$GW_PORT' && echo yes || echo no")
-    [ "$up" = "yes" ] && { ok "gateway listening on :$GW_PORT"; return 0; }
+    [ "$up" = "yes" ] && {
+      ok "gateway listening on :$GW_PORT"
+      return 0
+    }
     sleep 5
   done
   bad "gateway did not bind :$GW_PORT"
@@ -161,7 +216,10 @@ cmd_creds_sync() {
   # Mirror chad-setup.sh: push only the keys the pod actually needs. A pod
   # restart drops this file, which breaks gh operations (restore/backup) and
   # gbrain embeds (NVIDIA_API_KEY). Streamed over stdin — never on argv/ps.
-  [ -f "$HOST_CREDS" ] || { bad "host creds not found: $HOST_CREDS"; return 1; }
+  [ -f "$HOST_CREDS" ] || {
+    bad "host creds not found: $HOST_CREDS"
+    return 1
+  }
   local filtered
   filtered="$(python3 -c "
 import json,sys
@@ -169,7 +227,10 @@ keep=['PROTON_USERNAME','PROTON_PASSWORD','GITHUB_TOKEN','BRAVE_API_KEY','NVIDIA
 src=json.load(open('$HOST_CREDS'))
 json.dump({k:src[k] for k in keep if k in src}, sys.stdout)
 " 2>/dev/null)"
-  [ -n "$filtered" ] || { bad "could not build filtered creds"; return 1; }
+  [ -n "$filtered" ] || {
+    bad "could not build filtered creds"
+    return 1
+  }
   printf '%s' "$filtered" | ssh -o BatchMode=yes -o ConnectTimeout=12 "$SSH_HOST" \
     "mkdir -p /sandbox/.nemoclaw && cat > /sandbox/.nemoclaw/credentials.json && chmod 600 /sandbox/.nemoclaw/credentials.json && echo ok" >/dev/null 2>&1 \
     && ok "pod credentials.json written ($(printf '%s' "$filtered" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)))') keys)" \
@@ -192,8 +253,12 @@ cmd_embed_backfill() {
   # After a restore the imported pages have no embeddings — semantic recall is
   # dark until backfilled. The nightly gbrain-dream cron does this incrementally;
   # this kicks it now, detached, so a big restore doesn't block the terminal.
-  local miss; miss=$(sshp 'gbrain health 2>&1 | grep -i "missing embeddings" | grep -oE "[0-9]+" | head -1')
-  if [ "${miss:-0}" = "0" ]; then ok "no missing embeddings"; return 0; fi
+  local miss
+  miss=$(sshp 'gbrain health 2>&1 | grep -i "missing embeddings" | grep -oE "[0-9]+" | head -1')
+  if [ "${miss:-0}" = "0" ]; then
+    ok "no missing embeddings"
+    return 0
+  fi
   warn "${miss} pages missing embeddings — backfilling in background"
   sshp "nohup sh -c 'gbrain embed --stale > /tmp/gbrain-embed.log 2>&1' >/dev/null 2>&1 & echo started pid \$!"
   dim "progress: ssh $SSH_HOST 'tail -f /tmp/gbrain-embed.log'"
@@ -203,7 +268,10 @@ cmd_gate_sync() {
   step "gate-sync (push operator allowlist from host creds → pod file, restart shim)"
   local list
   list="$(python3 -c "import json;v=json.load(open('$HOST_CREDS')).get('CHAD_OPERATOR_ALLOWLIST','');print(','.join(v) if isinstance(v,list) else v)" 2>/dev/null || true)"
-  if [ -z "$list" ]; then bad "no CHAD_OPERATOR_ALLOWLIST in $HOST_CREDS — gate would be fail-open"; return 1; fi
+  if [ -z "$list" ]; then
+    bad "no CHAD_OPERATOR_ALLOWLIST in $HOST_CREDS — gate would be fail-open"
+    return 1
+  fi
   dim "operators: $list"
   sshp "mkdir -p \$(dirname '$ALLOWLIST_FILE'); printf '%s\n' '$list' | tr ',' '\n' > '$ALLOWLIST_FILE'; echo wrote" >/dev/null
   ok "allowlist file written"
@@ -237,30 +305,38 @@ cmd_inbox_prune() {
 cmd_doctor() {
   step "doctor — Chad health (read-only)"
   # shim
-  local code; code=$(curl -sS -o /dev/null -w '%{http_code}' -m 6 "http://127.0.0.1:$SHIM_PORT/v1/models" 2>/dev/null)
+  local code
+  code=$(curl -sS -o /dev/null -w '%{http_code}' -m 6 "http://127.0.0.1:$SHIM_PORT/v1/models" 2>/dev/null)
   [ "$code" = "200" ] && ok "shim :$SHIM_PORT → 200" || bad "shim :$SHIM_PORT → ${code:-unreachable}"
   # gateway
   [ "$(sshp "ss -tln 2>/dev/null | grep -q ':$GW_PORT' && echo y")" = "y" ] && ok "gateway listening :$GW_PORT" || bad "gateway not listening :$GW_PORT"
   # gbrain
-  local gh; gh=$(sshp 'gbrain health 2>&1 | grep -i "health score" | head -1')
+  local gh
+  gh=$(sshp 'gbrain health 2>&1 | grep -i "health score" | head -1')
   [ -n "$gh" ] && ok "gbrain: $gh" || bad "gbrain not answering (gbrain-bin missing?)"
   # binaries
-  local drift; drift=$( ( cd "$HERE" && ./chad-deploy.sh --verify 2>/dev/null | grep -oE 'drift=[0-9]+  absent=[0-9]+' ) )
+  local drift
+  drift=$( (cd "$HERE" && ./chad-deploy.sh --verify 2>/dev/null | grep -oE 'drift=[0-9]+  absent=[0-9]+'))
   echo "$drift" | grep -q 'drift=0  absent=0' && ok "binaries in sync ($drift)" || warn "binary drift: ${drift:-unknown} — run: chad-ops deploy"
   # allowlist gate
-  local n; n=$(sshp "test -s '$ALLOWLIST_FILE' && wc -l < '$ALLOWLIST_FILE'")
+  local n
+  n=$(sshp "test -s '$ALLOWLIST_FILE' && wc -l < '$ALLOWLIST_FILE'")
   [ -n "$n" ] && ok "allowlist gate armed ($n operators)" || bad "allowlist EMPTY — gate fail-open (run: chad-ops gate-sync)"
   # crons registered (canonical durable set = 10 pod crons; 3 more are host timers)
-  local crons; crons=$(sshp "openclaw cron list 2>/dev/null | grep -cE 'cron [0-9*]'")
+  local crons
+  crons=$(sshp "openclaw cron list 2>/dev/null | grep -cE 'cron [0-9*]'")
   [ "${crons:-0}" -ge 10 ] && ok "crons registered ($crons)" || warn "only ${crons:-0} crons registered (expect 10) — run: chad-ops cron-reload"
   # Chad's custom skills loaded (extraDirs)
-  local sk; sk=$(sshp "python3 -c \"import json;print('y' if 'openclaw-data/skills' in str(json.load(open('/sandbox/.openclaw/openclaw.json')).get('skills',{}).get('load',{}).get('extraDirs')) else 'n')\"")
+  local sk
+  sk=$(sshp "python3 -c \"import json;print('y' if 'openclaw-data/skills' in str(json.load(open('/sandbox/.openclaw/openclaw.json')).get('skills',{}).get('load',{}).get('extraDirs')) else 'n')\"")
   [ "$sk" = "y" ] && ok "custom skills loaded (extraDirs set)" || bad "skills.load.extraDirs unset — Chad skills dark (run: chad-ops skills-register)"
   # gbrain embed config (NVIDIA key, not clobbered)
-  local ek; ek=$(sshp "python3 -c \"import json;c=json.load(open('/sandbox/.gbrain/config.json'));print('y' if c.get('openai_api_key') and c['openai_api_key']!='unused' and 'nvidia' in c.get('openai_base_url','') else 'n')\"")
+  local ek
+  ek=$(sshp "python3 -c \"import json;c=json.load(open('/sandbox/.gbrain/config.json'));print('y' if c.get('openai_api_key') and c['openai_api_key']!='unused' and 'nvidia' in c.get('openai_base_url','') else 'n')\"")
   [ "$ek" = "y" ] && ok "gbrain embed config OK (NVIDIA)" || bad "gbrain embed config clobbered → 401 (run: chad-ops gbrain-config)"
   # inbox noise today
-  local errs; errs=$(sshp "grep \$(date -u +%Y-%m-%d) '$INBOX' 2>/dev/null | grep -c '\"severity\":\"error\"'")
+  local errs
+  errs=$(sshp "grep \$(date -u +%Y-%m-%d) '$INBOX' 2>/dev/null | grep -c '\"severity\":\"error\"'")
   [ "${errs:-0}" -gt 50 ] && warn "agent-inbox has ${errs} error events today (run: chad-ops inbox-prune)" || ok "agent-inbox clean (${errs:-0} errors today)"
 }
 
@@ -276,43 +352,50 @@ cmd_recover() {
   cmd_creds_sync
   cmd_chown
   cmd_gbrain_fix
-  cmd_gbrain_config      # NVIDIA embed key/model (clobbered by gbrain init on restart)
+  cmd_gbrain_config # NVIDIA embed key/model (clobbered by gbrain init on restart)
   cmd_restore_data
   cmd_deploy || true
-  cmd_cron_reload        # reconcile gateway ← jobs.json (restores the durable cron set)
-  cmd_bonjour_off        # before gateway restart: stops the ~20s crash loop
-  cmd_skills_register    # before gateway restart: loads Chad's custom skills
+  cmd_cron_reload     # reconcile gateway ← jobs.json (restores the durable cron set)
+  cmd_bonjour_off     # before gateway restart: stops the ~20s crash loop
+  cmd_skills_register # before gateway restart: loads Chad's custom skills
   cmd_restart_gateway
-  cmd_gate_sync          # writes allowlist, restarts shim, verifies deny/allow
+  cmd_gate_sync # writes allowlist, restarts shim, verifies deny/allow
   cmd_embed_backfill
-  echo; step "post-recovery doctor"; cmd_doctor
+  echo
+  step "post-recovery doctor"
+  cmd_doctor
 }
 
 usage() { sed -n '4,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 main() {
-  local c="${1:-}"; shift || true
+  local c="${1:-}"
+  shift || true
   case "$c" in
-    doctor)          cmd_doctor ;;
-    recover)         cmd_recover ;;
-    deploy)          cmd_deploy "$@" ;;
-    verify)          cmd_verify ;;
-    chown)           cmd_chown ;;
-    gbrain-fix)      cmd_gbrain_fix ;;
-    restart-shim)    cmd_restart_shim ;;
+    doctor) cmd_doctor ;;
+    recover) cmd_recover ;;
+    deploy) cmd_deploy "$@" ;;
+    verify) cmd_verify ;;
+    chown) cmd_chown ;;
+    gbrain-fix) cmd_gbrain_fix ;;
+    restart-shim) cmd_restart_shim ;;
     restart-gateway) cmd_restart_gateway ;;
-    creds-sync)      cmd_creds_sync ;;
-    restore-data)    cmd_restore_data ;;
-    cron-reload)     cmd_cron_reload ;;
-    embed-backfill)  cmd_embed_backfill ;;
-    bonjour-off)     cmd_bonjour_off ;;
-    gbrain-config)   cmd_gbrain_config ;;
+    creds-sync) cmd_creds_sync ;;
+    restore-data) cmd_restore_data ;;
+    cron-reload) cmd_cron_reload ;;
+    embed-backfill) cmd_embed_backfill ;;
+    bonjour-off) cmd_bonjour_off ;;
+    gbrain-config) cmd_gbrain_config ;;
     skills-register) cmd_skills_register ;;
-    gate-sync)       cmd_gate_sync ;;
-    gate-check)      cmd_gate_check ;;
-    inbox-prune)     cmd_inbox_prune ;;
-    ""|-h|--help)    usage ;;
-    *) echo "chad-ops: unknown command '$c'" >&2; usage; exit 2 ;;
+    gate-sync) cmd_gate_sync ;;
+    gate-check) cmd_gate_check ;;
+    inbox-prune) cmd_inbox_prune ;;
+    "" | -h | --help) usage ;;
+    *)
+      echo "chad-ops: unknown command '$c'" >&2
+      usage
+      exit 2
+      ;;
   esac
 }
 main "$@"

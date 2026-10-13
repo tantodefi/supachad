@@ -6,4 +6,8 @@
 # SC1091: Not following sourced file.
 # We dynamically source nvm.sh and runtime.sh at paths that shellcheck
 # cannot resolve statically.
-disable=SC2059,SC1091
+# SC2015: A && B || C is not if-then-else.
+# Our status helpers use the `cmd && ok "msg" || warn "msg"` idiom where the
+# B branch (ok/warn/bad — plain printf) never fails, so C only runs when cmd
+# (A) fails. This is intentional and pervasive across the chad ops scripts.
+disable=SC2059,SC1091,SC2015
