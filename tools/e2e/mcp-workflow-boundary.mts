@@ -103,9 +103,9 @@ const DEV_COMPATIBILITY_RUN = [
 ].join("\n");
 const DEV_FULL_LIFECYCLE_CONDITION =
   "${{ steps.mcp_runtime_compatibility.outputs.mode == 'full-lifecycle' }}";
-const MCP_CLOUDFLARED_VERSION = "2026.6.1";
+const MCP_CLOUDFLARED_VERSION = "2026.10.0";
 const MCP_CLOUDFLARED_DEB_SHA256 =
-  "ccd02ec216c62bfa573395d8f72cb2e91e95cbdf8726a8acc06b3e2d9aa31526";
+  "9721287c28f78cb623e77c7b95a63feea87e909054d75666a0ec9eff20e5d548";
 const LEGACY_WORKFLOWS = [
   ".github/workflows/e2e-script.yaml",
   ".github/workflows/e2e-vitest-scenarios.yaml",

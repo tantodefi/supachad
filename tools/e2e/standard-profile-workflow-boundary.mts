@@ -586,8 +586,8 @@ function validateProfileWorkflow(errors: string[], profile: WorkflowRecord): voi
     cloudflared?.if !== "${{ inputs.cloudflared }}" ||
     cloudflared.shell !== EXECUTION_PLAN_SHELL ||
     !isDeepStrictEqual(record(cloudflared.env), {
-      CLOUDFLARED_VERSION: "2026.6.1",
-      CLOUDFLARED_DEB_SHA256: "ccd02ec216c62bfa573395d8f72cb2e91e95cbdf8726a8acc06b3e2d9aa31526",
+      CLOUDFLARED_VERSION: "2026.10.0",
+      CLOUDFLARED_DEB_SHA256: "9721287c28f78cb623e77c7b95a63feea87e909054d75666a0ec9eff20e5d548",
     }) ||
     !cloudflaredRun.includes(
       "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb",

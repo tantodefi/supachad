@@ -3944,8 +3944,8 @@ jobs:
         # lanes; mutable package repositories and unreviewed latest releases
         # are intentionally rejected by the workflow-contract tests.
         env:
-          CLOUDFLARED_VERSION: "2026.6.1"
-          CLOUDFLARED_DEB_SHA256: "ccd02ec216c62bfa573395d8f72cb2e91e95cbdf8726a8acc06b3e2d9aa31526"
+          CLOUDFLARED_VERSION: "2026.10.0"
+          CLOUDFLARED_DEB_SHA256: "9721287c28f78cb623e77c7b95a63feea87e909054d75666a0ec9eff20e5d548"
         run: |
           set -euo pipefail
           cloudflared_deb="${RUNNER_TEMP}/cloudflared-${CLOUDFLARED_VERSION}-linux-amd64.deb"
@@ -4091,8 +4091,8 @@ jobs:
 
       - name: Install and verify cloudflared prerequisite
         env:
-          CLOUDFLARED_VERSION: "2026.6.1"
-          CLOUDFLARED_DEB_SHA256: "ccd02ec216c62bfa573395d8f72cb2e91e95cbdf8726a8acc06b3e2d9aa31526"
+          CLOUDFLARED_VERSION: "2026.10.0"
+          CLOUDFLARED_DEB_SHA256: "9721287c28f78cb623e77c7b95a63feea87e909054d75666a0ec9eff20e5d548"
         run: |
           set -euo pipefail
           cloudflared_deb="${RUNNER_TEMP}/cloudflared-${CLOUDFLARED_VERSION}-linux-amd64.deb"
@@ -4378,8 +4378,8 @@ jobs:
         # version/SHA256 pair as the stable lane; workflow-contract tests fail
         # if the pins diverge or installation becomes mutable.
         env:
-          CLOUDFLARED_VERSION: "2026.6.1"
-          CLOUDFLARED_DEB_SHA256: "ccd02ec216c62bfa573395d8f72cb2e91e95cbdf8726a8acc06b3e2d9aa31526"
+          CLOUDFLARED_VERSION: "2026.10.0"
+          CLOUDFLARED_DEB_SHA256: "9721287c28f78cb623e77c7b95a63feea87e909054d75666a0ec9eff20e5d548"
         run: |
           set -euo pipefail
           cloudflared_deb="${RUNNER_TEMP}/cloudflared-${CLOUDFLARED_VERSION}-linux-amd64.deb"
