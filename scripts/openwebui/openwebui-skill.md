@@ -2,8 +2,8 @@
 name: openwebui
 description: |
   Chad's complete control surface for the OpenWebUI deployment at
-  chad.supachad.com. Covers every v0.9.5 endpoint (60 commands across
-  10 groups) via two paths: native MCP tools (webui__*) for in-agent
+  chad.supachad.com (v0.11.4, "coi" fork). Covers the operator API
+  (60+ commands across 10 groups) via two paths: native MCP tools (webui__*) for in-agent
   use, and the chad-webui CLI for scripts and cron wrappers. Includes
   worked examples per command, composed recipes for common workflows,
   and a nightly-experiment playbook so Chad can run his own iteration
@@ -50,6 +50,14 @@ the OpenWebUI deployment at `chad.supachad.com`. It documents every
 sub-command of the `chad-webui` CLI (and every corresponding `webui__*`
 MCP tool), gives worked examples, and provides composed recipes Chad
 can chain together for nightly experiments without supervision.
+
+> **Deployment:** OpenWebUI **0.11.4**, custom image
+> `nemoclaw-open-webui:coi-v0.11.4` (the "coi" fork adds cross-origin
+> isolation for the in-browser VM + the native calendar/notes/automations
+> routers). Confirm the live version any time with
+> `docker exec nemoclaw-openwebui python3 -c "from open_webui.env import VERSION; print(VERSION)"`.
+> See **"v0.11.4 API changes"** below for endpoints added since this
+> skill's original v0.9.5 baseline.
 
 ## Two paths to the same API
 
@@ -147,7 +155,33 @@ identity + role you expect.
 
 ---
 
-# Command reference (every command, every flag, worked example)
+## v0.11.4 API changes (since the v0.9.5 baseline)
+
+The upstream routers gained endpoints between 0.9.5 and 0.11.4. The
+`chad-webui` wrapper is regenerated against them (commit `6cf8455790`,
+CLI + MCP), so use the wrapper commands below — no raw HTTP needed.
+
+| Group | Endpoint | Wrapper command | What it does |
+|---|---|---|---|
+| automations | `GET /automations/list` | `automations list` | List (0.11.4 moved this off the `/` root) |
+| automations | `POST /automations/{id}/run` | `automations run --automation-id ID` | Fire an automation **now**, off-schedule |
+| automations | `POST /automations/{id}/toggle` | `automations toggle --automation-id ID` | Enable/disable without editing the RRULE |
+| automations | `GET /automations/{id}/runs` | `automations runs --automation-id ID` | Run history (last-fire audit — powers Pattern E) |
+| notes | `GET /notes/pinned`, `GET /notes/search` | `notes pinned`, `notes search --query Q` | Pinned list; full-text note search |
+| notes | `POST /notes/{id}/pin` | `notes pin --note-id ID` | Pin/unpin a note (toggle) |
+| memories | `POST /memories/query`, `/search` | `memories query`, `memories search` | Semantic retrieval over the operator's memories |
+| memories | `POST /memories/reindex` | `memories reindex` | Rebuild the vector index |
+| calendar | `GET/POST /calendars/{id}[/update]` | `calendar get-calendar`, `calendar update-calendar` | Get/update a single calendar (name, color) |
+
+**Intentionally NOT wrapped:** `POST /memories/reset` and
+`DELETE /memories/delete/user` (wipe ALL of an operator's memories), and the
+note chat-link / ACL routes (`/notes/{id}/chat(s)`, `/notes/{id}/access/update`).
+Don't reach for them via raw HTTP — memory wipes are an operator decision, and
+ACL changes cross the per-operator scoping the wrapper enforces.
+
+---
+
+## Command reference (every command, every flag, worked example)
 
 The CLI form is shown for each; the MCP tool name is always
 `webui__<group>_<command>` with `_` instead of `-` (e.g.
@@ -157,9 +191,9 @@ For MCP, args are passed as a JSON object with snake_case keys (e.g.
 `{"calendar_id": "…", "title": "…"}`). For CLI, kebab-case flags
 (`--calendar-id …`). The wrapper translates one to the other.
 
-## Diagnostics
+### Diagnostics
 
-### `whoami` — show OpenWebUI identity
+#### `whoami` — show OpenWebUI identity
 
 ```sh
 chad-webui whoami
@@ -180,7 +214,7 @@ Hits `GET /api/v1/auths/`. Returns the full user record:
 Use this as the **cheap health check** before any privileged
 operation. If `role != "admin"`, downgrade your plan accordingly.
 
-### `health` — probe reachability + auth
+#### `health` — probe reachability + auth
 
 ```sh
 chad-webui health
@@ -191,12 +225,12 @@ Returns a diagnostic blob: base URL, the selected api-key name
 result. Use when a downstream call fails and you don't know if it's
 auth, network, or app.
 
-## Calendar
+### Calendar
 
 The default calendar is the operator's primary. Events are stored
 with nanosecond precision; `--all-day` flips the time component off.
 
-### `calendar list-calendars`
+#### `calendar list-calendars`
 
 ```sh
 chad-webui calendar list-calendars | jq '.[].name'
@@ -204,7 +238,7 @@ chad-webui calendar list-calendars | jq '.[].name'
 # "Coached by TJ"
 ```
 
-### `calendar create-calendar`
+#### `calendar create-calendar`
 
 ```sh
 chad-webui calendar create-calendar \
@@ -215,7 +249,7 @@ chad-webui calendar create-calendar \
 
 `--default` makes the new calendar the default for new events.
 
-### `calendar set-default-calendar` / `delete-calendar`
+#### `calendar set-default-calendar` / `delete-calendar`
 
 ```sh
 CALS=$(chad-webui calendar list-calendars)
@@ -224,7 +258,7 @@ chad-webui calendar set-default-calendar --calendar-id "$ID"
 chad-webui calendar delete-calendar     --calendar-id "$ID"
 ```
 
-### `calendar list-events`
+#### `calendar list-events`
 
 ```sh
 # Default: today + 14 days
@@ -245,7 +279,7 @@ chad-webui calendar list-events \
 `--start`/`--end` accept either bare `YYYY-MM-DD` (midnight UTC) or
 full ISO 8601 with timezone.
 
-### `calendar search-events`
+#### `calendar search-events`
 
 ```sh
 chad-webui calendar search-events --query "review with tj" --limit 10
@@ -253,13 +287,13 @@ chad-webui calendar search-events --query "review with tj" --limit 10
 
 Full-text against title + description.
 
-### `calendar get-event`
+#### `calendar get-event`
 
 ```sh
 chad-webui calendar get-event --event-id 7f02…
 ```
 
-### `calendar create-event`
+#### `calendar create-event`
 
 ```sh
 # One-shot
@@ -292,7 +326,7 @@ Common patterns:
 | Daily for 30 occurrences | `FREQ=DAILY;COUNT=30` |
 | Daily until a date | `FREQ=DAILY;UNTIL=20260701T000000Z` |
 
-### `calendar update-event`
+#### `calendar update-event`
 
 All flags from `create-event` are optional on update; only `--event-id`
 is required.
@@ -304,7 +338,7 @@ chad-webui calendar update-event \
   --end   2026-05-19T11:30:00Z
 ```
 
-### `calendar delete-event` / `rsvp`
+#### `calendar delete-event` / `rsvp`
 
 ```sh
 chad-webui calendar delete-event --event-id "$EVENT_ID"
@@ -314,18 +348,18 @@ chad-webui calendar rsvp \
   --status accepted     # accepted | declined | tentative | pending
 ```
 
-## Notes
+### Notes
 
 Notes are tagged markdown documents. Tags are comma-separated strings.
 
-### `notes list` / `get`
+#### `notes list` / `get`
 
 ```sh
 chad-webui notes list | jq '.[] | {id,title,updated_at}'
 chad-webui notes get --note-id "$NOTE_ID"
 ```
 
-### `notes create`
+#### `notes create`
 
 ```sh
 # Inline content
@@ -341,7 +375,7 @@ chad-webui notes create \
   --tags "content,planning"
 ```
 
-### `notes update`
+#### `notes update`
 
 ```sh
 chad-webui notes update \
@@ -351,25 +385,25 @@ chad-webui notes update \
 
 Pass only the fields you want changed.
 
-### `notes delete`
+#### `notes delete`
 
 ```sh
 chad-webui notes delete --note-id "$ID"
 ```
 
-## Automations (scheduled prompts)
+### Automations (scheduled prompts)
 
 Automations are recurring prompts that run on a schedule and write
 their output to the operator's chats. The schedule is an RRULE.
 
-### `automations list` / `get`
+#### `automations list` / `get`
 
 ```sh
 chad-webui automations list
 chad-webui automations get --automation-id "$AUTO_ID"
 ```
 
-### `automations create`
+#### `automations create`
 
 ```sh
 chad-webui automations create \
@@ -382,7 +416,7 @@ chad-webui automations create \
 `--inactive` creates it disabled. Omit `--model` to use the operator's
 current default.
 
-### `automations update`
+#### `automations update`
 
 ```sh
 chad-webui automations update \
@@ -390,19 +424,19 @@ chad-webui automations update \
   --rrule "FREQ=DAILY;BYHOUR=8;BYMINUTE=30"
 ```
 
-### `automations delete`
+#### `automations delete`
 
 ```sh
 chad-webui automations delete --automation-id "$AUTO_ID"
 ```
 
-## Memories (per-operator long-term)
+### Memories (per-operator long-term)
 
 Memories surface to the model on every chat turn as context. Keep
 them short (one fact per memory). They're operator-scoped — tantodefi
 can't see tjcooke's memories, and vice versa.
 
-### `memories list` / `create` / `update` / `delete`
+#### `memories list` / `create` / `update` / `delete`
 
 ```sh
 chad-webui memories list
@@ -411,13 +445,13 @@ chad-webui memories update --memory-id "$MEM_ID" --content "Prefers imperial uni
 chad-webui memories delete --memory-id "$MEM_ID"
 ```
 
-## Chats
+### Chats
 
 The chat history is the source of truth for past conversations. New
 chats can't be created here — they're created by the model serving
 turn. But every other lifecycle action is exposed.
 
-### `chats list` / `get` / `search`
+#### `chats list` / `get` / `search`
 
 ```sh
 chad-webui chats list --page 1                # 20 per page
@@ -425,7 +459,7 @@ chad-webui chats get --chat-id "$CHAT_ID"     # full conversation
 chad-webui chats search --query "openwebui upgrade"
 ```
 
-### `chats archive` / `pin`
+#### `chats archive` / `pin`
 
 Both are toggles — call once to set, again to unset. The response
 shows the new state.
@@ -435,7 +469,7 @@ chad-webui chats archive --chat-id "$ID"
 chad-webui chats pin     --chat-id "$ID"
 ```
 
-### `chats share` / `unshare`
+#### `chats share` / `unshare`
 
 ```sh
 RESP=$(chad-webui chats share --chat-id "$ID")
@@ -445,27 +479,27 @@ echo "Share URL: https://chad.supachad.com/s/$SHARE_ID"
 chad-webui chats unshare --chat-id "$ID"     # revokes the share token
 ```
 
-### `chats delete`
+#### `chats delete`
 
 ```sh
 chad-webui chats delete --chat-id "$ID"      # permanent; no undo
 ```
 
-## Knowledge (RAG collections)
+### Knowledge (RAG collections)
 
 Knowledge collections are vector-indexed file groups the model can
 RAG-retrieve into a chat turn. A collection is metadata; files come
 from `POST /api/v1/files/` (not in chad-webui yet — see
 "Knowledge ingestion" recipe below for the workaround).
 
-### `knowledge list` / `get`
+#### `knowledge list` / `get`
 
 ```sh
 chad-webui knowledge list
 chad-webui knowledge get --knowledge-id "$KB_ID"   # includes the file list
 ```
 
-### `knowledge create`
+#### `knowledge create`
 
 ```sh
 chad-webui knowledge create \
@@ -473,7 +507,7 @@ chad-webui knowledge create \
   --description "Sources for coaching content drafts — Schoenfeld, Helms, Israetel, MASS."
 ```
 
-### `knowledge update`
+#### `knowledge update`
 
 ```sh
 chad-webui knowledge update \
@@ -481,7 +515,7 @@ chad-webui knowledge update \
   --name "Strength + hypertrophy programming"
 ```
 
-### `knowledge add-file`
+#### `knowledge add-file`
 
 Attach an already-uploaded file (you must POST to `/api/v1/files/`
 first, then use the returned id here):
@@ -499,25 +533,25 @@ FILE_ID=$(echo "$FILE_RESP" | jq -r '.id')
 chad-webui knowledge add-file --knowledge-id "$KB_ID" --file-id "$FILE_ID"
 ```
 
-### `knowledge delete`
+#### `knowledge delete`
 
 ```sh
 chad-webui knowledge delete --knowledge-id "$KB_ID"
 ```
 
-## Models (admin role required for writes)
+### Models (admin role required for writes)
 
 The model registry powers the dropdown. `list` shows every row; the
 write commands are admin-only and uncommon — typically for adding a
 new fine-tuned variant or toggling visibility.
 
-### `models list`
+#### `models list`
 
 ```sh
 chad-webui models list | jq '.[] | {id,name,is_active}'
 ```
 
-### `models create`
+#### `models create`
 
 ```sh
 chad-webui models create \
@@ -532,7 +566,7 @@ chad-webui models create \
 include `system`, `temperature`, `max_tokens`, `seed`, plus open-webui
 specific ones — see the upstream docs link below.
 
-### `models update`
+#### `models update`
 
 ```sh
 chad-webui models update \
@@ -540,7 +574,7 @@ chad-webui models update \
   --params '{"system":"Be terse but warm. Two sentences max."}'
 ```
 
-### `models toggle`
+#### `models toggle`
 
 ```sh
 chad-webui models toggle --id "chad-experiment-1"
@@ -549,7 +583,7 @@ chad-webui models toggle --id "chad-experiment-1"
 Toggle enables/disables a model row. Disabled rows don't appear in
 the dropdown but the entry stays in the db.
 
-## Functions (admin role required for writes)
+### Functions (admin role required for writes)
 
 Functions are Python modules that extend OpenWebUI. Three types:
 
@@ -559,14 +593,14 @@ Functions are Python modules that extend OpenWebUI. Three types:
 | `pipe` | Replaces the upstream call entirely with custom Python | Local model proxy, mock model for testing |
 | `action` | Adds a clickable button under each assistant message | "Save to notes", "Regenerate with longer answer" |
 
-### `functions list` / `get`
+#### `functions list` / `get`
 
 ```sh
 chad-webui functions list
 chad-webui functions get --function-id strip_emails
 ```
 
-### `functions create`
+#### `functions create`
 
 ```sh
 chad-webui functions create \
@@ -579,7 +613,7 @@ chad-webui functions create \
 
 Function source format: see [OpenWebUI Functions docs][owui-functions].
 
-### `functions update` / `delete`
+#### `functions update` / `delete`
 
 ```sh
 chad-webui functions update \
@@ -589,7 +623,7 @@ chad-webui functions update \
 chad-webui functions delete --function-id strip_emails
 ```
 
-### `functions toggle`
+#### `functions toggle`
 
 Toggle enables/disables a function. `--scope global` toggles whether
 it applies to **every** chat (admin only); default `--scope self`
@@ -599,13 +633,13 @@ only toggles for the current user.
 chad-webui functions toggle --function-id strip_emails --scope global
 ```
 
-## Tools (admin role required for writes)
+### Tools (admin role required for writes)
 
 Tools are Python modules exposed to the model as OpenAI-style tool
 specs. Different from functions: tools are *called by the model* on
 demand, functions transparently mutate the pipeline.
 
-### `tools list` / `get` / `create` / `update` / `delete`
+#### `tools list` / `get` / `create` / `update` / `delete`
 
 Same flag shape as functions, minus the `--type` and `--scope`:
 
@@ -622,7 +656,7 @@ chad-webui tools delete --tool-id weather_check
 
 Tool source format: see [OpenWebUI Tools docs][owui-tools].
 
-## Folders
+### Folders
 
 Chat folders are a UI-side organization mechanism. The chats inside
 aren't physically moved — they get a `folder_id` reference.
@@ -636,13 +670,13 @@ chad-webui folders delete --folder-id "$F_ID"
 
 ---
 
-# Composed workflows (recipes)
+## Composed workflows (recipes)
 
 These are multi-step patterns that come up repeatedly. Each is
 written as a shell script for clarity; chains of MCP tool calls work
 equivalently.
 
-## Recipe 1 — "Save this conversation as a note"
+### Recipe 1 — "Save this conversation as a note"
 
 ```sh
 CHAT_ID="$CHAD_OPERATOR_CHAT_ID"          # provided by chad-shim
@@ -656,7 +690,7 @@ chad-webui notes create \
   --tags "chat-export,$(date -u +%Y-%m)"
 ```
 
-## Recipe 2 — "Reschedule everything from tomorrow to next Monday"
+### Recipe 2 — "Reschedule everything from tomorrow to next Monday"
 
 ```sh
 TOMORROW=$(date -u -d 'tomorrow' +%Y-%m-%d)
@@ -673,7 +707,7 @@ echo "$EVENTS" | jq -r '.[].id' | while read EVENT_ID; do
 done
 ```
 
-## Recipe 3 — "Hygiene: archive chats older than 30 days that aren't pinned"
+### Recipe 3 — "Hygiene: archive chats older than 30 days that aren't pinned"
 
 ```sh
 CUTOFF_MS=$(( $(date -u +%s) * 1000 - 30 * 86400 * 1000 ))
@@ -684,7 +718,7 @@ chad-webui chats list | jq -r --argjson cutoff "$CUTOFF_MS" '
 done
 ```
 
-## Recipe 4 — "Ingest a URL into a knowledge collection"
+### Recipe 4 — "Ingest a URL into a knowledge collection"
 
 ```sh
 URL="$1"
@@ -704,7 +738,7 @@ chad-webui knowledge add-file --knowledge-id "$KB" --file-id "$FILE_ID"
 rm -f /tmp/ingest-$$
 ```
 
-## Recipe 5 — "Memory consolidation pass"
+### Recipe 5 — "Memory consolidation pass"
 
 Detect near-duplicate memories, propose a merged version, keep one,
 delete the others.
@@ -716,7 +750,7 @@ echo "$MEMS" | jq -r '.[] | "\(.id) \(.content[:60])"' | sort -k2 > /tmp/mems.tx
 # Send to chad to find dupes → human-approval flow → delete via memories delete.
 ```
 
-## Recipe 6 — "A/B test two model variants"
+### Recipe 6 — "A/B test two model variants"
 
 ```sh
 # Create two variants
@@ -737,12 +771,12 @@ done
 
 ---
 
-# Nightly experiment playbook
+## Nightly experiment playbook
 
 Chad has 02:00-06:00 UTC to himself most days. Patterns he can run
 without supervision (idempotent, low-blast, easy to roll back):
 
-## Pattern A — "Function development cycle"
+### Pattern A — "Function development cycle"
 
 Goal: iteratively develop a custom function, test, refine.
 
@@ -757,7 +791,7 @@ Goal: iteratively develop a custom function, test, refine.
 9. Log the iteration to memory: `webui__memories_create`
 10. **Rollback if needed**: `webui__functions_delete` (file id preserved in your notes from step 3)
 
-## Pattern B — "Knowledge curation pass"
+### Pattern B — "Knowledge curation pass"
 
 Goal: keep RAG collections fresh; drop stale, add recent.
 
@@ -770,7 +804,7 @@ Goal: keep RAG collections fresh; drop stale, add recent.
 5. Replace with fresher sources via the Recipe 4 ingest pattern
 6. `webui__memories_create` to log "Refreshed KB X on 2026-MM-DD; replaced N files"
 
-## Pattern C — "Memory hygiene"
+### Pattern C — "Memory hygiene"
 
 Goal: keep operator memory store tight; dedupe and condense.
 
@@ -781,7 +815,7 @@ Goal: keep operator memory store tight; dedupe and condense.
    then `webui__memories_delete` the redundant ones
 5. **Never delete without first updating a survivor** — atomicity matters
 
-## Pattern D — "Calendar / chat hygiene"
+### Pattern D — "Calendar / chat hygiene"
 
 Goal: keep the operator's surfaces clean.
 
@@ -791,7 +825,7 @@ Goal: keep the operator's surfaces clean.
 - Verify all recurring events still match the operator's stated
   rhythm (cross-ref against `identity.md`)
 
-## Pattern E — "Automation review"
+### Pattern E — "Automation review"
 
 Goal: ensure scheduled automations are still firing as expected.
 
@@ -800,7 +834,7 @@ Goal: ensure scheduled automations are still firing as expected.
 3. If drift: `webui__automations_update` with corrected RRULE OR
    `webui__automations_delete` if obsolete
 
-## Safe-experiment ground rules
+### Safe-experiment ground rules
 
 | Rule | Why |
 |---|---|
@@ -811,7 +845,7 @@ Goal: ensure scheduled automations are still firing as expected.
 | Delete = the last resort | Update / archive / disable first |
 | Log the rollback path | "If this breaks, run X to undo" — written as a memory at start of experiment |
 
-## Suggested cron-wrapper additions (not yet built)
+### Suggested cron-wrapper additions (not yet built)
 
 These don't exist as named cron jobs yet but are good candidates for
 Chad's autonomous loops. Mention this to the operator when proposing
@@ -826,9 +860,9 @@ new automations:
 
 ---
 
-# Error handling + idempotency
+## Error handling + idempotency
 
-## Exit codes (CLI form)
+### Exit codes (CLI form)
 
 | Code | Meaning | Recovery |
 |---|---|---|
@@ -837,7 +871,7 @@ new automations:
 | 2 | Credentials file missing or malformed | Run `chad-restore-from-github`; check `/sandbox/.nemoclaw/credentials.json` |
 | 3 | Operator slug set but matching API key missing — fail-closed | Add `OPENWEBUI_API_KEY_<SLUG>` to credentials; never relax this |
 
-## Idempotency matrix
+### Idempotency matrix
 
 | Operation | Idempotent? | Notes |
 |---|---|---|
@@ -849,7 +883,7 @@ new automations:
 | Archive | No — toggles | Same as toggle |
 | Share | No — creates a new share each call | Check `share_id` field on the chat first |
 
-## HTTP 403 / 401 — auth failure routing
+### HTTP 403 / 401 — auth failure routing
 
 | Symptom | Root cause | Fix |
 |---|---|---|
@@ -857,7 +891,7 @@ new automations:
 | 401 with `unauthenticated` | Bearer key invalid | Rotate via `/api/v1/auths/api_key` (admin) |
 | 403 with `not allowed` | Operator role insufficient (e.g. trying admin op as user) | Surface to tantodefi; don't escalate |
 
-## `[Errno 101] Network is unreachable` from urllib
+### `[Errno 101] Network is unreachable` from urllib
 
 Two possible causes:
 
@@ -865,6 +899,7 @@ Two possible causes:
    `10.200.0.1:3128` is the only outbound path; without the env,
    urllib tries direct egress and fails. `chad-webui-mcp` sets
    this automatically — for any other call site, set:
+
    ```sh
    export HTTPS_PROXY=http://10.200.0.1:3128
    export HTTP_PROXY=http://10.200.0.1:3128
@@ -873,6 +908,7 @@ Two possible causes:
 
 2. **TLS UnknownCA**, often misreported as Errno 101 depending on
    client. Set the CA bundle:
+
    ```sh
    export SSL_CERT_FILE=/etc/openshell-tls/ca-bundle.pem
    export REQUESTS_CA_BUNDLE=/etc/openshell-tls/ca-bundle.pem
@@ -884,197 +920,153 @@ whether the L7 policy was the block.
 
 ---
 
-# Linked docs
+## Terminal Integration (Browser VM + Docker)
 
-Chad's experiment surface is bounded by what OpenWebUI can do. This
-section is the read-this-before-designing-an-experiment reference —
-every major feature has an upstream doc that explains the model
-chad can use, the schema, the access-control implications, and (often)
-example code chad can adapt as an experiment surface.
+OpenWebUI at `chad.supachad.com` runs a **dual-terminal** architecture
+driven entirely by an injected `static/loader.js` (the `vm-panel`), not
+a stock OpenWebUI feature. Full engineering detail is in the companion
+**`TERMINAL_INTEGRATION.md`**; this section is the operator-level map.
 
-## Top-level orientation
+| id | Backend container | Where the shell runs |
+|---|---|---|
+| `webvm` | `nemoclaw-browser-vm-relay` | CheerpX x86 Debian pod **inside the user's browser tab** (zero server compute) |
+| `docker-term` | `nemoclaw-docker-vm-relay` | a **real PTY** (`os.openpty` + `bash -l`) in the relay container |
 
-- [OpenWebUI docs](https://docs.openwebui.com/) — landing
-- [Getting started → Environment variables](https://docs.openwebui.com/getting-started/env-configuration) — every flag exposed on the container; useful for `chad-webui health` debugging
-- [Getting started → API endpoints](https://docs.openwebui.com/getting-started/api-endpoints) — REST surface chad-webui wraps
-- [GitHub releases](https://github.com/open-webui/open-webui/releases) — version history, breaking changes per version (currently :main = post-v0.9.5)
+Both are the **same relay code** (`browser-vm/relay/relay.py`), switched
+by the `RELAY_BACKEND` env (`browser` vs `docker`) — there is **no**
+`ghcr.io/open-webui/terminals` orchestrator (that image has no
+session-create route; the relay replaces it). Both are registered in the
+DB as `config.terminal_server.connections` (`webvm`, `docker-term`).
 
-## Feature reference (organized by what chad can experiment with)
+### The floating bar UI (not a dropdown)
 
-### Functions — the in-pipeline Python plugin layer
+A thin, **draggable** bar (`#bv-vmbar`) sits in a screen corner with:
 
-[**Functions overview**][owui-functions] — the entry point.
+- Two **toggle buttons** — `🌐 Browser VM (WebVM)` / `🐳 Docker Terminal`
+  — one active at a time (the active one carries the `.active` class).
+- A terminal-glyph icon that opens/closes the interactive dock.
+- A **collapse chevron** → shrinks the bar to a small pill that snaps to
+  the nearest screen edge; tap the pill to expand. Position + collapsed
+  state persist in `localStorage` (`bv.barPos`, `bv.barCollapsed`).
 
-Three types, each a different experiment surface:
+### Browser VM (WebVM) — CheerpX
 
-- **Filters** — run before/after every chat turn; mutate request or
-  response. Best for: pre-processing user messages (e.g. inject
-  context from operator's calendar), post-processing model output
-  (e.g. strip PII), changing parameters per turn.
-  [docs](https://docs.openwebui.com/features/plugin/functions/filter)
-- **Pipes** — replace the upstream model entirely with custom Python.
-  Best for: routing decisions, multi-model orchestration, calling
-  an external service that returns chat-completion-shaped responses.
-  [docs](https://docs.openwebui.com/features/plugin/functions/pipe)
-- **Actions** — add a clickable button under each assistant message.
-  Best for: one-click follow-ups ("Save to notes", "Regenerate with
-  longer answer", "Email to operator").
-  [docs](https://docs.openwebui.com/features/plugin/functions/action)
+Full x86 Debian in the browser via WebAssembly. Requirements:
 
-Community catalog of installable functions:
-**https://openwebui.com/functions** — browse for inspiration; many
-filters and pipes are 1-screen Python and easy to A/B against.
+- **Cross-origin isolation** (`COOP: same-origin`, `COEP: require-corp`,
+  plus `CORP`) for `SharedArrayBuffer` — added by `coi_middleware.py`,
+  baked into `Dockerfile.coi` (NOT a runtime `main.py` patch, which does
+  not survive a recreate).
+- **Self-hosted CheerpX**, complete, under `static/vendor/` — the CDN is
+  not used. `makeCheerpxAdapter()` loads it from a **versioned subdir**
+  `/static/vendor/r1/cheerpx_v3.esm.js` (bump `r1`→`r2` to defeat a
+  Cloudflare-cached 404). `cx_esm.js` eagerly imports its whole runtime
+  RELATIVE to itself — `cxcore*.{js,wasm}`, `cheerpOS.js`, `cxbridge.js`,
+  `workerclock.js`, and the `tun/` tree (`direct.js`,
+  `tailscale_tun*.js`, `ipstack.js`, `wasm_exec.js`, `tailscale.wasm`,
+  `ipstack.wasm`) — so **all** of those must be vendored or boot throws.
+- Disk image `debian.ext2` (~600 MB) stays at `/static/vendor/` and loads
+  via `HttpBytesDevice` (HTTP range requests) + `IDBDevice("block1")` mem
+  overlay + `OverlayDevice`.
+- Exec: OSC-999 sentinel capture on the shared tty (`setCustomConsole`),
+  serialized queue prevents interleaved output.
 
-### Tools — OpenAI-style tool/function calling
+`static/vendor` is **bind-mounted read-only** into `STATIC_DIR`, so new
+vendor files need no `docker cp` — drop them on the host and they serve.
 
-[**Tools overview**][owui-tools] — Python tool specs the model can
-invoke on demand (different from Functions, which run automatically).
+### Docker Terminal — real PTY in the relay
 
-Community catalog: **https://openwebui.com/tools**
+`makeDockerAdapter()` drives `docker-vm-relay` (`RELAY_BACKEND=docker`,
+`DOCKER_SHELL=/bin/bash`, `DOCKER_TARGET` empty = shell in the relay
+container; set it to `docker exec -i -t` into a named container):
 
-External tool servers via OpenAPI spec:
+- `POST /api/v1/terminals/docker-term/api/terminals` (X-Session-Id: chat)
+  → session id, then `WS …/api/terminals/{id}`.
+- **First-message auth MUST include chat_id**:
+  `{"type":"auth","token":<jwt>,"chat_id":<chat>}`. OpenWebUI's proxy
+  reads `payload.chat_id` and forwards it to the relay as `X-Session-Id`;
+  a browser `WebSocket` can't set headers, so omitting it leaves the
+  relay with no chat context and it closes the session (the classic
+  "Docker terminal unresponsive" bug).
+- Keystrokes → WS; PTY output ← WS binary frames; resize via JSON frames.
 
-- [Tool Servers / OpenAPI integration](https://docs.openwebui.com/openapi-servers) — chad can register external HTTP tools as if they were native
-- [MCP (Model Context Protocol)](https://docs.openwebui.com/openapi-servers/mcp) — OpenWebUI's MCP bridge; relevant because chad-webui-mcp uses the same protocol
+### Switching between terminals (shared console)
 
-### Pipelines — the long-form pipeline framework
+The two adapters share **one** xterm (`ensureConsole()`), created once and
+never disposed on a switch. `switchTerminal(type)`:
 
-[**Pipelines docs**](https://docs.openwebui.com/pipelines/) — a
-separate server that hosts more complex multi-stage pipelines than
-Functions allow. Higher overhead, more capability. Useful for chad
-when an experiment needs more than a single Python file.
+1. `detach()` the old adapter (stops its backend, **keeps** the console) —
+   NOT `reset()`, which disposes the xterm (that left WebVM dead after a
+   round-trip through Docker).
+2. `term.clear()`, then `init()` the new adapter onto the same console.
+3. Keeps the **agent relay connected for both** types (does NOT
+   `dropRelay()` on switch — dropping a connecting socket threw
+   "WebSocket closed before the connection is established").
 
-### Knowledge (RAG)
+### Agent typing into the active terminal
 
-- [**RAG / Knowledge overview**](https://docs.openwebui.com/features/rag)
-- Schema: collections contain files; each file goes through
-  embedder + chunker; queries are top-k similarity retrieval.
-- Access control: collections support `access_control.read.user_ids`
-  and `.group_ids` — **how chad shares a RAG collection with a
-  specific operator without using their key.**
-- Embedder config: lives under Admin → Settings → Documents.
+The agent's commands flow: agent tool → `/vm-bridge` relay → the browser's
+`execRequest()` → `STATE.pubAdapter.exec()` — i.e. whichever terminal is
+selected:
 
-### Memory
+- **WebVM** → runs in the in-browser CheerpX pod.
+- **Docker** → the adapter POSTs to
+  `/api/v1/terminals/docker-term/api/cmd`, which runs server-side
+  (`DockerSession.run`, sentinel-captured output) isolated from the
+  user's live typing.
 
-- [**Memory overview**](https://docs.openwebui.com/features/memory)
-- Per-user, no sharing. Chad creates memories via
-  `chad-webui memories create` for the matching operator slug.
-- Memories surface as context on every chat turn for that user.
+The agent's tools are generated from the **terminal servers'
+`/openapi.json`** (there is no separate tool server; the native
+`browser_shell.py` tool is optional). The relay routes originally parsed
+`await request.json()` with an untyped `Request`, so FastAPI advertised
+**empty** params and the agent's exec tools were uncallable ("empty
+command"). Fixed by adding `openapi_extra` request schemas to `/api/cmd`,
+`/execute`, `/files/upload`, and resolving `chat_id` from the injected
+`X-Session-Id` header — so the agent only supplies `command`. After a
+relay change, **restart `nemoclaw-openwebui`** so it re-fetches the tool
+schema, and start a fresh chat.
 
-### Web search
+### Deploying loader + relay changes (order matters)
 
-- [**Web search overview**](https://docs.openwebui.com/features/web-search)
-- Configurable per-engine (Brave is what chad has wired); the
-  search results are injected as a tool call before the model
-  generates. Good experiment surface for "does web grounding
-  improve answers in topic X?"
+| Artifact | Source of truth | Deploy |
+|---|---|---|
+| `loader.js` | `browser-vm/loader/vm-panel.js` → `build.sh` (syntax + ~295-assertion smoke test) → `static/loader.js` | `browser-vm/loader/deploy-loader.sh`: `docker cp` into `STATIC_DIR` **and** bump `index.html`'s `?v=<hash>` (a FIXED `?v=` is cached by browser + Cloudflare, so every deploy needs a new hash). Normal reload then picks it up. |
+| vendor assets | `static/vendor/**` (bind-mounted) | just drop on host; no restart |
+| `relay.py` | `browser-vm/relay/relay.py` (baked into the image) | `docker cp relay/relay.py <c>:/relay/relay.py && docker restart` for both relays; rebuild the image (`docker build -f browser-vm/deploy/relay.Dockerfile -t openwebui-browser-vm-relay -t openwebui-docker-vm-relay browser-vm/`) to survive `--force-recreate` |
 
-### Image generation
+**Never hand-edit the deployed `static/loader.js`** — always edit
+`vm-panel.js` and run `build.sh`; the gate catches the regressions that a
+direct edit shipped (drag-guard eating clicks, mock-adapter fabricating
+output, missing `sendTerminalOutput`, dropped `/proc`+`/dev` mounts).
 
-- [**Image generation overview**](https://docs.openwebui.com/features/image-generation)
-- Pluggable backend (default: ComfyUI). Chad can experiment with
-  prompt-template variations for image automations.
+A `docker restart nemoclaw-openwebui` does **not** revert the loader
+(`STATIC_DIR` re-copies from the bind mount) nor the `index.html` `?v=`
+(writable layer survives restart; only `--force-recreate`/rebuild reverts).
 
-### Code interpreter
+---
 
-- [**Code interpreter**](https://docs.openwebui.com/features/code-interpreter)
-- Sandboxed Python execution per chat turn. Experiment surface for
-  "should this automation include code-interpreter output?"
+## Linked docs
 
-### Automations (scheduled prompts)
+### Official OpenWebUI
 
-- [**Automations overview**](https://docs.openwebui.com/features/workspace/automations)
-- RRULE-scheduled prompts that fire and post results to the
-  operator's chat list. Primary experiment artifact for Category 1
-  (prompt opt), 2 (workflow), 6 (timing).
-- Schema is exposed at `AutomationData`: `prompt`, `model_id`,
-  `rrule`, `terminal` (optional). Top-level: `name`, `is_active`,
-  `access_control`.
-
-### Channels (shared chat spaces)
-
-- [**Channels overview**](https://docs.openwebui.com/features/workspace/channels)
-- Multi-user chat rooms with member lists. **The way chad creates
-  artifacts both operators see without needing per-operator API
-  keys.** Webhook support for inbound events from external systems.
-
-### Notes
-
-- [**Notes overview**](https://docs.openwebui.com/features/workspace/notes)
-- Per-user markdown notes; chad creates with `chad-webui notes
-  create`. Lives in the workspace sidebar. Experiment surface for
-  "auto-summary as a note vs as a chat".
-
-### Calendar
-
-OpenWebUI 0.9+ ships a built-in calendar:
-
-- Endpoints at `/api/v1/calendar/*` — full CRUD on calendars and events.
-- Per-user calendars; events bound to the API key holder's user_id
-  (confirmed by reading the router source — no admin override
-  parameter).
-- Used by chad for `[chad-block]` / `[chad-experiment]` /
-  `[operator-sync]` / `[experiment-review]` events.
-- Experiment surface for Category 6 (calendar timing).
-
-### Workspace (models, knowledge, automations, prompts)
-
-- [**Workspace overview**](https://docs.openwebui.com/features/workspace)
-- The admin-managed model registry, plus the workspace-level
-  knowledge / automation / prompt / function management. This is
-  the surface for **admin-shared** artifacts (Categories 3 + 4 from
-  the chad-experiment skill).
-
-### Permissions, access control, sharing
-
-- [**Permissions overview**](https://docs.openwebui.com/features/permissions)
-- [Users + Groups](https://docs.openwebui.com/getting-started/quick-start/community#users--groups) — for tjcooke-visible artifacts without his key, add him to a group and grant the group access
-- `BYPASS_MODEL_ACCESS_CONTROL=True` (current config) — every signed-in user sees every model regardless of `access_control`. This is on for chad's deployment.
-
-## Reading list by chad-experiment category
-
-When chad picks a category from the experiment skill, the right
-upstream docs to consult are:
-
-| Category | OpenWebUI docs to consult |
-|---|---|
-| **1 — Prompt optimization** | Automations · Functions (filter/pipe) · Models (system prompt + params) |
-| **2 — Workflow optimization** | Automations + RRULE conventions · Functions (action type for one-click follow-ups) · Notes · Calendar |
-| **3 — Tool spec / function deployment** | Functions (3 types) · Tools · MCP · OpenAPI tool servers · Pipelines |
-| **4 — Knowledge curation** | RAG / Knowledge · Web search (for live grounding) · Permissions (sharing collections without per-user keys) |
-| **5 — Memory tuning** | Memory · Permissions (per-user only — no cross-operator) |
-| **6 — Calendar timing** | Calendar · Automations (RRULE format) |
-| **7 — Drift detection** | API endpoints · Workspace (model registry) · GitHub releases (track upstream changes) |
-
-## Community resources (inspiration for experiment designs)
-
-- [openwebui.com/functions](https://openwebui.com/functions) — installable function catalog (filters, pipes, actions)
-- [openwebui.com/tools](https://openwebui.com/tools) — installable tools
-- [openwebui.com/prompts](https://openwebui.com/prompts) — installable prompts
-- [openwebui.com/models](https://openwebui.com/models) — model presets (params + system prompts to A/B test against)
-
-When chad designs a Category 1 (prompt opt) experiment, the prompts
-catalog is a sanity check: if someone in the community has already
-A/B'd this pattern, the docs there often summarize what won.
-
-## Cross-experiment design references
-
-- [Access control matrix](https://docs.openwebui.com/features/permissions/) — which artifacts can be shared without per-user keys (knowledge, functions, tools, models, channels) vs. which cannot (automations, notes, calendar, memories)
-- [OpenAPI server architecture](https://docs.openwebui.com/openapi-servers) — when building a Category 3 tool, chad should consider whether to ship as a native function (in-Python) or an external OpenAPI server
-- [Connection providers](https://docs.openwebui.com/getting-started/quick-start/integrations) — the model dropdown's backend configs; Category 1.3 (system-prompt experiments on custom model rows) uses this layer
-
-## Local docs (in this repo)
-
-- `docs/operations/openwebui.md` — host-side deployment guide
-- `docs/operations/chad-devflow.md` — full chad-* wrapper catalog
-- `docs/operations/wrapper-bugs.md` — tracked bugs + shim workarounds
-- `docs/operations/chad-experiments.md` — operator's-eye view of the experiment lifecycle
-- The sibling **chad-experiment** skill at `/sandbox/.openclaw-data/skills/chad-experiment/SKILL.md` — methodology + the 7 experiment categories
+- [OpenWebUI docs](https://docs.openwebui.com/)
+- [Environment variables](https://docs.openwebui.com/getting-started/env-configuration)
+- [API reference](https://docs.openwebui.com/getting-started/api-endpoints)
+- [Functions][owui-functions] — Python pipeline filter / pipe / action
+- [Tools][owui-tools] — OpenAI-style tool specs
+- [Pipelines](https://docs.openwebui.com/pipelines/) — long-form pipeline framework
+- [GitHub releases](https://github.com/open-webui/open-webui/releases)
 
 [owui-functions]: https://docs.openwebui.com/features/plugin/functions/
 [owui-tools]: https://docs.openwebui.com/features/plugin/tools/
 
-## Source
+### Local docs (in this repo)
+
+- `docs/operations/openwebui.md` — host-side deployment guide
+- `docs/operations/chad-devflow.md` — full chad-* wrapper catalog
+- `docs/operations/wrapper-bugs.md` — tracked bugs + shim workarounds
+
+### Source
 
 - Wrapper: `/sandbox/.openclaw-data/bin/chad-webui` (Python, stdlib only)
 - MCP server: `/sandbox/.openclaw-data/bin/chad-webui-mcp` (Python, stdlib only)
@@ -1082,7 +1074,7 @@ A/B'd this pattern, the docs there often summarize what won.
 - Credentials: `/sandbox/.nemoclaw/credentials.json`
 - MCP registration: `mcp.servers.webui` in `/sandbox/.openclaw/openclaw.json`
 
-## In-container source (for endpoint discovery)
+### In-container source (for endpoint discovery)
 
 When something isn't documented and you need to find an endpoint:
 
@@ -1091,6 +1083,12 @@ docker exec nemoclaw-openwebui grep -hE '@router\.(get|post|delete|put|patch)' \
   /app/backend/open_webui/routers/<router>.py
 ```
 
-Where `<router>` is one of: `auths, chats, models, functions, tools,
-knowledge, memories, folders, files, calendar, notes, automations,
-configs, prompts, channels, users, groups, evaluations, audio, images`.
+Where `<router>` is one of (full v0.11.4 set): `analytics, audio, auths,
+automations, calendar, channels, chats, configs, evaluations, files,
+folders, functions, groups, images, knowledge, memories, models, notes,
+notifications, ollama, openai, pipelines, prompts, retrieval, scim,
+skills, tasks, terminals, tools, users, utils`.
+
+The decorator format in this fork is single-quoted with no leading
+slash collapse, e.g. `@router.get('/list')` — grep for `^@router\.` to
+catch them all (a `@router.get("...")` double-quote pattern misses them).

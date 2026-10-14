@@ -74,6 +74,27 @@ scripts/chad-github-worker/chad-dispatch             /usr/local/bin/chad-dispatc
 # ─────────────────────────────────────────────────────────────────────────
 scripts/openwebui/chad-experiment       /sandbox/.openclaw-data/bin/chad-experiment   755 ssh
 scripts/openwebui/chad-experiment-skill.md  /sandbox/.openclaw-data/skills/chad-experiment/SKILL.md  644 ssh
+# Chad's other skills. Previously only chad-setup.sh (sync-skills-to-sandbox.sh)
+# installed these, so any redeploy/restart left them dark (2026-10-14: only
+# chad-experiment loaded). Docs + the relative-path helper scripts they cite;
+# binaries (proton-tool, chad-spawn, chad-intake…) are deployed above.
+scripts/openwebui/openwebui-skill.md                         /sandbox/.openclaw-data/skills/openwebui/SKILL.md                                644 ssh
+.github/skills/proton-calendar/SKILL.md                      /sandbox/.openclaw-data/skills/proton-calendar/SKILL.md                          644 ssh
+.github/skills/proton-calendar/EMAIL-POLICY.md               /sandbox/.openclaw-data/skills/proton-calendar/EMAIL-POLICY.md                   644 ssh
+.github/skills/chad-bug-intake/SKILL.md                      /sandbox/.openclaw-data/skills/chad-bug-intake/SKILL.md                          644 ssh
+.github/skills/chad-bug-intake/scripts/create-bug-issue.sh   /sandbox/.openclaw-data/skills/chad-bug-intake/scripts/create-bug-issue.sh       755 ssh
+.github/skills/chad-bug-intake/scripts/create-child-issues.sh  /sandbox/.openclaw-data/skills/chad-bug-intake/scripts/create-child-issues.sh   755 ssh
+.github/skills/chad-bug-intake/scripts/normalize-bug-title.sh  /sandbox/.openclaw-data/skills/chad-bug-intake/scripts/normalize-bug-title.sh   755 ssh
+.github/skills/chad-bug-intake/scripts/bootstrap-github-labels.sh  /sandbox/.openclaw-data/skills/chad-bug-intake/scripts/bootstrap-github-labels.sh  755 ssh
+.github/skills/chad-orchestrator/SKILL.md                    /sandbox/.openclaw-data/skills/chad-orchestrator/SKILL.md                        644 ssh
+.github/skills/chad-orchestrator/kinds/brain.yaml            /sandbox/.openclaw-data/skills/chad-orchestrator/kinds/brain.yaml                644 ssh
+.github/skills/chad-orchestrator/kinds/coder.yaml            /sandbox/.openclaw-data/skills/chad-orchestrator/kinds/coder.yaml                644 ssh
+.github/skills/chad-orchestrator/kinds/codex.yaml            /sandbox/.openclaw-data/skills/chad-orchestrator/kinds/codex.yaml                644 ssh
+.github/skills/chad-orchestrator/kinds/fitness.yaml          /sandbox/.openclaw-data/skills/chad-orchestrator/kinds/fitness.yaml              644 ssh
+.github/skills/chad-orchestrator/kinds/opencode.yaml         /sandbox/.openclaw-data/skills/chad-orchestrator/kinds/opencode.yaml             644 ssh
+.github/skills/chad-orchestrator/kinds/researcher.yaml       /sandbox/.openclaw-data/skills/chad-orchestrator/kinds/researcher.yaml           644 ssh
+.github/skills/chad-orchestrator/kinds/reviewer.yaml         /sandbox/.openclaw-data/skills/chad-orchestrator/kinds/reviewer.yaml             644 ssh
+.github/skills/chad-orchestrator/kinds/writer.yaml           /sandbox/.openclaw-data/skills/chad-orchestrator/kinds/writer.yaml               644 ssh
 scripts/openwebui/chad-webui            /sandbox/.openclaw-data/bin/chad-webui        755 ssh
 scripts/openwebui/chad-webui-mcp        /sandbox/.openclaw-data/bin/chad-webui-mcp    755 ssh
 scripts/openwebui/chad-inbox            /sandbox/.openclaw-data/bin/chad-inbox        755 ssh
