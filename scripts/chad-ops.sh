@@ -144,6 +144,14 @@ cmd_gbrain_fix() {
 
 cmd_restart_shim() {
   step "restart-shim (+ refresh allowlist, wait :$SHIM_PORT)"
+  if [ "$SANDBOX_MODE" = container ]; then
+    # Container model: the shim runs in-container and is exposed to the host via
+    # `openshell forward service` (not an SSH tunnel + launchd watchdog). Bounce the
+    # in-container shim; host serving/forward is managed separately (not here).
+    sshp "pkill -9 -f chad-shim.py 2>/dev/null; true" >/dev/null
+    ok "in-container shim bounced (host serving via: openshell -g $GW_NAME forward service --target-port $SHIM_PORT --local 127.0.0.1:$SHIM_PORT $SANDBOX_NAME)"
+    return 0
+  fi
   sshp "pkill -9 -f chad-shim.py 2>/dev/null; true" >/dev/null
   launchctl kickstart -k "$GUI/dev.nemoclaw.chad-shim-watchdog" 2>/dev/null || true
   wait_port_host "$SHIM_PORT" "shim"
@@ -196,7 +204,17 @@ cmd_skills_register() {
 }
 
 cmd_restart_gateway() {
-  step "restart-gateway (wait :$GW_PORT on pod)"
+  step "restart-gateway (wait :$GW_PORT)"
+  if [ "$SANDBOX_MODE" = container ]; then
+    # Container self-supervises its gateway (nemoclaw-start + the #38 convergence
+    # respawn). Do NOT pkill it — killing the gateway kills the container's main
+    # process (exit 137). Just verify it is listening on its loopback dashboard port.
+    local p
+    p=$(sshp "ss -tln 2>/dev/null | grep -qE ':1879[0-9]' && echo yes || echo no")
+    [ "$p" = yes ] && ok "gateway listening (container self-supervised)" \
+      || warn "gateway not listening in container — inspect nemoclaw-start log"
+    return 0
+  fi
   kx 'pkill -9 -f "openclaw.*gateway" 2>/dev/null; pkill -9 -f openclaw-gateway 2>/dev/null; true' >/dev/null
   launchctl kickstart -k "$GUI/dev.nemoclaw.chad-gateway-watchdog" 2>/dev/null || true
   local up
@@ -231,8 +249,15 @@ json.dump({k:src[k] for k in keep if k in src}, sys.stdout)
     bad "could not build filtered creds"
     return 1
   }
-  printf '%s' "$filtered" | ssh -o BatchMode=yes -o ConnectTimeout=12 "$SSH_HOST" \
-    "mkdir -p /sandbox/.nemoclaw && cat > /sandbox/.nemoclaw/credentials.json && chmod 600 /sandbox/.nemoclaw/credentials.json && echo ok" >/dev/null 2>&1 \
+  local _cwrite="mkdir -p /sandbox/.nemoclaw && cat > /sandbox/.nemoclaw/credentials.json && chmod 600 /sandbox/.nemoclaw/credentials.json && chown sandbox:sandbox /sandbox/.nemoclaw/credentials.json 2>/dev/null; echo ok"
+  local _cok=0
+  if [ "$SANDBOX_MODE" = container ]; then
+    # Container model: stream over `docker exec -i -u 0` (sshp redirects </dev/null).
+    printf '%s' "$filtered" | docker exec -i -u 0 "$SANDBOX_CONTAINER" sh -c "$_cwrite" >/dev/null 2>&1 && _cok=1
+  else
+    printf '%s' "$filtered" | ssh -o BatchMode=yes -o ConnectTimeout=12 "$SSH_HOST" "$_cwrite" >/dev/null 2>&1 && _cok=1
+  fi
+  [ "$_cok" = 1 ] \
     && ok "pod credentials.json written ($(printf '%s' "$filtered" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)))') keys)" \
     || bad "failed to write pod credentials.json"
 }
