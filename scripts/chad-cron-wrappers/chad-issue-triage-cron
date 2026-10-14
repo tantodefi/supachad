@@ -49,7 +49,7 @@ if [ "$REMAINING" -lt "$MIN_BUDGET" ]; then
     echo ""
     echo "## Issue triage skipped (low budget) — ${TS}"
     echo "remaining_tokens=${REMAINING} (< ${MIN_BUDGET})"
-  } >> "$MEMORY_FILE"
+  } >>"$MEMORY_FILE"
   echo "skipped: budget=${REMAINING}"
   exit 0
 fi
@@ -67,10 +67,10 @@ ISSUES_JSON="$(mktemp)"
 PARKED_ISSUES="$(mktemp)"
 trap 'rm -f "$ISSUES_JSON" "$PARKED_ISSUES"' EXIT
 if command -v gh >/dev/null 2>&1; then
-  if gh issue list --state open --limit "$TOP_N" --json number,title,body,author,labels > "$ISSUES_JSON" 2>/dev/null; then
+  if gh issue list --state open --limit "$TOP_N" --json number,title,body,author,labels >"$ISSUES_JSON" 2>/dev/null; then
     PREMIUM_HITS="$(
       AUTH_CONTEXT_DIR="$AUTH_CONTEXT_DIR" TS="$TS" PATTERN="$PREMIUM_MENTION_RE" \
-      python3 - "$ISSUES_JSON" "$PARKED_ISSUES" <<'PY'
+        python3 - "$ISSUES_JSON" "$PARKED_ISSUES" <<'PY'
 import json, sys, os, re
 issues_path, parked_path = sys.argv[1], sys.argv[2]
 ctx_dir = os.environ["AUTH_CONTEXT_DIR"]; ts = os.environ["TS"]
@@ -132,7 +132,7 @@ fi
   if [ "$PREMIUM_HITS" -gt 0 ]; then
     echo "Premium-eligible mentions: ${PREMIUM_HITS} 🔐 (auth context dir: ${AUTH_CONTEXT_DIR})"
   fi
-} >> "$MEMORY_FILE"
+} >>"$MEMORY_FILE"
 
 # ── Drafter — optional single-turn LLM draft pass ────────────────────
 # Runs BEFORE the heavy nohup detach. Drafts a triage decision (skip /
@@ -148,7 +148,8 @@ DRAFT_COUNT=0
 # same fix applied there.
 DRAFTER_STATUS="not-invoked"
 if [ "$PARK_ISSUE_COUNT" -gt 0 ]; then
-  DRAFTER_CFG="$(python3 - <<PY
+  DRAFTER_CFG="$(
+    python3 - <<PY
 import json, os
 cfg_path = os.environ.get("CHAD_PROFILES_FILE", "/usr/local/share/chad/task-profiles.json")
 try:
@@ -167,7 +168,7 @@ else:
         "model": ph.get("model", ""),
     }))
 PY
-)"
+  )"
   if [ -n "$DRAFTER_CFG" ] && [ -x /usr/local/bin/chad-drafter ]; then
     DRAFTER_MIN_BUDGET="$(printf '%s' "$DRAFTER_CFG" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("minBudgetTokens",0))')"
     DRAFTER_TIMEOUT="$(printf '%s' "$DRAFTER_CFG" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("timeoutSeconds",60))')"
@@ -179,17 +180,18 @@ PY
       DRAFTER_STATUS="skipped (budget=${REMAINING} < ${DRAFTER_MIN_BUDGET})"
     else
       DRAFTER_OUT="$(mktemp)"
-      DRAFTER_ARGS=( --kind issue --timeout "$DRAFTER_TIMEOUT" --max-tokens "$DRAFTER_MAX_TOK" )
-      [ "$DRAFTER_PREMIUM" = "1" ] && DRAFTER_ARGS+=( --use-premium )
-      [ -n "$DRAFTER_MODEL" ] && DRAFTER_ARGS+=( --model "$DRAFTER_MODEL" )
+      DRAFTER_ARGS=(--kind issue --timeout "$DRAFTER_TIMEOUT" --max-tokens "$DRAFTER_MAX_TOK")
+      [ "$DRAFTER_PREMIUM" = "1" ] && DRAFTER_ARGS+=(--use-premium)
+      [ -n "$DRAFTER_MODEL" ] && DRAFTER_ARGS+=(--model "$DRAFTER_MODEL")
 
       if [ "$DRAFTER_PREMIUM" = "1" ] && [ "$PREMIUM_HITS" -gt 0 ]; then
+        # shellcheck disable=SC2012 # names are timestamps/ids we generate (no odd chars)
         FIRST_CTX="$(ls -1 "${AUTH_CONTEXT_DIR}"/issue-*.json 2>/dev/null | head -n 1 || true)"
         [ -n "$FIRST_CTX" ] && export CHAD_AUTH_CONTEXT_PATH="$FIRST_CTX"
       fi
 
       if /usr/local/bin/chad-drafter "$PARKED_ISSUES" "$DRAFTER_OUT" \
-            "${DRAFTER_ARGS[@]}" 2>/dev/null; then
+        "${DRAFTER_ARGS[@]}" 2>/dev/null; then
         DRAFT_COUNT="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(len([x for x in d.get("drafts",[]) if x.get("action") in ("draft","comment-draft","close-stale")]))' "$DRAFTER_OUT")"
         DRAFT_ERR="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("error","") or "")' "$DRAFTER_OUT")"
         if [ -n "$DRAFT_ERR" ]; then
@@ -219,7 +221,7 @@ for d in out.get("drafts", []):
     if action in ("draft","comment-draft","close-stale") and d.get("draft"):
         print(f"  draft:\n  > {d['draft'].replace(chr(10), chr(10)+'  > ')}")
 PY
-        } >> "$MEMORY_FILE"
+        } >>"$MEMORY_FILE"
       else
         DRAFTER_STATUS="failed (helper exit non-zero)"
       fi
@@ -228,7 +230,7 @@ PY
     {
       echo ""
       echo "_drafter: ${DRAFTER_STATUS}_"
-    } >> "$MEMORY_FILE"
+    } >>"$MEMORY_FILE"
   fi
 fi
 
@@ -255,7 +257,7 @@ nohup bash -c "
       echo '\`\`\`'
     } >> '${MEMORY_FILE}'
   fi
-" >/dev/null 2>&1 < /dev/null &
+" >/dev/null 2>&1 </dev/null &
 disown 2>/dev/null || true
 
 echo "issue-triage: top=${TOP_N} premium=${PREMIUM_HITS} drafts=${DRAFT_COUNT} drafter=${DRAFTER_STATUS} detached → ${LOG}"

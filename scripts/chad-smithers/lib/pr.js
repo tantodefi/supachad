@@ -10,14 +10,14 @@
 // Rank order matters: the FIRST matching rule wins, most-blocking first, so a PR
 // with conflicts AND failing checks reports "conflicts" (the thing to fix first).
 export const PR_ACTIONS = [
-  "draft",              // still a draft — not ready for anyone
-  "conflicts",          // merge conflicts — author must rebase
-  "checks-failing",     // CI red — author must fix
-  "changes-requested",  // a reviewer blocked it — author must address
-  "merge-ready",        // approved + mergeable + green — land it
-  "stale-nudge",        // review-requested but untouched for STALE_DAYS — poke reviewers
-  "needs-review",       // awaiting first review, still fresh
-  "waiting",            // none of the above (e.g. unknown mergeability, in-flight CI)
+  "draft", // still a draft — not ready for anyone
+  "conflicts", // merge conflicts — author must rebase
+  "checks-failing", // CI red — author must fix
+  "changes-requested", // a reviewer blocked it — author must address
+  "merge-ready", // approved + mergeable + green — land it
+  "stale-nudge", // review-requested but untouched for STALE_DAYS — poke reviewers
+  "needs-review", // awaiting first review, still fresh
+  "waiting", // none of the above (e.g. unknown mergeability, in-flight CI)
 ];
 
 // Did the status-check rollup fail? gh returns either a rollup array of
@@ -25,7 +25,9 @@ export const PR_ACTIONS = [
 export function checksFailing(pr = {}) {
   const roll = pr.statusCheckRollup;
   if (Array.isArray(roll)) {
-    return roll.some((c) => /FAIL|ERROR|TIMED_OUT|CANCELLED/i.test(String(c.conclusion || c.state || "")));
+    return roll.some((c) =>
+      /FAIL|ERROR|TIMED_OUT|CANCELLED/i.test(String(c.conclusion || c.state || "")),
+    );
   }
   return /FAIL|ERROR/i.test(String(roll || ""));
 }
@@ -34,7 +36,9 @@ function checksPassing(pr = {}) {
   const roll = pr.statusCheckRollup;
   if (Array.isArray(roll)) {
     if (roll.length === 0) return true; // no checks configured = not blocking
-    return roll.every((c) => /SUCCESS|NEUTRAL|SKIPPED/i.test(String(c.conclusion || c.state || "")));
+    return roll.every((c) =>
+      /SUCCESS|NEUTRAL|SKIPPED/i.test(String(c.conclusion || c.state || "")),
+    );
   }
   return !/FAIL|ERROR|PENDING/i.test(String(roll || ""));
 }
@@ -54,14 +58,31 @@ export function prAction(pr = {}, opts = {}) {
   const idleDays = pr.updatedAt ? (now - new Date(pr.updatedAt).getTime()) / 86400000 : 0;
 
   let action, reason;
-  if (pr.isDraft) { action = "draft"; reason = "still a draft"; }
-  else if (mergeable === "CONFLICTING") { action = "conflicts"; reason = "merge conflicts — rebase needed"; }
-  else if (checksFailing(pr)) { action = "checks-failing"; reason = "CI is red"; }
-  else if (review === "CHANGES_REQUESTED") { action = "changes-requested"; reason = "a reviewer requested changes"; }
-  else if (review === "APPROVED" && mergeable === "MERGEABLE" && checksPassing(pr)) { action = "merge-ready"; reason = "approved, mergeable, green"; }
-  else if ((review === "REVIEW_REQUIRED" || review === "") && idleDays >= staleDays) { action = "stale-nudge"; reason = `awaiting review ${Math.floor(idleDays)}d`; }
-  else if (review === "REVIEW_REQUIRED" || review === "") { action = "needs-review"; reason = "awaiting first review"; }
-  else { action = "waiting"; reason = "in flight (checks/mergeability pending)"; }
+  if (pr.isDraft) {
+    action = "draft";
+    reason = "still a draft";
+  } else if (mergeable === "CONFLICTING") {
+    action = "conflicts";
+    reason = "merge conflicts — rebase needed";
+  } else if (checksFailing(pr)) {
+    action = "checks-failing";
+    reason = "CI is red";
+  } else if (review === "CHANGES_REQUESTED") {
+    action = "changes-requested";
+    reason = "a reviewer requested changes";
+  } else if (review === "APPROVED" && mergeable === "MERGEABLE" && checksPassing(pr)) {
+    action = "merge-ready";
+    reason = "approved, mergeable, green";
+  } else if ((review === "REVIEW_REQUIRED" || review === "") && idleDays >= staleDays) {
+    action = "stale-nudge";
+    reason = `awaiting review ${Math.floor(idleDays)}d`;
+  } else if (review === "REVIEW_REQUIRED" || review === "") {
+    action = "needs-review";
+    reason = "awaiting first review";
+  } else {
+    action = "waiting";
+    reason = "in flight (checks/mergeability pending)";
+  }
 
   return { number: pr.number, title: pr.title || "", action, reason };
 }

@@ -30,17 +30,23 @@ PAIRS=(
 
 check() {
   local rel="$1" var="$2" f="$here/$1"
-  if [ ! -f "$f" ]; then echo "  FAIL $rel: file missing"; fail=$((fail+1)); return; fi
+  if [ ! -f "$f" ]; then
+    echo "  FAIL $rel: file missing"
+    fail=$((fail + 1))
+    return
+  fi
   # The env-var reference pattern (shell ${VAR} / $VAR, python os.environ/getenv).
   local env_re="(os\.environ(\.get)?\(?[\"']?${var}|\\\$\{?${var}|getenv\(\"?${var})"
   # Must read the env var at all — else vault injection is silently ignored.
   if ! grep -qE "$env_re" "$f"; then
     echo "  FAIL $rel: never reads \$$var from the environment (vault injection would be ignored)"
-    fail=$((fail+1)); return
+    fail=$((fail + 1))
+    return
   fi
   # Find the first genuine *open/test* of the creds file — NOT the path
   # assignment (CREDS=...) and NOT comments/docstrings. These are the idioms that
   # actually touch the file: a -f/-r test, open(...), isfile(...), cat/jq/< redirect.
+  # shellcheck disable=SC2016 # a literal regex, not an expansion
   local open_re='(\[[[:space:]]+-[fr][[:space:]]+"\$(CREDS|CREDS_FILE)"|open\(([^)]*)(CREDS|creds_path|CREDS_FILE)|isfile\(([^)]*)(CREDS|creds_path|CREDS_FILE)|cat[[:space:]]+"\$CREDS|jq[[:space:]].*"\$CREDS|<[[:space:]]*"\$CREDS)'
   local credline envline
   credline="$(grep -nE "$open_re" "$f" | head -1 | cut -d: -f1)"
@@ -48,11 +54,13 @@ check() {
   # If the file is ever opened, the env read must appear at or before that open.
   if [ -n "$credline" ] && [ -n "$envline" ] && [ "$envline" -gt "$credline" ]; then
     echo "  FAIL $rel: opens creds file (line $credline) before reading \$$var (line $envline) — not env-first"
-    fail=$((fail+1)); return
+    fail=$((fail + 1))
+    return
   fi
-  local where="env-only"; [ -n "$credline" ] && where="env-first (file fallback at line $credline)"
+  local where="env-only"
+  [ -n "$credline" ] && where="env-first (file fallback at line $credline)"
   echo "  ok   $rel reads \$$var $where"
-  pass=$((pass+1))
+  pass=$((pass + 1))
 }
 
 for p in "${PAIRS[@]}"; do

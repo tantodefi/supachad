@@ -43,8 +43,10 @@ const api = createSmithers(schemas, { dbPath: DB });
 const { smithers, Workflow, Task, Sequence, outputs } = api;
 
 export const workflow = smithers((ctx) => {
-  const topic = ctx.input?.topic || process.env.CHAD_DEBATE_TOPIC
-    || "Should chad-smithers migrate the dashboard from SQLite polling to the Smithers gateway event stream?";
+  const topic =
+    ctx.input?.topic ||
+    process.env.CHAD_DEBATE_TOPIC ||
+    "Should chad-smithers migrate the dashboard from SQLite polling to the Smithers gateway event stream?";
   const verdict = (ctx.outputs.verdict ?? [])[0];
 
   return (
@@ -71,14 +73,23 @@ export const workflow = smithers((ctx) => {
         />
 
         {/* Report the ruling. Shadow by default; reversible note when POST=1. */}
-        <Task id="report" output={outputs.report} sideEffect idempotencyKey={`debate-report-${topic.slice(0, 40)}`}>
+        <Task
+          id="report"
+          output={outputs.report}
+          sideEffect
+          idempotencyKey={`debate-report-${topic.slice(0, 40)}`}
+        >
           {async () => {
             const title = `Debate — ${topic.slice(0, 60)} — winner: ${verdict?.winner || "?"}`;
-            const body = `# ${title}\n\n**Decision:** ${verdict?.decision || ""}\n\n` +
+            const body =
+              `# ${title}\n\n**Decision:** ${verdict?.decision || ""}\n\n` +
               (verdict?.key_reasons || []).map((r) => `- ${r}`).join("\n") +
               `\n\n_confidence: ${verdict?.confidence ?? "?"}_`;
             if (POST) await postNote({ title, content: body, tags: "chad-debate" });
-            return { note: POST ? `${title} (posted)` : `SHADOW: ${title}`, winner: verdict?.winner || "?" };
+            return {
+              note: POST ? `${title} (posted)` : `SHADOW: ${title}`,
+              winner: verdict?.winner || "?",
+            };
           }}
         </Task>
       </Sequence>

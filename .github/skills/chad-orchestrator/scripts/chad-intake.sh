@@ -41,50 +41,100 @@ usage() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --from)          source_kind="$2"; shift 2 ;;
-    --task-file)     task_file="$2"; shift 2 ;;
-    --message-id)    message_id="$2"; shift 2 ;;
-    --issue)         issue_number="$2"; shift 2 ;;
-    --repo)          repo="$2"; shift 2 ;;
-    --kind)          forced_kind="$2"; shift 2 ;;
-    --dry-run)       dry_run=1; shift ;;
-    --no-collect)    no_collect=1; shift ;;
-    --timeout)       timeout_secs="$2"; shift 2 ;;
-    --budget-tokens) budget_tokens="$2"; shift 2 ;;
-    -h|--help)       usage ;;
-    *) echo "chad-intake: unknown argument: $1" >&2; exit 2 ;;
+    --from)
+      source_kind="$2"
+      shift 2
+      ;;
+    --task-file)
+      task_file="$2"
+      shift 2
+      ;;
+    --message-id)
+      message_id="$2"
+      shift 2
+      ;;
+    --issue)
+      issue_number="$2"
+      shift 2
+      ;;
+    --repo)
+      repo="$2"
+      shift 2
+      ;;
+    --kind)
+      forced_kind="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    --no-collect)
+      no_collect=1
+      shift
+      ;;
+    --timeout)
+      timeout_secs="$2"
+      shift 2
+      ;;
+    --budget-tokens)
+      budget_tokens="$2"
+      shift 2
+      ;;
+    -h | --help) usage ;;
+    *)
+      echo "chad-intake: unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
-[ -n "$source_kind" ] || { echo "chad-intake: --from is required" >&2; exit 2; }
+[ -n "$source_kind" ] || {
+  echo "chad-intake: --from is required" >&2
+  exit 2
+}
 
 # ── Materialize the task file depending on source ─────────────────
 tmp_task=""
 case "$source_kind" in
-  chat|cron)
-    [ -n "$task_file" ] || { echo "chad-intake: --task-file required for --from $source_kind" >&2; exit 2; }
+  chat | cron)
+    [ -n "$task_file" ] || {
+      echo "chad-intake: --task-file required for --from $source_kind" >&2
+      exit 2
+    }
     ;;
 
   proton)
-    [ -n "$message_id" ] || { echo "chad-intake: --message-id required for --from proton" >&2; exit 2; }
+    [ -n "$message_id" ] || {
+      echo "chad-intake: --message-id required for --from proton" >&2
+      exit 2
+    }
     command -v proton-tool >/dev/null 2>&1 || {
-      echo "chad-intake: proton-tool not available" >&2; exit 3; }
+      echo "chad-intake: proton-tool not available" >&2
+      exit 3
+    }
     tmp_task="$(mktemp /tmp/chad-intake-proton-XXXXXX.txt)"
     # read-mail auto-marks the message as read; that is intentional.
-    proton-tool read-mail --id="$message_id" > "$tmp_task"
+    proton-tool read-mail --id="$message_id" >"$tmp_task"
     task_file="$tmp_task"
     ;;
 
   issue)
-    [ -n "$issue_number" ] || { echo "chad-intake: --issue required for --from issue" >&2; exit 2; }
-    command -v gh >/dev/null 2>&1 || { echo "chad-intake: gh CLI not available" >&2; exit 3; }
+    [ -n "$issue_number" ] || {
+      echo "chad-intake: --issue required for --from issue" >&2
+      exit 2
+    }
+    command -v gh >/dev/null 2>&1 || {
+      echo "chad-intake: gh CLI not available" >&2
+      exit 3
+    }
     tmp_task="$(mktemp /tmp/chad-intake-issue-XXXXXX.md)"
-    gh_args=(issue view "$issue_number" --json title,body,author,labels -t \
+    gh_args=(issue view "$issue_number" --json "title,body,author,labels" -t
       '{{.title}}{{"\n\n"}}{{.body}}{{"\n\nauthor: @"}}{{.author.login}}{{"\nlabels: "}}{{range .labels}}{{.name}} {{end}}')
     if [ -n "$repo" ]; then
       gh_args+=(--repo "$repo")
     fi
-    gh "${gh_args[@]}" > "$tmp_task"
+    gh "${gh_args[@]}" >"$tmp_task"
     task_file="$tmp_task"
     ;;
 
@@ -104,9 +154,9 @@ echo "chad-intake: source=${source_kind} kind=${kind}" >&2
 
 # ── Spawn ─────────────────────────────────────────────────────────
 spawn_args=(--kind "$kind" --task-file "$task_file")
-[ -n "$timeout_secs" ]  && spawn_args+=(--timeout "$timeout_secs")
+[ -n "$timeout_secs" ] && spawn_args+=(--timeout "$timeout_secs")
 [ -n "$budget_tokens" ] && spawn_args+=(--budget-tokens "$budget_tokens")
-[ "$dry_run" -eq 1 ]    && spawn_args+=(--dry-run)
+[ "$dry_run" -eq 1 ] && spawn_args+=(--dry-run)
 
 task_id="$(chad-spawn "${spawn_args[@]}")"
 echo "chad-intake: task_id=${task_id}" >&2

@@ -15,9 +15,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-info()  { echo -e "${GREEN}[backup-host]${NC} $1"; }
-warn()  { echo -e "${YELLOW}[backup-host]${NC} $1"; }
-fail()  { echo -e "${RED}[backup-host]${NC} $1" >&2; exit 1; }
+info() { echo -e "${GREEN}[backup-host]${NC} $1"; }
+warn() { echo -e "${YELLOW}[backup-host]${NC} $1"; }
+fail() {
+  echo -e "${RED}[backup-host]${NC} $1" >&2
+  exit 1
+}
 
 usage() {
   cat <<EOF
@@ -99,7 +102,7 @@ do_backup() {
     [ -z "$old_dir" ] && continue
     rm -rf "$old_dir"
     pruned=$((pruned + 1))
-  done <<< "$(find "${BACKUP_BASE}" -mindepth 1 -maxdepth 1 -type d -mtime +30 2>/dev/null)"
+  done <<<"$(find "${BACKUP_BASE}" -mindepth 1 -maxdepth 1 -type d -mtime +30 2>/dev/null)"
   if [ "$pruned" -gt 0 ]; then
     info "Pruned ${pruned} backup(s) older than 30 days"
   fi
@@ -112,9 +115,9 @@ do_list() {
   fi
   info "Available host backups:"
   echo ""
-  for d in $(find "${BACKUP_BASE}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | xargs -I{} basename {} | sort -r); do
+  for d in $(find "${BACKUP_BASE}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort -r); do
     local files
-    files=$(find "${BACKUP_BASE}/${d}" -maxdepth 1 -type f -name '*.json' 2>/dev/null | xargs -I{} basename {} | tr '\n' ' ' || true)
+    files=$(find "${BACKUP_BASE}/${d}" -maxdepth 1 -type f -name '*.json' -exec basename {} \; 2>/dev/null | tr '\n' ' ' || true)
     local has_tmp=""
     [ -d "${BACKUP_BASE}/${d}/tmp" ] && has_tmp=" +tmp/"
     local has_skills=""
@@ -127,7 +130,7 @@ do_restore() {
   local ts="${1:-}"
 
   if [ -z "$ts" ]; then
-    ts="$(find "${BACKUP_BASE}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | xargs -I{} basename {} | sort -r | head -n1 || true)"
+    ts="$(find "${BACKUP_BASE}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort -r | head -n1 || true)"
     [ -n "$ts" ] || fail "No backups found in ${BACKUP_BASE}/"
     info "Using most recent backup: ${ts}"
   fi
@@ -182,9 +185,12 @@ do_restore() {
 action="${1:-backup}"
 
 case "$action" in
-  backup)  do_backup ;;
-  list)    do_list ;;
-  restore) shift; do_restore "$@" ;;
-  -h|--help|help) usage ;;
+  backup) do_backup ;;
+  list) do_list ;;
+  restore)
+    shift
+    do_restore "$@"
+    ;;
+  -h | --help | help) usage ;;
   *) usage ;;
 esac

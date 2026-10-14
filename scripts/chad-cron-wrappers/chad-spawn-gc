@@ -68,23 +68,42 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --done-days)    done_days="$2"; shift 2 ;;
-    --failed-days)  failed_days="$2"; shift 2 ;;
-    --orphan-hours) orphan_hours="$2"; shift 2 ;;
-    --dry-run)      dry_run=1; shift ;;
-    -h|--help)      usage ;;
-    *) echo "chad-spawn-gc: unknown arg: $1" >&2; exit 2 ;;
+    --done-days)
+      done_days="$2"
+      shift 2
+      ;;
+    --failed-days)
+      failed_days="$2"
+      shift 2
+      ;;
+    --orphan-hours)
+      orphan_hours="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h | --help) usage ;;
+    *)
+      echo "chad-spawn-gc: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
-[ -f "$QUEUE_FILE" ] || { echo "no ledger; nothing to gc"; exit 0; }
+[ -f "$QUEUE_FILE" ] || {
+  echo "no ledger; nothing to gc"
+  exit 0
+}
 
 # ── Phase 1: orphan reconcile (local; no gh dependency) ─────────────
 # Appends terminal entries for spawns stuck in queued/running past the
 # threshold. Done in Python so the latest-status fold and the append
 # happen in one pass; appends are newline-delimited JSON like chad-spawn's.
-reconciled="$(QUEUE_FILE="$QUEUE_FILE" SUBAGENTS_DIR="$SUBAGENTS_DIR" \
-  ORPHAN_HOURS="$orphan_hours" DRY_RUN="$dry_run" python3 <<'PY'
+reconciled="$(
+  QUEUE_FILE="$QUEUE_FILE" SUBAGENTS_DIR="$SUBAGENTS_DIR" \
+    ORPHAN_HOURS="$orphan_hours" DRY_RUN="$dry_run" python3 <<'PY'
 import json, os, datetime, pathlib
 UTC = datetime.timezone.utc
 now = datetime.datetime.now(UTC)
@@ -150,7 +169,8 @@ declare -A id_age_days
 while IFS=$'\t' read -r task_id status age; do
   id_status["$task_id"]="$status"
   id_age_days["$task_id"]="$age"
-done < <(QUEUE_FILE="$QUEUE_FILE" python3 <<'PY'
+done < <(
+  QUEUE_FILE="$QUEUE_FILE" python3 <<'PY'
 import json, os, datetime
 _UTC = datetime.timezone.utc
 now = datetime.datetime.now(_UTC)
@@ -207,9 +227,9 @@ while IFS= read -r branch; do
 
   threshold=0
   case "$status" in
-    done)   threshold="$done_days" ;;
+    done) threshold="$done_days" ;;
     failed) threshold="$failed_days" ;;
-    queued|running)
+    queued | running)
       echo "  $branch: status=$status; KEEP (in flight)"
       kept=$((kept + 1))
       continue

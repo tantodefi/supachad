@@ -32,8 +32,17 @@ test("route falls back to the default on no match", () => {
 });
 
 test("scoreIssue rewards high-signal issues", () => {
-  const hot = scoreIssue({ labels: ["needs-chad", "bug"], reactions: { total_count: 4 }, createdAt: new Date().toISOString() });
-  const cold = scoreIssue({ labels: ["wontfix"], reactions: { total_count: 0 }, createdAt: "2020-01-01T00:00:00Z", pull_request: {} });
+  const hot = scoreIssue({
+    labels: ["needs-chad", "bug"],
+    reactions: { total_count: 4 },
+    createdAt: new Date().toISOString(),
+  });
+  const cold = scoreIssue({
+    labels: ["wontfix"],
+    reactions: { total_count: 0 },
+    createdAt: "2020-01-01T00:00:00Z",
+    pull_request: {},
+  });
   expect(hot).toBeGreaterThan(cold);
 });
 

@@ -31,7 +31,7 @@ const POD = process.env.CHAD_POD_SSH || "openshell-chad";
 
 const schemas = {
   probe: z.object({
-    signals: z.string(),          // JSON-encoded array of {server,healthy,detail}
+    signals: z.string(), // JSON-encoded array of {server,healthy,detail}
     healthyCount: z.number(),
     unhealthyCount: z.number(),
   }),
@@ -50,21 +50,35 @@ const { smithers, Workflow, Task, Sequence, outputs } = api;
 function gatherSignals() {
   const sig = [];
   const tryProbe = (server, fn) => {
-    try { sig.push({ server, healthy: true, detail: fn() }); }
-    catch (e) { sig.push({ server, healthy: false, detail: String(e.message || e).slice(0, 200) }); }
+    try {
+      sig.push({ server, healthy: true, detail: fn() });
+    } catch (e) {
+      sig.push({ server, healthy: false, detail: String(e.message || e).slice(0, 200) });
+    }
   };
   // gbrain health (pod). The CLI subcommand is `health` (NOT `get-health` —
   // that's the MCP tool name; the CLI rejects it as "Unknown command", which a
   // health probe must treat as unhealthy). Emits "Health score: N/10" +
   // "Embed coverage: X%" — 0% coverage is the documented silent-failure signal.
   tryProbe("gbrain", () =>
-    execSync(`ssh -n -o ConnectTimeout=15 ${POD} 'gbrain health 2>&1 | head -c 400'`, { encoding: "utf8" }).trim());
+    execSync(`ssh -n -o ConnectTimeout=15 ${POD} 'gbrain health 2>&1 | head -c 400'`, {
+      encoding: "utf8",
+    }).trim(),
+  );
   // NVIDIA inference reachability (host has the key + egress).
   tryProbe("nvidia-nim", () =>
-    execSync(`curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://integrate.api.nvidia.com/v1/models -H "Authorization: Bearer $NVIDIA_API_KEY"`, { encoding: "utf8" }).trim());
+    execSync(
+      `curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://integrate.api.nvidia.com/v1/models -H "Authorization: Bearer $NVIDIA_API_KEY"`,
+      { encoding: "utf8" },
+    ).trim(),
+  );
   // chad-shim liveness (pod 8901).
   tryProbe("chad-shim", () =>
-    execSync(`ssh -n -o ConnectTimeout=15 ${POD} 'curl -sS -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:8901/v1/models'`, { encoding: "utf8" }).trim());
+    execSync(
+      `ssh -n -o ConnectTimeout=15 ${POD} 'curl -sS -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:8901/v1/models'`,
+      { encoding: "utf8" },
+    ).trim(),
+  );
   return sig;
 }
 
@@ -103,14 +117,19 @@ export const workflow = smithers((ctx) => {
             // returns health text — unhealthy if it reports an error / 0% coverage;
             // a probe that threw is already healthy:false from gatherSignals().
             const isUnhealthy = (s) => {
-              if (!s.healthy) return true;                  // probe threw
+              if (!s.healthy) return true; // probe threw
               const d = String(s.detail ?? "").trim();
-              if (d === "") return true;                    // empty = no signal
-              if (/^\d{3}$/.test(d)) return d !== "200";    // HTTP status code
+              if (d === "") return true; // empty = no signal
+              if (/^\d{3}$/.test(d)) return d !== "200"; // HTTP status code
               // Any text that is a command/exec error is unhealthy — this is what
               // catches a renamed/missing CLI (the old `gbrain get-health` printed
               // "Unknown command", which previously read as healthy).
-              if (/\b(error|unhealthy|failed|failure|timeout|unknown command|not found|no such|refused|denied|traceback|exception)\b/i.test(d)) return true;
+              if (
+                /\b(error|unhealthy|failed|failure|timeout|unknown command|not found|no such|refused|denied|traceback|exception)\b/i.test(
+                  d,
+                )
+              )
+                return true;
               // gbrain health text: the documented silent-failure modes are embed
               // coverage collapsing to 0% (the EOL-410 incident) or a low score.
               if (s.server === "gbrain") {
@@ -124,9 +143,9 @@ export const workflow = smithers((ctx) => {
             const unhealthy = signals.filter(isUnhealthy).map((s) => s.server);
             const now = new Set(unhealthy);
             const materialChange =
-              now.size !== prior.size
-              || [...now].some((u) => !prior.has(u))
-              || [...prior].some((p) => !now.has(p));
+              now.size !== prior.size ||
+              [...now].some((u) => !prior.has(u)) ||
+              [...prior].some((p) => !now.has(p));
             const summary = unhealthy.length
               ? `${unhealthy.length} unhealthy: ${unhealthy.join(", ")}`
               : "all probes healthy";
@@ -136,10 +155,17 @@ export const workflow = smithers((ctx) => {
 
         <Task id="report" output={outputs.report}>
           {() => {
-            const c = priorCheck[priorCheck.length - 1] ?? { materialChange: false, unhealthy: [], summary: "no change" };
+            const c = priorCheck[priorCheck.length - 1] ?? {
+              materialChange: false,
+              unhealthy: [],
+              summary: "no change",
+            };
             if (c.materialChange) {
               mkdirSync(dirname(SNAPSHOT), { recursive: true });
-              writeFileSync(SNAPSHOT, JSON.stringify({ unhealthy: c.unhealthy, at: new Date().toISOString() }, null, 2));
+              writeFileSync(
+                SNAPSHOT,
+                JSON.stringify({ unhealthy: c.unhealthy, at: new Date().toISOString() }, null, 2),
+              );
             }
             // Quiet runs stay quiet; only material changes get reported/posted by the wrapper.
             return { reported: Boolean(c.materialChange), summary: c.summary };

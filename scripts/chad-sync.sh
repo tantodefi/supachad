@@ -44,14 +44,26 @@ SKIP_DUMP=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --dry-run)   DRY_RUN=1; shift ;;
-    --no-dump)   SKIP_DUMP=1; shift ;;
-    --sandbox)   SANDBOX="$2"; shift 2 ;;
-    -h|--help)
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --no-dump)
+      SKIP_DUMP=1
+      shift
+      ;;
+    --sandbox)
+      SANDBOX="$2"
+      shift 2
+      ;;
+    -h | --help)
       sed -n '4,30p' "$0" | sed 's|^# *||'
       exit 0
       ;;
-    *) echo "chad-sync: unknown arg: $1" >&2; exit 2 ;;
+    *)
+      echo "chad-sync: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -66,9 +78,12 @@ RESET='\033[0m'
 
 step() { echo -e "${BLUE}==>${RESET} $*"; }
 info() { echo -e "    $*"; }
-ok()   { echo -e "${GREEN}    ✓${RESET} $*"; }
+ok() { echo -e "${GREEN}    ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW}    !${RESET} $*"; }
-fail() { echo -e "${RED}    ✗${RESET} $*"; exit 1; }
+fail() {
+  echo -e "${RED}    ✗${RESET} $*"
+  exit 1
+}
 
 run() {
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -83,6 +98,7 @@ ssh_run() {
     echo "    [dry-run] ssh $REMOTE_HOST '$*'"
     return 0
   fi
+  # shellcheck disable=SC2029 # args are meant to expand client-side
   ssh "$REMOTE_HOST" "$@"
 }
 
@@ -107,8 +123,8 @@ else
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "    [dry-run] ssh ${REMOTE_HOST} 'chad-dump-state' > ${dump_file}"
   else
-    if ssh "$REMOTE_HOST" 'chad-dump-state' > "$dump_file" 2>/dev/null; then
-      ok "dump saved → ${dump_file} ($(wc -l < "$dump_file" | tr -d ' ') lines)"
+    if ssh "$REMOTE_HOST" 'chad-dump-state' >"$dump_file" 2>/dev/null; then
+      ok "dump saved → ${dump_file} ($(wc -l <"$dump_file" | tr -d ' ') lines)"
     else
       warn "chad-dump-state failed — continuing without dump"
       rm -f "$dump_file"
@@ -123,7 +139,7 @@ trap 'rm -f "$backup_log"' EXIT
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "    [dry-run] ssh ${REMOTE_HOST} 'chad-backup-to-github'"
 else
-  if ssh "$REMOTE_HOST" 'chad-backup-to-github' > "$backup_log" 2>&1; then
+  if ssh "$REMOTE_HOST" 'chad-backup-to-github' >"$backup_log" 2>&1; then
     pushed="$(grep -c '^\[backup\]   ok:' "$backup_log" 2>/dev/null || echo 0)"
     skipped="$(grep -c '^\[backup\]   skip:' "$backup_log" 2>/dev/null || echo 0)"
     summary_line="$(grep -E '^\[backup\] Pushed' "$backup_log" | tail -1)"

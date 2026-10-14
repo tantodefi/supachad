@@ -394,6 +394,7 @@ PY
       # If a premium-eligible park exists and usePremium is on, attach the
       # first matching AuthContext so chad-premium-client passes its gate.
       if [ "$DRAFTER_PREMIUM" = "1" ] && [ "$PREMIUM_PARK_COUNT" -gt 0 ]; then
+        # shellcheck disable=SC2012 # names are timestamps/ids we generate (no odd chars)
         FIRST_CTX="$(ls -1 "${AUTH_CONTEXT_DIR}"/*.json 2>/dev/null | head -n 1 || true)"
         [ -n "$FIRST_CTX" ] && export CHAD_AUTH_CONTEXT_PATH="$FIRST_CTX"
       fi

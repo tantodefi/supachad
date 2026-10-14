@@ -25,7 +25,7 @@ BRANCH="${CHAD_SOURCE_BRANCH:-main}"
 DEST="${CHAD_SOURCE_DIR:-/sandbox/source}"
 CREDS="${CHAD_CREDENTIALS:-/sandbox/.nemoclaw/credentials.json}"
 
-log()  { echo "[clone] $*"; }
+log() { echo "[clone] $*"; }
 warn() { echo "[clone] $*" >&2; }
 
 if [ -z "${GITHUB_TOKEN:-}" ] && [ -f "$CREDS" ]; then

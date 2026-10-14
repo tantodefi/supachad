@@ -36,6 +36,7 @@ fork a run, or check the evolutionary leaderboard.
 ## chad-runs — how Chad drives it
 
 Auth + endpoint resolve from `credentials.json` automatically:
+
 - Host-local: hits `http://127.0.0.1:7331` with `SMITHERS_RUNS_API_KEY`.
 - Pod: set `CHAD_RUNS_URL=https://runs.supachad.com`; it adds the Cloudflare
   Access service token (`CF_ACCESS_CLIENT_ID/SECRET`) to pass Access + the key.
@@ -101,6 +102,7 @@ chad-runs chain-fork <id>             # copy into a NEW chain run (source untouc
 chad-runs chain-cancel <id>           # cancel a running/stalled chain
 chad-runs chain-delete <id>           # remove a terminal chain from the list
 ```
+
 Chain lifecycle at a glance: **again** (whole chain, same record) vs **resume**
 (continue the stuck step) vs **fork** (copy → new record) vs **rerun --index N**
 (from a chosen step). A chain whose current step's run dies (crashed / killed —
@@ -110,6 +112,7 @@ no heartbeat > `CHAD_CHAIN_STALL_MS`, default 30min) is auto-marked **`stalled`*
 ### Worked examples
 
 Run an experiment on demand and watch it:
+
 ```sh
 chad-runs launch experiments.jsx
 RID=$(chad-runs runs | jq -r '.runs[0].run_id')
@@ -118,12 +121,14 @@ chad-runs get "$RID" | jq '.attempts[] | {node:.node_id, state}'
 ```
 
 Approve Chad's pending email reply (autonomy ladder):
+
 ```sh
 chad-runs approvals | jq '.pending[]'
 chad-runs approve <runId> --node human-approval --iteration 0
 ```
 
 Edit + validate + launch a workflow from the CLI:
+
 ```sh
 chad-runs cat workflows/mcp-health-probe.jsx > /tmp/wf.jsx
 #   …edit /tmp/wf.jsx…
@@ -139,6 +144,7 @@ live: `experiments` (free-text steer), `creativity` (low|moderate|high → how b
 the mutate step explores), `priorities` (task-kinds → scopes which fixtures score),
 `systemPrompts.{all,<role>}` (injected into agent calls). `signal` is the
 trace-grounded DB scan that feeds the next generation. Read the signal, then steer:
+
 ```sh
 chad-runs signal --days 7 | jq '{failed:.failedRuns|length, low:.lowScorers|length}'
 chad-runs directives > /tmp/d.json
@@ -151,6 +157,7 @@ set and/or supply its own directives, so you can A/B a directive. Resolution:
 `CHAD_DIRECTIVES_OFF=1` ignores the global file; `CHAD_DIRECTIVES_JSON='{…}'` is a
 per-run override (merges over global; used alone when global is off). Both ride the
 allowlisted launch env (drawer: Workflows → Launch → Directives):
+
 ```sh
 # breed the arena under a bolder directive for ONE run, without touching the global:
 chad-runs launch experiments.jsx --directives '{"creativity":"high","experiments":"try a radically terser voice"}'
@@ -161,6 +168,7 @@ chad-runs launch experiments.jsx --no-global --directives '{"experiments":"…"}
 **Driving a chain.** String workflows into a pipeline; each step launches when the
 prior reaches `finished`, optionally feeding its output forward (`passOutput`). A
 step that pauses at a gate HOLDS the chain until you `approve` it.
+
 ```sh
 cat > /tmp/chain.json <<'JSON'
 { "passOutput": true, "steps": [
@@ -176,6 +184,7 @@ chad-runs chains | jq '.chains[0] | {id, status, current}'
 
 Workflows never name a model — they call `pickAgent(role)`. The router
 auto-detects and routes by tier:
+
 - **cheap** (classify/draft/observe/report): NVIDIA-hosted Nemotron 120B if
   `NVIDIA_API_KEY`, else claude CLI, else local.
 - **capable** (evaluate/judge/optimize/implement): claudecode (subscription) →
@@ -217,6 +226,7 @@ export default smithers((ctx) => (
   </Workflow>
 ));
 ```
+
 Gotchas that bite: zod **v4** (v3 `/v4` shim throws `toJSONSchema: optional`);
 agent-task prompt is a **string child** (not a thunk); read upstream outputs via
 `ctx.outputs.<schema>` in render scope (not the `deps` arg); each workflow needs
@@ -251,7 +261,7 @@ they would do unless an explicit env flag is set.
 | `pr-shepherd.jsx` | Keep open PRs moving: fetch → **deterministic** per-PR action (`lib/pr.js#prAction`, no LLM) → one cheap-tier digest of "what's blocked on whom". Read-only `gh pr list`; advisory. | `CHAD_PRSHEP_REPO`, `CHAD_PRSHEP_STALE_DAYS`, `CHAD_PRSHEP_POST=1` |
 | `coverage-loop.jsx` | Raise test coverage toward a target via **`<Loop>`** — measure (read-only) → draft focused tests → re-measure, until target or max iters. Draft-only unless `APPLY=1` (exits after one pass in shadow). | `CHAD_COVERAGE_CMD/TARGET/DIR`, `CHAD_COVERAGE_APPLY=1` |
 | `coding-task.jsx` | Chad (nemotron) DRIVES a long, validated **opencode big-pickle** build: plan (spec + a real `validateCmd`) → **[ code → validate (run the cmd) → assess ]** looped until done/maxRounds → Moshi ping → `Approval` → optional draft PR (doubly gated). Coder path via `CHAD_CODING_CODER`: **spawn** (default — isolated pod/GHA) or **direct** (host opencode). Never edits the live repo; draft-only. | `--input '{"task":"…"}'`, `CHAD_CODING_CODER=direct`, `CHAD_SPAWN_SSH`, `CHAD_CODING_APPLY=1`, `CHAD_CODING_PR=1` |
-| `landing-lab.jsx` | GROUNDED marketing-copy lab: nemotron distills the real docs (README + supachad docs) into a fact sheet (claim → source) → opencode big-pickle writes **N distinct landing pages** (per angle) using ONLY those facts → nemotron **compares** + **flags any unbacked/hallucinated claim**. Never touches the live landing repo; Moshi ping + `Approval`. | `CHAD_LAB_ANGLES="dev|founder"`, `CHAD_LAB_SOURCES`, `CHAD_LAB_WORKDIR`, `CHAD_LAB_POST=1` |
+| `landing-lab.jsx` | GROUNDED marketing-copy lab: nemotron distills the real docs (README + supachad docs) into a fact sheet (claim → source) → opencode big-pickle writes **N distinct landing pages** (per angle) using ONLY those facts → nemotron **compares** + **flags any unbacked/hallucinated claim**. Never touches the live landing repo; Moshi ping + `Approval`. | `CHAD_LAB_ANGLES="dev\|founder"`,`CHAD_LAB_SOURCES`,`CHAD_LAB_WORKDIR`,`CHAD_LAB_POST=1` |
 
 The composite-based rows (added with the Smithers 0.26 upgrade) lean on Smithers'
 **built-in composite components** — `ScanFixVerify`, `Debate`, `Poller`, `Loop` —
@@ -277,6 +287,7 @@ Two coder paths: **spawn** (default — `runSpawn`, isolated pod/GHA workdir + L
 stubs on a bare host with no transport) and **direct** (`CHAD_CODING_CODER=direct` →
 `lib/opencode.js#runOpencodeDirect`, host opencode in an isolated `/tmp` workdir, for
 authed hosts). Hard-won gotchas baked into `runOpencodeDirect`:
+
 - **Launch under a shell with stdout→file.** opencode `run` only engages its full
   tool-using loop that way; a direct `execFile`/`spawn` pipe runs it degraded and it
   **writes nothing**. It runs `sh -c 'opencode run "$OC_TASK" … >log 2>&1'` (task via

@@ -70,9 +70,17 @@ export const workflow = smithers((ctx) => {
               clearTimeout(t);
               const body = (await r.text()).slice(0, 400);
               const ok = r.ok && /\bok\b|healthy|"ok"\s*:\s*true/i.test(body);
-              return { satisfied: ok, httpStatus: r.status, detail: ok ? "healthy" : `unexpected: ${body.slice(0, 120)}` };
+              return {
+                satisfied: ok,
+                httpStatus: r.status,
+                detail: ok ? "healthy" : `unexpected: ${body.slice(0, 120)}`,
+              };
             } catch (e) {
-              return { satisfied: false, httpStatus: 0, detail: `unreachable: ${String(e.message).slice(0, 120)}` };
+              return {
+                satisfied: false,
+                httpStatus: 0,
+                detail: `unreachable: ${String(e.message).slice(0, 120)}`,
+              };
             }
           }}
         >
@@ -91,13 +99,22 @@ export const workflow = smithers((ctx) => {
         </Task>
 
         {/* 3) Report — advisory only. Never promotes/rolls back; posts a note when POST=1. */}
-        <Task id="report" output={outputs.report} sideEffect idempotencyKey={`canary-report-${url.slice(0, 60)}-${new Date().toISOString().slice(0, 13)}`}>
+        <Task
+          id="report"
+          output={outputs.report}
+          sideEffect
+          idempotencyKey={`canary-report-${url.slice(0, 60)}-${new Date().toISOString().slice(0, 13)}`}
+        >
           {async () => {
             const title = `Canary — ${url} — ${verdict?.action || (healthy ? "healthy" : "unhealthy")}`;
-            const body = `# ${title}\n\nFinal probe: \`${probe?.httpStatus ?? "?"}\` ${probe?.detail || ""}\n\n` +
+            const body =
+              `# ${title}\n\nFinal probe: \`${probe?.httpStatus ?? "?"}\` ${probe?.detail || ""}\n\n` +
               `**Recommended action: ${verdict?.action || "?"}** — ${verdict?.reason || ""}`;
             if (POST) await postNote({ title, content: body, tags: "chad-canary" });
-            return { note: POST ? `${title} (posted)` : `SHADOW: ${title}`, action: verdict?.action || "?" };
+            return {
+              note: POST ? `${title} (posted)` : `SHADOW: ${title}`,
+              action: verdict?.action || "?",
+            };
           }}
         </Task>
       </Sequence>

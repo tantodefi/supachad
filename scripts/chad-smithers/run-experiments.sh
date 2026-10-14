@@ -22,7 +22,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-cd "$HERE"
+cd "$HERE" || exit 1
 
 LOCK="/tmp/chad-experiment-smithers.lock.d"
 DRY="${1:-}"
@@ -70,7 +70,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
     exit 0
   fi
 fi
-echo "$$" > "$PIDF"
+echo "$$" >"$PIDF"
 trap 'rm -rf "$LOCK" 2>/dev/null' EXIT
 
 if [ "$DRY" = "--dry-run" ]; then
@@ -97,11 +97,11 @@ if [ -f "$REPORT" ]; then
   # Capture the created note id to a log — `notes list` is currently broken
   # (HTTP 500), so the returned id is the only handle for later cleanup.
   note_out="$(ssh -o ConnectTimeout=15 "$POD_SSH" \
-       "cat > /tmp/chad-exp-report.md && '$POD_WEBUI' notes create --title '$title' --content-file /tmp/chad-exp-report.md --tags chad-experiments" \
-       < "$REPORT" 2>&1 || true)"
+    "cat > /tmp/chad-exp-report.md && '$POD_WEBUI' notes create --title '$title' --content-file /tmp/chad-exp-report.md --tags chad-experiments" \
+    <"$REPORT" 2>&1 || true)"
   note_id="$(printf '%s' "$note_out" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)"
   if [ -n "$note_id" ]; then
-    printf '%s\t%s\n' "$(date -u +%FT%TZ)" "$note_id" >> "$HERE/state/posted-notes.log"
+    printf '%s\t%s\n' "$(date -u +%FT%TZ)" "$note_id" >>"$HERE/state/posted-notes.log"
     echo "run-experiments: posted leaderboard to OpenWebUI (note $note_id)"
   else
     echo "run-experiments: OpenWebUI post failed (run still recorded at $REPORT)" >&2
@@ -118,7 +118,7 @@ echo "run-experiments: running model benchmark (token-optimize, shadow)…" >&2
 # Smithers exit 3 = the run paused at its Approval gate (the expected outcome for
 # a shadow workflow — see `smithers up` "exit 3 = awaiting a decision, not a
 # failure"). Only a genuine non-zero-non-3 rc is a real failure worth logging.
-CHAD_TOKENOPT_APPLY= "$SMITHERS" up workflows/token-optimize.jsx >/dev/null 2>&1
+CHAD_TOKENOPT_APPLY='' "$SMITHERS" up workflows/token-optimize.jsx >/dev/null 2>&1
 trc=$?
 if [ "$trc" -ne 0 ] && [ "$trc" -ne 3 ]; then
   echo "run-experiments: token-optimize benchmark non-fatal failure (rc=$trc)" >&2

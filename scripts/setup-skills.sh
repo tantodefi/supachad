@@ -17,7 +17,6 @@ set -euo pipefail
 
 SANDBOX_HOME="/sandbox"
 LOCAL_BIN="${SANDBOX_HOME}/.local/bin"
-SKILLS_DIR="${SANDBOX_HOME}/.openclaw-data/skills"
 
 echo "==> Setting up skill tooling in ${SANDBOX_HOME}"
 
@@ -62,7 +61,8 @@ fi
 # ── PATH and env persistence ───────────────────────────────────
 for rcfile in "${SANDBOX_HOME}/.bashrc" "${SANDBOX_HOME}/.profile"; do
   if ! grep -q '.local/bin' "$rcfile" 2>/dev/null; then
-    echo 'export PATH="/sandbox/.local/bin:/sandbox/node_modules/.bin:$PATH"' >> "$rcfile"
+    # shellcheck disable=SC2016 # $PATH must expand when the rc file is sourced
+    echo 'export PATH="/sandbox/.local/bin:/sandbox/node_modules/.bin:$PATH"' >>"$rcfile"
   fi
 done
 

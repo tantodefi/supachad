@@ -54,19 +54,28 @@ set -uo pipefail
 
 PROPOSALS_FILE="${CHAD_PROPOSALS_FILE:-/sandbox/.openclaw-data/memory/feedback-proposals.md}"
 AUDIT_LOG="${CHAD_AUTO_ACTION_LOG:-/sandbox/.openclaw-data/state/auto-action-log.jsonl}"
-PROFILES_FILE="${CHAD_PROFILES_FILE:-/usr/local/share/chad/task-profiles.json}"
 
 dry_run=0
 max_apply=5
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --dry-run) dry_run=1; shift ;;
-    --max-apply) max_apply="$2"; shift 2 ;;
-    -h|--help)
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    --max-apply)
+      max_apply="$2"
+      shift 2
+      ;;
+    -h | --help)
       sed -n '4,35p' "$0" | sed 's/^# \{0,1\}//' >&2
-      exit 0 ;;
-    *) echo "chad-proposal-apply: unknown arg: $1" >&2; exit 2 ;;
+      exit 0
+      ;;
+    *)
+      echo "chad-proposal-apply: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -76,10 +85,10 @@ if [ ! -r "$PROPOSALS_FILE" ]; then
 fi
 
 PROPOSALS_FILE="$PROPOSALS_FILE" \
-AUDIT_LOG="$AUDIT_LOG" \
-DRY_RUN="$dry_run" \
-MAX_APPLY="$max_apply" \
-python3 <<'PY'
+  AUDIT_LOG="$AUDIT_LOG" \
+  DRY_RUN="$dry_run" \
+  MAX_APPLY="$max_apply" \
+  python3 <<'PY'
 import json, os, re, subprocess, datetime, sys
 
 proposals_file = os.environ["PROPOSALS_FILE"]

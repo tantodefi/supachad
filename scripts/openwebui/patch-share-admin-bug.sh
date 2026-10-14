@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Re-applies the in-container fix for the OpenWebUI 0.9.2 share-view admin bug.
 #
 # Upstream bug: GET /api/v1/chats/share/{share_id} under user.role=='admin' +
@@ -12,7 +15,6 @@ set -euo pipefail
 
 CONTAINER="${OWUI_CONTAINER:-nemoclaw-openwebui}"
 TARGET="/app/backend/open_webui/routers/chats.py"
-SENTINEL="get_chat_by_share_id(share_id, db=db)\n    if not chat and user.role == 'admin'"
 
 if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
   echo "ERR: container '$CONTAINER' is not running" >&2
@@ -56,7 +58,7 @@ PY
 echo "restarting $CONTAINER..."
 docker restart "$CONTAINER" >/dev/null
 
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
   h=$(docker inspect -f '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo "?")
   if [ "$h" = "healthy" ]; then
     echo "healthy"

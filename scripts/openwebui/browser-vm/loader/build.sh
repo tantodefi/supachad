@@ -40,7 +40,7 @@ trap 'rm -rf "${tmpdir}"' EXIT
   cat "${src_loader}"
   printf '\n/* ===== browser-vm vm-panel.js appended by build.sh ===== */\n'
   cat "${panel}"
-} > "${tmp}"
+} >"${tmp}"
 
 fail() {
   echo "error: $1" >&2
@@ -95,7 +95,7 @@ if command -v node >/dev/null 2>&1; then
   if [[ ! -f "${here}/test_vm_panel.js" ]]; then
     fail "test_vm_panel.js missing — refusing to ship an unverified panel"
   fi
-  if ! node "${here}/test_vm_panel.js" "${panel}" > "${tmpdir}/test.log" 2>&1; then
+  if ! node "${here}/test_vm_panel.js" "${panel}" >"${tmpdir}/test.log" 2>&1; then
     sed 's/^/    /' "${tmpdir}/test.log" >&2
     fail "vm-panel.js smoke test failed (output above)"
   fi
@@ -110,7 +110,7 @@ fi
 mv "${tmp}" "${out}"
 trap - EXIT
 
-echo "wrote $(wc -l < "${out}" | tr -d ' ') lines to ${out}"
+echo "wrote $(wc -l <"${out}" | tr -d ' ') lines to ${out}"
 echo "backed up previous loader.js (if any) alongside it"
 echo "deploy mount: ${out} -> /app/build/static/loader.js"
 echo

@@ -22,15 +22,34 @@ as_json=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --id)      filter_id="$2"; shift 2 ;;
-    --open)    filter_status="open"; shift ;;
-    --failed)  filter_status="failed"; shift ;;
-    --done)    filter_status="done"; shift ;;
-    --json)    as_json=1; shift ;;
-    -h|--help)
+    --id)
+      filter_id="$2"
+      shift 2
+      ;;
+    --open)
+      filter_status="open"
+      shift
+      ;;
+    --failed)
+      filter_status="failed"
+      shift
+      ;;
+    --done)
+      filter_status="done"
+      shift
+      ;;
+    --json)
+      as_json=1
+      shift
+      ;;
+    -h | --help)
       sed -n '2,15p' "$0" | sed -e 's/^# \{0,1\}//' -e '1,3d'
-      exit 0 ;;
-    *) echo "chad-spawn-status: unknown arg: $1" >&2; exit 2 ;;
+      exit 0
+      ;;
+    *)
+      echo "chad-spawn-status: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -40,11 +59,11 @@ if [ ! -f "$QUEUE_FILE" ]; then
 fi
 
 CHAD_STATUS_FILE="$QUEUE_FILE" \
-CHAD_STATUS_ID="$filter_id" \
-CHAD_STATUS_FILTER="$filter_status" \
-CHAD_STATUS_JSON="$as_json" \
-CHAD_STATUS_SUBAGENTS="$SUBAGENTS_DIR" \
-python3 <<'PY'
+  CHAD_STATUS_ID="$filter_id" \
+  CHAD_STATUS_FILTER="$filter_status" \
+  CHAD_STATUS_JSON="$as_json" \
+  CHAD_STATUS_SUBAGENTS="$SUBAGENTS_DIR" \
+  python3 <<'PY'
 import os, sys, json
 
 path         = os.environ["CHAD_STATUS_FILE"]

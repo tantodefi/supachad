@@ -32,10 +32,13 @@ if [ "${1:-}" = "--uninstall" ]; then
   exit 0
 fi
 
-cd "$HERE"
+cd "$HERE" || exit 1
 
 echo "1/3 deps…"
-"$BUN" install >/dev/null 2>&1 && echo "    bun install ok" || { echo "    bun install FAILED"; exit 1; }
+"$BUN" install >/dev/null 2>&1 && echo "    bun install ok" || {
+  echo "    bun install FAILED"
+  exit 1
+}
 
 echo "    chad-runs CLI ready ($HERE/chad-runs) — Chad's API client"
 chmod +x "$HERE/chad-runs" 2>/dev/null || true
@@ -43,7 +46,10 @@ chmod +x "$HERE/chad-runs" 2>/dev/null || true
 echo "2/3 launchd agent…"
 cp "$HERE/$PLIST" "$DEST"
 launchctl unload "$DEST" 2>/dev/null || true
-launchctl load "$DEST" && echo "    loaded $PLIST" || { echo "    launchctl load FAILED"; exit 1; }
+launchctl load "$DEST" && echo "    loaded $PLIST" || {
+  echo "    launchctl load FAILED"
+  exit 1
+}
 
 echo "3/3 health…"
 sleep 3

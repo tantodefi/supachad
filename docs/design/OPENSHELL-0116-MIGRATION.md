@@ -22,6 +22,7 @@ from a k8s **pod** (cluster:0.0.20) to a native-gateway **docker-driver containe
 model is gone in 0.0.116.
 
 ### Proven primitives (container model)
+
 - **exec (non-root uid 998):** `openshell -g <gw> sandbox exec -n <name> --timeout N -- sh -c '…'`
 - **root exec:** `docker exec -u 0 <container> sh -c '…'` (needed for /usr/local/bin writes)
 - **file push:** `docker cp src <container>:/tmp/x` → root exec `mv+chown` (bypasses landlock)
@@ -30,6 +31,7 @@ model is gone in 0.0.116.
 - container name = `openshell-default--<sandbox>-<uuid>` (`docker ps | grep`)
 
 ### Cutover sequence (destructive — live chad down during it; rollback = restart the 0.0.20 cluster)
+
 1. **Fresh backup** of live chad `/sandbox` (gbrain + .openclaw + .openclaw-data + .nemoclaw) via
    `docker exec cluster kubectl exec chad -- tar … | gzip` (see `backups/chad-precutover-*.tar.gz`).
    Also tar out the gbrain+bun RUNTIME: `tar c /usr/local/lib/gbrain /usr/local/bin/bun`.
@@ -63,6 +65,7 @@ model is gone in 0.0.116.
     → reload watchdogs; chad back on 0.0.20 in ~1–2 min (the cluster is stopped, not deleted).
 
 ### Still TODO before/around the cutover
+
 - Durable gbrain+bun Dockerfile layer (reviewed-install conventions) — step 8 is a runtime copy today.
 - Container-adapt chad-setup.sh gbrain runtime + the watchdogs (tunnel/gateway ones are obsoleted).
 - #49 beyond-upstream bumps (OpenClaw 2026.9.2→2026.10.2, mcporter 0.7.3→0.14.3) are SEPARATE
@@ -71,6 +74,7 @@ model is gone in 0.0.116.
 ---
 
 ## Why this is a migration, not a bump
+
 The 0.0.116 transactional rebuild (`nemoclaw chad rebuild` / `backup-all`) **scans the
 whole `/sandbox` native state and rejects any credential-bearing file** (verified: it
 flagged `credentials.json` even after moving it). Chad keeps its 7 operational creds in
@@ -78,6 +82,7 @@ flagged `credentials.json` even after moving it). Chad keeps its 7 operational c
 creds must live in OpenShell's **gateway credential vault**.
 
 ## The vault mechanism (verified)
+
 - Register: `openshell provider create --name <n> --type <type> --credential <ENV_NAME>`
   (reads the value from the host env at creation; nothing persisted to host disk).
 - **Generic-type creds ARE injected into the sandbox process env** — proven: `BRAVE_API_KEY`
@@ -86,6 +91,7 @@ creds must live in OpenShell's **gateway credential vault**.
 - Already in the vault: `nvidia-prod` (nvidia), `chad-brave-search` (generic).
 
 ## Credential inventory (chad's 7 pod creds)
+
 | Cred (file key) | Used for | Target | Env-injected? | Status |
 |---|---|---|---|---|
 | `NVIDIA_API_KEY` | inference + chad scripts (refresh-models, gbrain embed) | provider `nvidia-prod` **+** generic for scripts | generic: yes | partial (provider done) |
@@ -97,6 +103,7 @@ creds must live in OpenShell's **gateway credential vault**.
 | `NEMOCLAW_INVOKER_TOKEN` | invoker auth | generic `chad-invoker` | yes | todo |
 
 ## Scripts that read `credentials.json` → must rewire to env
+
 `chad-backup-to-github.sh`, `chad-restore-from-github.sh`, `chad-clone-source.sh`,
 `chad-setup.sh`, `chad-ops.sh`, `openwebui/chad-shim.py`, `openwebui/chad-shim-watchdog.sh`,
 `openwebui/chad-webui`, `chad-cron-wrappers/{chad-auth-context,chad-premium-client,_chad-paths.sh}`,
@@ -107,6 +114,7 @@ READMEs). Because the vault injects each generic cred under its **own key name**
 file-fallback during transition) keeps everything working until the file is removed.
 
 ## ⚠️ Scope finding (2026-10-07) — this is a PLATFORM upgrade, not a pin flip
+
 Two discoveries change phase 6 from "`nemoclaw chad rebuild`" into a bigger operation:
 
 1. **Version skew requires a host/cluster upgrade first.** The blueprint comment is
@@ -139,9 +147,11 @@ selected before any pod operation.
 Investigated onboard [7/8] on a **staging harness so chad is never touched** (chad stays on
 0.0.20): a second 0.0.116 gateway `nemoclaw-8081`→`nemoclaw-18080` on a spare port, driven by
 `NEMOCLAW_GATEWAY_PORT=18080` + `NEMOCLAW_OPENSHELL_BIN=/opt/homebrew/opt/openshell/bin/openshell`
+
 + a throwaway `stage` sandbox. Reusable; chad's gateway/CLI untouched throughout.
 
 **What we proved:**
+
 - The OpenClaw 2026.9.2 agent gateway **does reach ready inside the sandbox** — a converge
   pass logged `[gateway] ready`, 14 plugins, and `device pairing auto-approved role=operator`.
 - First-run it applies state migrations and, with `gateway.reload=off` (#4710), **refuses ready
@@ -176,6 +186,7 @@ patch was wrong + reverted). It was **the gateway deployed without sandbox-JWT a
 Confirmed via SETTLE_DIAG instrumentation (selector AND no-selector list both `[]`).
 
 **Gateway deployment recipe that works (host config, no code change):**
+
 - launchd plist runs `openshell-gateway` **directly** (NOT the `…-homebrew-service` bash
   wrapper — onboard's process-identity preflight must see the real binary with `--name`):
   `openshell-gateway --name nemoclaw --bind-address 127.0.0.1 --port 8080 --health-port 8090
@@ -211,6 +222,7 @@ certs match) → `nemoclaw onboard --fresh --from Dockerfile` → **image builds
 **sandbox 'chad' reaches Ready**.
 
 **Two real blockers resolved along the way:**
+
 1. ✅ **mcporter audit gate** (the real attempt-1 "build failure", NOT memory): the
    sandbox-base build's `verify-mcporter-audit.sh` blocked on 2 high+ advisories
    (GHSA-jqcg-44mw-7w3h critical proxy-addr, GHSA-6qxp-vccf-f47h high MCP SDK). Fixed by
@@ -234,6 +246,7 @@ No bypass env/flag exists. Likely the finalization assumes **kubernetes-driver**
 no container, identity null = nothing durably created).
 
 **Fix paths for next session (pick one):**
+
 - (a) Patch onboard finalization to accept a docker-driver sandbox that reached Ready
   without the durable-identity response (treat Ready as success when driver=docker), OR
 - (b) deploy the 0.0.116 gateway with `--drivers kubernetes` against a k3s (match the old
@@ -261,6 +274,7 @@ fail on `gateway start`.
 
 **End-to-end validated NON-destructively** (throwaway gateway on port 18080, temp state,
 docker driver — torn down after; chad untouched throughout):
+
 - 0.0.116 `openshell-gateway` starts healthy on this Mac (TLS/mTLS, docker driver,
   supervisor:0.0.116 pulled, workspace created, `healthz` 200).
 - 0.0.116 CLI → 0.0.116 gateway: `gateway add` ✓, `sandbox list` ✓ (**no protobuf skew**).
@@ -268,6 +282,7 @@ docker driver — torn down after; chad untouched throughout):
   stayed up the entire time.
 
 ### CUTOVER RUNBOOK (destructive — chad down during it; every component pre-validated)
+
 1. Re-activate 0.0.116 CLI: point `~/.local/bin/openshell` back at `/opt/homebrew/bin/openshell`.
 2. **Persistent gateway service**: configure `openshell-gateway` as a durable service
    (launchd via `brew services`, or a `dev.nemoclaw.openshell-gateway.plist`) with
@@ -290,6 +305,7 @@ always-on gateway survives reboots. All other components are proven. Staged asse
 ## ✅ Platform upgrade executed (2026-10-07) — reversible work done; one destructive step staged
 
 **Done + verified (all reversible):**
+
 - Host `openshell` CLI upgraded **0.0.36 → 0.0.116** (Homebrew tap `nvidia/openshell`,
   `scripts/install-openshell.sh`; our fork pins OpenShell to exactly 0.0.116).
   Old binary saved at `backups/openshell-0.0.36-rollback` for rollback.
@@ -304,6 +320,7 @@ always-on gateway survives reboots. All other components are proven. Staged asse
   `backups/creds/credentials.json.premerge`.
 
 **Key facts discovered:**
+
 - The 0.0.116 CLI is **wire-incompatible** with the running 0.0.20 gateway
   (`sandbox list` → Protobuf decode error). chad's pod still serves users
   independently, but the host CLI cannot manage it until the gateway is recreated.
@@ -319,6 +336,7 @@ always-on gateway survives reboots. All other components are proven. Staged asse
   before lifecycle commands." The saved `onboard-session.json` is stale (all pending).
 
 ### THE DESTRUCTIVE STEP (run to finish the upgrade) — takes live chad down
+
 ```bash
 cd /Users/r/.nemoclaw/source
 # NVIDIA_API_KEY from backups/creds/credentials.json.premerge
@@ -330,11 +348,13 @@ NEMOCLAW_RECREATE_SANDBOX=1 \
 nemoclaw onboard --from Dockerfile --agent openclaw --sandbox-gpu \
   --non-interactive --yes --yes-i-accept-third-party-software
 ```
+
 This rebuilds the 2026.9.2 image, recreates the gateway at 0.0.116, and recreates the
 chad sandbox. **Note:** onboard creates a *fresh* openclaw.json — chad's real config,
 policies, cron, identity, gbrain are restored from the backup in the NEXT step.
 
 ### POST-ONBOARD (Claude completes these — no human needed)
+
 1. Re-register vault creds + inference (gateway recreate wipes them):
    `openshell inference set --provider nvidia-prod --model nvidia/nemotron-3-super-120b-a12b`
    then the 8 `openshell provider create` registrations (see provider-list-preupgrade.txt;
@@ -347,10 +367,12 @@ policies, cron, identity, gbrain are restored from the backup in the NEXT step.
 4. Verify: `nemoclaw chad doctor`, gbrain search, OpenWebUI round-trip, crons, backup/restore.
 
 ### Rollback (if onboard fails badly, before re-provisioning)
+
 `cp backups/openshell-0.0.36-rollback ~/.local/bin/openshell` (break the symlink first),
 redeploy the 0.0.20 gateway, restore the backup. chad returns to the pre-upgrade state.
 
 ## Migration plan (phased, reversible until step 6)
+
 1. **Register** the operational creds as generic vault entries (env-injected). *Additive.*
 2. **Rewire** chad's scripts to read from env (via a `chad-cred` helper, env-first).
 3. **Update `chad-ops creds-sync`** to register vault creds instead of writing the file.
@@ -361,6 +383,7 @@ redeploy the 0.0.20 gateway, restore the backup. chad returns to the pre-upgrade
 8. **Verify** functionality (doctor, gbrain search, OpenWebUI, crons, backup/restore).
 
 ## Progress
+
 - ✅ **Phase 1 (2026-10-07):** registered 6 generic vault creds — `chad-github`,
   `chad-proton-user`, `chad-proton-pass`, `chad-invoker`, `chad-anthropic`,
   `chad-nvidia-scripts` — alongside the pre-existing `nvidia-prod` + `chad-brave-search`.

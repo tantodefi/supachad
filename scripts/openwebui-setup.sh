@@ -27,7 +27,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEBUI_DIR="$ROOT/scripts/openwebui"
 ENV_FILE="$WEBUI_DIR/.env"
 ENV_TEMPLATE="$WEBUI_DIR/env.template"
-COMPOSE_FILE="$WEBUI_DIR/docker-compose.yml"
 
 DRY_RUN=0
 MODE=""
@@ -81,6 +80,7 @@ fi
 
 # shellcheck source=/dev/null
 set -a
+# shellcheck source=/dev/null # env file path is runtime-configurable
 . "$ENV_FILE"
 set +a
 

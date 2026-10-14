@@ -44,7 +44,8 @@ const { smithers, Workflow, Task, Sequence, outputs } = api;
 function sh(cmd) {
   return new Promise((resolve) => {
     execFile("sh", ["-c", cmd], { cwd: REPO_DIR, maxBuffer: 16 * 1024 * 1024 }, (_e, out, err) =>
-      resolve((out || "").toString() + (err || "").toString()));
+      resolve((out || "").toString() + (err || "").toString()),
+    );
   });
 }
 
@@ -63,24 +64,40 @@ export const workflow = smithers((ctx) => {
         <Loop until={done} maxIterations={MAX_ITERS} onMaxReached="return-last">
           <Sequence>
             {/* Measure: run the coverage command (read-only), parse the total. */}
-            <Task id="measure" output={outputs.measure} sideEffect
-              idempotencyKey={`coverage-measure-${new Date().toISOString().slice(0, 13)}-${measures.length}`}>
+            <Task
+              id="measure"
+              output={outputs.measure}
+              sideEffect
+              idempotencyKey={`coverage-measure-${new Date().toISOString().slice(0, 13)}-${measures.length}`}
+            >
               {async () => {
                 const out = await sh(COV_CMD);
                 const cov = parseCoverage(out);
                 // Keep the uncovered-files tail as context for the fixer.
-                return { coverage: cov, uncovered: uncoveredLines(out).slice(0, 4000), ran: out.length > 0 };
+                return {
+                  coverage: cov,
+                  uncovered: uncoveredLines(out).slice(0, 4000),
+                  ran: out.length > 0,
+                };
               }}
             </Task>
 
             {/* Fix: draft focused tests for the gaps. Draft-only unless APPLY=1 —
                 the fixer never writes here; it proposes what to add. */}
-            <Task id="fix" skipIf={hitTarget} output={outputs.fix}
-              agent={pickAgent("implement")} fallbackAgent={pickFallback("implement")} {...taskOpts("implement")}>
+            <Task
+              id="fix"
+              skipIf={hitTarget}
+              output={outputs.fix}
+              agent={pickAgent("implement")}
+              fallbackAgent={pickFallback("implement")}
+              {...taskOpts("implement")}
+            >
               {[
                 `Coverage is ${coverage}% (target ${TARGET}%). Propose 2-3 focused test files for the biggest gaps.`,
                 "For each: the file path, what to test, and the test skeleton. Prefer the lowest-coverage units.",
-                APPLY ? "These will be written to disk — make them runnable." : "DRAFT ONLY — do not assume they'll be written.",
+                APPLY
+                  ? "These will be written to disk — make them runnable."
+                  : "DRAFT ONLY — do not assume they'll be written.",
                 `Uncovered (from the coverage report):\n${last?.uncovered || "(none captured)"}`,
                 "Return JSON { status, files:[paths], detail (the proposed tests, markdown) }.",
               ].join("\n\n")}
@@ -89,11 +106,17 @@ export const workflow = smithers((ctx) => {
         </Loop>
 
         {/* Report — coverage delta + the proposal. Shadow note unless POST=1. */}
-        <Task id="report" output={outputs.report} sideEffect idempotencyKey={`coverage-report-${new Date().toISOString().slice(0, 13)}`}>
+        <Task
+          id="report"
+          output={outputs.report}
+          sideEffect
+          idempotencyKey={`coverage-report-${new Date().toISOString().slice(0, 13)}`}
+        >
           {async () => {
             const title = `Coverage loop — ${coverage}% / ${TARGET}% target ${hitTarget ? "✓ hit" : "(gap)"}`;
             const fix = (ctx.outputs.fix ?? []).slice(-1)[0];
-            const body = `# ${title}\n\nRan ${measures.length} measure pass(es).\n\n` +
+            const body =
+              `# ${title}\n\nRan ${measures.length} measure pass(es).\n\n` +
               (hitTarget ? "_Target met._" : `**Proposed tests:**\n${fix?.detail || "_none_"}`);
             if (POST) await postNote({ title, content: body, tags: "chad-coverage" });
             return { note: POST ? `${title} (posted)` : `SHADOW: ${title}`, coverage, hitTarget };

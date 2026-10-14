@@ -39,9 +39,17 @@ const POST = process.env.CHAD_TRIAGE_POST === "1"; // post the report as an Open
 const SPAWN_TIMEOUT = Number(process.env.CHAD_SPAWN_TIMEOUT_MS || 1_800_000); // 30 min
 
 const schemas = {
-  issues: z.object({ fetched: z.number(), selected: z.array(z.object({
-    number: z.number(), title: z.string(), score: z.number(), kind: z.string(),
-  })) }),
+  issues: z.object({
+    fetched: z.number(),
+    selected: z.array(
+      z.object({
+        number: z.number(),
+        title: z.string(),
+        score: z.number(),
+        kind: z.string(),
+      }),
+    ),
+  }),
   spawn: spawnResultSchema,
   report: z.object({ note: z.string(), spawned: z.number() }),
 };
@@ -65,19 +73,55 @@ export const workflow = smithers((ctx) => {
     <Workflow name="chad-issue-triage">
       <Sequence>
         {/* 1) Fetch + score + select. Deterministic, read-only, no LLM. */}
-        <Task id="select" output={outputs.issues} sideEffect idempotencyKey={`triage-${REPO}-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="select"
+          output={outputs.issues}
+          sideEffect
+          idempotencyKey={`triage-${REPO}-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
-            const args = ["issue", "list", "--repo", REPO, "--state", "open", "--limit", "50",
-              "--json", "number,title,labels,reactionGroups,createdAt"];
+            const args = [
+              "issue",
+              "list",
+              "--repo",
+              REPO,
+              "--state",
+              "open",
+              "--limit",
+              "50",
+              "--json",
+              "number,title,labels,reactionGroups,createdAt",
+            ];
             if (LABEL) args.push("--label", LABEL);
             const raw = await gh(args);
             let issues = [];
-            try { issues = raw ? JSON.parse(raw) : []; } catch { issues = []; }
-            const scored = issues.map((i) => {
-              const reactions = (i.reactionGroups || []).reduce((n, g) => n + (g.users?.totalCount || 0), 0);
-              const s = scoreIssue({ labels: i.labels, reactions: { total_count: reactions }, createdAt: i.createdAt });
-              return { number: i.number, title: i.title || "", score: s, kind: route(`${i.title}\n${(i.labels || []).map((l) => l.name).join(" ")}`, { default: "researcher" }) };
-            }).sort((a, b) => b.score - a.score).slice(0, TOP);
+            try {
+              issues = raw ? JSON.parse(raw) : [];
+            } catch {
+              issues = [];
+            }
+            const scored = issues
+              .map((i) => {
+                const reactions = (i.reactionGroups || []).reduce(
+                  (n, g) => n + (g.users?.totalCount || 0),
+                  0,
+                );
+                const s = scoreIssue({
+                  labels: i.labels,
+                  reactions: { total_count: reactions },
+                  createdAt: i.createdAt,
+                });
+                return {
+                  number: i.number,
+                  title: i.title || "",
+                  score: s,
+                  kind: route(`${i.title}\n${(i.labels || []).map((l) => l.name).join(" ")}`, {
+                    default: "researcher",
+                  }),
+                };
+              })
+              .sort((a, b) => b.score - a.score)
+              .slice(0, TOP);
             return { fetched: issues.length, selected: scored };
           }}
         </Task>
@@ -87,30 +131,53 @@ export const workflow = smithers((ctx) => {
             fans the work onto a fresh GH runner via the chad-spawn bridge. */}
         <Parallel>
           {selected.map((iss) => (
-            <Task key={`iss-${iss.number}`} id={`spawn-${iss.number}`} output={outputs.spawn}
-              sideEffect idempotencyKey={`spawn-iss-${iss.number}`}
-              continueOnFail retries={0} timeoutMs={SPAWN_TIMEOUT}>
-              {() => runSpawn({
-                kind: iss.kind,
-                substrate: SUBSTRATE,
-                id: `triage-iss-${iss.number}`,
-                task: `Propose a fix for ${REPO}#${iss.number}: ${iss.title}\n\n` +
-                  `Read the issue with: gh issue view ${iss.number} --repo ${REPO}\n` +
-                  `Draft a patch + explanation. DO NOT open a PR or comment — draft only; ` +
-                  `write your proposal to the workdir. Last stdout line = result.json.`,
-              })}
+            <Task
+              key={`iss-${iss.number}`}
+              id={`spawn-${iss.number}`}
+              output={outputs.spawn}
+              sideEffect
+              idempotencyKey={`spawn-iss-${iss.number}`}
+              continueOnFail
+              retries={0}
+              timeoutMs={SPAWN_TIMEOUT}
+            >
+              {() =>
+                runSpawn({
+                  kind: iss.kind,
+                  substrate: SUBSTRATE,
+                  id: `triage-iss-${iss.number}`,
+                  task:
+                    `Propose a fix for ${REPO}#${iss.number}: ${iss.title}\n\n` +
+                    `Read the issue with: gh issue view ${iss.number} --repo ${REPO}\n` +
+                    `Draft a patch + explanation. DO NOT open a PR or comment — draft only; ` +
+                    `write your proposal to the workdir. Last stdout line = result.json.`,
+                })
+              }
             </Task>
           ))}
         </Parallel>
 
         {/* 3) Report: a single OpenWebUI-ready note summarizing what was spawned. */}
-        <Task id="report" output={outputs.report} sideEffect idempotencyKey={`triage-report-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="report"
+          output={outputs.report}
+          sideEffect
+          idempotencyKey={`triage-report-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
-            const lines = spawnResults.map((r) => `- ${r.kind} [${r.status}] ${r.summary || ""}`.trim());
-            const note = `# Issue triage — ${new Date().toISOString().slice(0, 10)}\n\n` +
+            const lines = spawnResults.map((r) =>
+              `- ${r.kind} [${r.status}] ${r.summary || ""}`.trim(),
+            );
+            const note =
+              `# Issue triage — ${new Date().toISOString().slice(0, 10)}\n\n` +
               `Repo: ${REPO} · selected ${selected.length} of top ${TOP}\n\n` +
               (lines.length ? lines.join("\n") : "_no spawns_");
-            if (POST) await postNote({ title: `Issue triage — ${REPO} — ${new Date().toISOString().slice(0, 10)}`, content: note, tags: "chad-triage" });
+            if (POST)
+              await postNote({
+                title: `Issue triage — ${REPO} — ${new Date().toISOString().slice(0, 10)}`,
+                content: note,
+                tags: "chad-triage",
+              });
             return { note, spawned: spawnResults.length };
           }}
         </Task>

@@ -9,6 +9,7 @@ wrapper inventory on `chad-dev`.
 
 **2026-06-13 — Smithers foundation built + validated (host-side).**
 `scripts/chad-smithers/`:
+
 - `agents.js` — model router, all backends, runtime auto-detection. Probes
   clean (`bun agents.js --probe`); constructs ClaudeCodeAgent / ToolLoopAgent.
 - `lib/population.js` + `population.test.js` — evolutionary selection engine
@@ -60,6 +61,7 @@ toolUse). Does the newest Nemotron — **Ultra 550B**
 
 **Test (pod-side, against integrate.api.nvidia.com):** with reasoning ON
 (system `detailed thinking on`) and a `get_weather` tool offered:
+
 - Turn 1: emitted a **standard OpenAI `tool_call`** with valid-JSON args
   (`{"city":"Tokyo"}`) **and** reasoning content. `tool_calls=1`.
 - Turn 2: fed the tool result back → `finish_reason=stop`, final answer
@@ -75,6 +77,7 @@ Egress detail: raw `python3` is L7-blocked to NVIDIA (binary-identity policy);
 `curl` is allowlisted, so the test ran via curl.
 
 **"Ultra everywhere + reasoning on" rollout:**
+
 - DONE (source, reviewed-before-commit): `model-registry.json` Ultra entry
   `reasoningSafe:true` w/ evidence; Smithers router defaults Ultra for both
   tiers + reasoning ON (`CHAD_REASONING=off` to disable); Dockerfile +
@@ -97,6 +100,7 @@ Egress detail: raw `python3` is L7-blocked to NVIDIA (binary-identity policy);
 `chad-spawn --substrate gha` runs sub-agents on a GH runner?
 
 **How chad-spawn-gha works** (`.github/skills/chad-orchestrator/scripts/chad-spawn-gha.sh`
+
 + `docs/design/spawn-as-github-run.md`): mint a task_id → push a
 `chad-spawn/<id>` branch to `tantodefi/chad-state` with the task/kind/budget →
 `gh workflow run agent-job.yml` → the runner installs the kind's binary, runs
@@ -126,7 +130,7 @@ host orchestration live, but a GHA-offloaded task only updates when its
 overhead). So: host for interactive/live; GHA for heavy/parallel/isolated.
 Needs `NVIDIA_API_KEY` as a GH Actions secret on `chad-state`.
 
-### Do we run both chad-spawn AND chad-Smithers? Yes — they're complementary.
+### Do we run both chad-spawn AND chad-Smithers? Yes — they're complementary
 
 | | chad-spawn | chad-Smithers |
 |---|---|---|
@@ -210,6 +214,7 @@ Audited our `workflows/fusion.jsx` against upstream **`github.com/smithersai/smi
 ### The "too-short responses" question — answered
 
 The run responses on `runs.supachad.com` are **real model output, not placeholders**, but look short/empty for four structural reasons:
+
 1. **Schema-capped.** Agent tasks return tiny structured JSON (`rationale` = "one sentence"); that *is* the whole answer by design.
 2. **Compute nodes have NULL `response_text`.** `select`/`report` are thunks returning JS objects, not agent text → blank dashboard rows.
 3. **Trace drops the reasoning.** The `ToolLoopAgent` (Nemotron) family is unrecognized → `captureMode:cli-text`, `traceCompleteness:final-only`, with `assistant.thinking.delta`/`assistant.text.delta` in `unsupportedEventKinds`. One eval generated **496 output tokens** but only ~60 (the final JSON) are captured/shown.
@@ -274,6 +279,7 @@ PermissionRequests, NOT Smithers `needsApproval` gates, so gates were effectivel
 silent until someone checked.
 
 **Wired now (easy):**
+
 - **Browser push (runs.supachad.com)** — the dashboard fires a desktop/PWA
   `Notification` on each new pending approval (grant permission once; it asks on
   load/first click). Zero infra, works immediately. Best for an operator at a desk.
@@ -283,6 +289,7 @@ silent until someone checked.
   Best-effort, deduped. (Verify the pod CLI arg names before relying on it.)
 
 **Effort to wire the rest:**
+
 - **Telegram/WhatsApp (openclaw channel)** — medium. If Chad's openclaw agent has a
   TG/WhatsApp channel configured, add a dispatch that sends through the openclaw
   messaging path (or `chad-webui`-style bridge). Needs the channel set up + the
@@ -508,6 +515,7 @@ routes by tier with runtime auto-detection so workflows never name a model:
   → local. Override via `CHAD_CAPABLE_BACKEND`.
 
 Findings that revise the plan:
+
 - The "free Nemotron" is NVIDIA's frontier **hosted Nemotron 3 Super 120B**
   (`integrate.api.nvidia.com`, `NVIDIA_API_KEY`); chad-shim :8901 is just its
   OpenAI-compatible proxy. Only `google/gemma-3-4b` (lmstudio) is truly local.
@@ -574,6 +582,7 @@ The host is already paired (`moshi-hook status` → `paired: true`,
 `Rs-Mac-mini`, keychain secret store).
 
 What was done:
+
 1. `moshi-hook install --target claude` — wrote handlers into the global
    `~/.claude/settings.json` that pipe Claude Code hook JSON to
    `moshi-hook claude-hook` for SessionStart / UserPromptSubmit / Stop /

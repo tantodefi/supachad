@@ -23,20 +23,30 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOST_CREDS="${CHAD_HOST_CREDS:-${HOME}/.nemoclaw/credentials.json}"
 CHAD_OPS="${CHAD_OPS_BIN:-${here}/../chad-ops.sh}"
 
-[ -f "$HOST_CREDS" ] || { echo "error: $HOST_CREDS not found" >&2; exit 1; }
+[ -f "$HOST_CREDS" ] || {
+  echo "error: $HOST_CREDS not found" >&2
+  exit 1
+}
 
 # Pull URL + secret from env, else from the creds file.
 URL="${PREMIUM_LIST_URL:-$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('PREMIUM_LIST_URL',''))" 2>/dev/null || true)}"
 SECRET="${PREMIUM_ADMIN_SECRET:-$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('PREMIUM_ADMIN_SECRET',''))" 2>/dev/null || true)}"
-[ -n "$URL" ] && [ -n "$SECRET" ] || { echo "error: set PREMIUM_LIST_URL + PREMIUM_ADMIN_SECRET (env or $HOST_CREDS)" >&2; exit 1; }
+[ -n "$URL" ] && [ -n "$SECRET" ] || {
+  echo "error: set PREMIUM_LIST_URL + PREMIUM_ADMIN_SECRET (env or $HOST_CREDS)" >&2
+  exit 1
+}
 
 echo "[premium-sync] fetching $URL"
 resp="$(curl -fsS -H "X-Admin-Secret: $SECRET" "$URL" 2>/dev/null || true)"
-[ -n "$resp" ] || { echo "error: empty/failed response from Worker" >&2; exit 1; }
+[ -n "$resp" ] || {
+  echo "error: empty/failed response from Worker" >&2
+  exit 1
+}
 
 # Merge the Worker's premium emails into CHAD_OPERATOR_ALLOWLIST (set union, lowercased).
 # Writes atomically and reports whether anything changed. RESP is passed via env.
-changed="$(RESP="$resp" python3 - "$HOST_CREDS" <<'PY'
+changed="$(
+  RESP="$resp" python3 - "$HOST_CREDS" <<'PY'
 import json, sys, os, tempfile
 creds_path = sys.argv[1]
 resp = json.loads(os.environ["RESP"])
@@ -62,7 +72,13 @@ PY
 
 echo "[premium-sync] $changed"
 case "$changed" in
-  CHANGED*) echo "[premium-sync] allowlist grew — running gate-sync"; "$CHAD_OPS" gate-sync ;;
+  CHANGED*)
+    echo "[premium-sync] allowlist grew — running gate-sync"
+    "$CHAD_OPS" gate-sync
+    ;;
   NOCHANGE) echo "[premium-sync] nothing to do" ;;
-  *)        echo "[premium-sync] merge step failed" >&2; exit 1 ;;
+  *)
+    echo "[premium-sync] merge step failed" >&2
+    exit 1
+    ;;
 esac

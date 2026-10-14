@@ -36,9 +36,14 @@ export function resolveFrom(base, env = {}) {
   const globalOn = String(env.CHAD_DIRECTIVES_OFF || "") !== "1";
   let override = null;
   if (env.CHAD_DIRECTIVES_JSON) {
-    try { const o = JSON.parse(env.CHAD_DIRECTIVES_JSON); if (o && typeof o === "object") override = o; } catch { /* bad json → ignore */ }
+    try {
+      const o = JSON.parse(env.CHAD_DIRECTIVES_JSON);
+      if (o && typeof o === "object") override = o;
+    } catch {
+      /* bad json → ignore */
+    }
   }
-  const start = globalOn ? (base || {}) : {};
+  const start = globalOn ? base || {} : {};
   return override ? mergeDirectives(start, override) : start;
 }
 
@@ -47,7 +52,11 @@ export function resolveDirectives(env = process.env, opts = {}) {
   const path = env.CHAD_DIRECTIVES || opts.path || DEFAULT_PATH;
   let base = {};
   if (String(env.CHAD_DIRECTIVES_OFF || "") !== "1") {
-    try { base = JSON.parse(readFileSync(path, "utf8")) || {}; } catch { base = {}; }
+    try {
+      base = JSON.parse(readFileSync(path, "utf8")) || {};
+    } catch {
+      base = {};
+    }
   }
   return resolveFrom(base, env);
 }
@@ -66,10 +75,23 @@ export function directiveSystemFor(directives, role) {
  * moderate (the neutral default), so an unset dial changes nothing.
  */
 export function creativityKnob(creativity) {
-  switch (String(creativity || "").trim().toLowerCase()) {
-    case "low":  return { expandMultiplier: 0.5, hint: "Refine conservatively: make a small, safe change to the leader — do not diverge." };
-    case "high": return { expandMultiplier: 2,   hint: "Explore boldly: try a genuinely different angle, not a tweak — divergence is wanted." };
-    default:     return { expandMultiplier: 1,   hint: "" }; // moderate / unset
+  switch (
+    String(creativity || "")
+      .trim()
+      .toLowerCase()
+  ) {
+    case "low":
+      return {
+        expandMultiplier: 0.5,
+        hint: "Refine conservatively: make a small, safe change to the leader — do not diverge.",
+      };
+    case "high":
+      return {
+        expandMultiplier: 2,
+        hint: "Explore boldly: try a genuinely different angle, not a tweak — divergence is wanted.",
+      };
+    default:
+      return { expandMultiplier: 1, hint: "" }; // moderate / unset
   }
 }
 
@@ -77,5 +99,7 @@ export function creativityKnob(creativity) {
  *  Empty priorities → everything is in scope (no filtering). */
 export function inScope(taskKind, priorities) {
   if (!Array.isArray(priorities) || priorities.length === 0) return true;
-  return priorities.map((p) => String(p).toLowerCase()).includes(String(taskKind || "").toLowerCase());
+  return priorities
+    .map((p) => String(p).toLowerCase())
+    .includes(String(taskKind || "").toLowerCase());
 }

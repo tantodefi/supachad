@@ -45,8 +45,8 @@ NO_POLL="${CHAD_GHA_NO_POLL:-0}"
 
 # Required-env check
 for v in CHAD_GHA_TASK_ID CHAD_GHA_KIND CHAD_GHA_WORKDIR CHAD_GHA_RESULT_FILE \
-         CHAD_GHA_PROMPT_FILE CHAD_GHA_TASK_FILE CHAD_GHA_MANIFEST_FILE \
-         CHAD_GHA_BINARY CHAD_GHA_INVOCATION CHAD_GHA_TIMEOUT CHAD_GHA_BUDGET_TOKENS; do
+  CHAD_GHA_PROMPT_FILE CHAD_GHA_TASK_FILE CHAD_GHA_MANIFEST_FILE \
+  CHAD_GHA_BINARY CHAD_GHA_INVOCATION CHAD_GHA_TIMEOUT CHAD_GHA_BUDGET_TOKENS; do
   if [ -z "${!v:-}" ]; then
     echo "chad-spawn-gha: required env $v missing" >&2
     exit 5
@@ -73,7 +73,10 @@ trap 'rm -rf "$state_dir"' EXIT
 mkdir -p "$workdir"
 
 log() { echo "[chad-spawn-gha] $*" >&2; }
-fail() { log "FAIL: $*"; exit "${2:-5}"; }
+fail() {
+  log "FAIL: $*"
+  exit "${2:-5}"
+}
 
 # Sanity: gh CLI present and authenticated
 command -v gh >/dev/null 2>&1 || fail "gh CLI not found in PATH"
@@ -84,7 +87,7 @@ log "cloning $REPO -> $state_dir"
 gh repo clone "$REPO" "$state_dir" -- --depth 1 --quiet \
   >>"${workdir}/gha.log" 2>&1 || fail "clone failed; see ${workdir}/gha.log"
 
-cd "$state_dir"
+cd "$state_dir" || exit 1
 
 # ── 2. Create spawn branch + push task config ────────────────────────
 git checkout -b "$branch" >>"${workdir}/gha.log" 2>&1 \
@@ -93,12 +96,12 @@ mkdir -p "$spawn_path"
 cp "$prompt_file" "${spawn_path}/prompt.txt"
 case "$task_file" in
   *.json) cp "$task_file" "${spawn_path}/task.json" ;;
-  *)      cp "$task_file" "${spawn_path}/task.txt"  ;;
+  *) cp "$task_file" "${spawn_path}/task.txt" ;;
 esac
 cp "$manifest_file" "${spawn_path}/kind.yaml"
 
 # Synthesize manifest.json the runner reads
-python3 - <<PY > "${spawn_path}/manifest.json"
+python3 - <<PY >"${spawn_path}/manifest.json"
 import json, datetime
 print(json.dumps({
     "task_id": "$task_id",
@@ -137,12 +140,12 @@ if [ "$NO_POLL" = "1" ]; then
 fi
 
 # ── 4. Poll for result.json on the spawn branch ──────────────────────
-poll_timeout=$(( timeout_secs + POLL_EXTRA ))
+poll_timeout=$((timeout_secs + POLL_EXTRA))
 poll_start=$(date +%s)
 log "polling for result (timeout ${poll_timeout}s, interval ${POLL_INTERVAL}s)"
 
 while true; do
-  elapsed=$(( $(date +%s) - poll_start ))
+  elapsed=$(($(date +%s) - poll_start))
   if [ "$elapsed" -gt "$poll_timeout" ]; then
     fail "poll timeout (${poll_timeout}s); workflow may still be running" 5
   fi

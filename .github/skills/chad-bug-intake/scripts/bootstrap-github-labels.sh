@@ -25,7 +25,7 @@ while [ "$#" -gt 0 ]; do
       repo="$2"
       shift 2
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -56,7 +56,7 @@ label_exists() {
 }
 
 for spec in "${labels[@]}"; do
-  IFS='|' read -r name color description <<< "$spec"
+  IFS='|' read -r name color description <<<"$spec"
   if label_exists "$name"; then
     gh label edit "$name" --repo "$repo" --color "$color" --description "$description" >/dev/null
     echo "Updated label: $name"

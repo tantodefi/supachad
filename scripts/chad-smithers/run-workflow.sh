@@ -11,7 +11,7 @@
 
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-cd "$HERE"
+cd "$HERE" || exit 1
 WF="${1:?usage: run-workflow.sh <workflow file, e.g. workflows/log-digest.jsx>}"
 SMITHERS="${SMITHERS_BIN:-$HERE/node_modules/.bin/smithers}"
 CREDS="${CHAD_HOST_CREDS:-/Users/r/.nemoclaw/credentials.json}"
@@ -48,7 +48,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
     exit 0
   fi
 fi
-echo "$$" > "$PIDF"
+echo "$$" >"$PIDF"
 trap 'rm -rf "$LOCK" 2>/dev/null' EXIT
 
 echo "run-workflow: $WF @ $(date -u +%FT%TZ)" >&2

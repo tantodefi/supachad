@@ -26,7 +26,7 @@ OPENCLAW_DATA="${CHAD_OPENCLAW_DATA:-/sandbox/.openclaw-data}"
 CREDS="${CHAD_CREDENTIALS:-/sandbox/.nemoclaw/credentials.json}"
 WORKSPACE_FILES_LIST="${CHAD_WORKSPACE_FILES_LIST:-/usr/local/share/chad/chad-workspace-files.txt}"
 
-log()  { echo "[restore] $*"; }
+log() { echo "[restore] $*"; }
 warn() { echo "[restore] $*" >&2; }
 
 if [ -z "${GITHUB_TOKEN:-}" ] && [ -f "$CREDS" ]; then
@@ -56,8 +56,8 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 log "Cloning ${REPO}@${BRANCH}"
 if ! git clone --quiet --depth 1 --branch "$BRANCH" \
-    "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" \
-    "$tmp_dir/state" 2>/dev/null; then
+  "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" \
+  "$tmp_dir/state" 2>/dev/null; then
   warn "Clone failed — ${REPO}@${BRANCH} may not exist yet"
   exit 1
 fi
@@ -87,17 +87,18 @@ if [ -r "$WORKSPACE_FILES_LIST" ]; then
   while IFS= read -r line; do
     line="${line%%#*}"
     line="${line//[$'\t\r\n']/}"
-    line="${line## }"; line="${line%% }"
+    line="${line## }"
+    line="${line%% }"
     [ -z "$line" ] && continue
     if [[ "$line" =~ ^\[(.+)\]$ ]]; then
       current_section="${BASH_REMATCH[1]}"
       continue
     fi
     case "$current_section" in
-      runtime)      RUNTIME_FILES+=("$line") ;;
+      runtime) RUNTIME_FILES+=("$line") ;;
       runtime-dirs) RUNTIME_DIRS+=("${line%/}") ;;
     esac
-  done < "$WORKSPACE_FILES_LIST"
+  done <"$WORKSPACE_FILES_LIST"
 fi
 if [ "${#RUNTIME_FILES[@]}" -eq 0 ]; then
   RUNTIME_FILES=(queue/tasks.jsonl queue/budget.json)
@@ -155,7 +156,8 @@ if [ -d "$tmp_dir/state/brain" ] && command -v gbrain >/dev/null 2>&1; then
     if [ -n "$GBRAIN_SERVE_PID" ]; then
       kill "$GBRAIN_SERVE_PID" 2>/dev/null
       for _ in 1 2 3 4 5; do
-        kill -0 "$GBRAIN_SERVE_PID" 2>/dev/null || break; sleep 1
+        kill -0 "$GBRAIN_SERVE_PID" 2>/dev/null || break
+        sleep 1
       done
     fi
     if HOME=/sandbox gbrain import "$tmp_dir/state/brain" --no-embed 2>/dev/null; then

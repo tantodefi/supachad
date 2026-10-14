@@ -35,7 +35,7 @@ if [ ! -r "$PROFILES_FILE" ]; then
     echo ""
     echo "## Budget audit skipped — ${TS}"
     echo "task-profiles.json not found at ${PROFILES_FILE}"
-  } >> "$MEMORY_FILE"
+  } >>"$MEMORY_FILE"
   echo "skipped: profiles file missing"
   exit 0
 fi
@@ -48,16 +48,16 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-echo "$CRONS_JSON" > "$TMP/crons.json"
+echo "$CRONS_JSON" >"$TMP/crons.json"
 
 CRONS_FILE="$TMP/crons.json" \
-LIMIT="$LIMIT" \
-PROFILES_FILE="$PROFILES_FILE" \
-TS="$TS" \
-MEMORY_FILE="$MEMORY_FILE" \
-PROPOSALS_FILE="$PROPOSALS_FILE" \
-PREMIUM_LEDGER="$PREMIUM_LEDGER" \
-python3 <<'PY'
+  LIMIT="$LIMIT" \
+  PROFILES_FILE="$PROFILES_FILE" \
+  TS="$TS" \
+  MEMORY_FILE="$MEMORY_FILE" \
+  PROPOSALS_FILE="$PROPOSALS_FILE" \
+  PREMIUM_LEDGER="$PREMIUM_LEDGER" \
+  python3 <<'PY'
 import json, os, subprocess, statistics
 from collections import defaultdict
 

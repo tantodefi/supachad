@@ -42,20 +42,20 @@ mkdir -p "$(dirname "$LOG")"
 
 # Bound the local log so it doesn't grow forever. Keep last ~2000 lines (≈20 days at one entry per event).
 trim_log() {
-  if [ -f "$LOG" ] && [ "$(wc -l < "$LOG" 2>/dev/null || echo 0)" -gt 2000 ]; then
-    tail -1500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+  if [ -f "$LOG" ] && [ "$(wc -l <"$LOG" 2>/dev/null || echo 0)" -gt 2000 ]; then
+    tail -1500 "$LOG" >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
   fi
 }
 
 ts() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
-log() { printf '[%s] %s\n' "$(ts)" "$*" >> "$LOG"; }
+log() { printf '[%s] %s\n' "$(ts)" "$*" >>"$LOG"; }
 
 # Self-heal: the pod's container filesystem resets on pod recreate, so the
 # sandbox-writable and image binaries can vanish. Restore from the host copy
 # so a fresh pod self-recovers without manual re-provisioning.
 PROVISION_SRC="${CHAD_SPAWN_POLL_SRC:-${HOME}/.nemoclaw/source/scripts/chad-cron-wrappers/chad-spawn-poll}"
 if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" \
-    "test -x '$SPAWN_POLL' -o -x '$SPAWN_POLL_FALLBACK'" 2>/dev/null; then
+  "test -x '$SPAWN_POLL' -o -x '$SPAWN_POLL_FALLBACK'" 2>/dev/null; then
   if [ -x "$PROVISION_SRC" ]; then
     log "self-heal: uploading chad-spawn-poll to pod"
     cat "$PROVISION_SRC" | ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" \
@@ -90,7 +90,7 @@ RC=$?
 event_kind=""
 severity=""
 case "$OUTPUT" in
-  *"reconciled"*"-> failed"*|*"reconciled"*"-> timeout"*)
+  *"reconciled"*"-> failed"* | *"reconciled"*"-> timeout"*)
     event_kind="spawn-reconciled"
     severity="warning"
     ;;
@@ -98,7 +98,7 @@ case "$OUTPUT" in
     event_kind="spawn-reconciled"
     severity="info"
     ;;
-  *"failed"*|*"FAILED"*|*"ERROR"*)
+  *"failed"* | *"FAILED"* | *"ERROR"*)
     event_kind="spawn-poll-error"
     severity="error"
     ;;
@@ -126,7 +126,7 @@ INBOX_LINE=$(printf '{"ts":"%s","source":"chad-spawn-poll-watchdog","kind":"%s",
 # Note: payloads (inbox line + raw output) travel via stdin, never inlined into
 # the remote command string — inlining multi-line output corrupted shell parsing.
 printf '%s\n' "$INBOX_LINE" | ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" \
-  "cat >> '$INBOX'" >> "$LOG" 2>&1 || true
+  "cat >> '$INBOX'" >>"$LOG" 2>&1 || true
 if [ "$severity" != "info" ] && [ -n "$OUTPUT" ]; then
   printf '%s' "$OUTPUT" | ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" '
     MEM=$(/usr/local/bin/chad-ensure-today-memory 2>/dev/null || /sandbox/.openclaw-data/bin/chad-ensure-today-memory 2>/dev/null || echo "")
@@ -139,7 +139,7 @@ if [ "$severity" != "info" ] && [ -n "$OUTPUT" ]; then
         cat
         echo "```"
       } >> "$MEM"
-    fi' >> "$LOG" 2>&1 || true
+    fi' >>"$LOG" 2>&1 || true
 fi
 
 log "kind=$event_kind severity=$severity rc=$RC summary=$(printf '%s' "$SUMMARY" | head -c 160)"

@@ -10,43 +10,94 @@ import { prAction, shepherdSummary, checksFailing, PR_ACTIONS } from "./pr.js";
 
 const NOW = new Date("2026-07-03T00:00:00Z").getTime();
 const daysAgo = (n) => new Date(NOW - n * 86400000).toISOString();
-const base = { number: 1, title: "t", isDraft: false, mergeable: "MERGEABLE", reviewDecision: "", statusCheckRollup: [], updatedAt: daysAgo(0) };
+const base = {
+  number: 1,
+  title: "t",
+  isDraft: false,
+  mergeable: "MERGEABLE",
+  reviewDecision: "",
+  statusCheckRollup: [],
+  updatedAt: daysAgo(0),
+};
 
 test("draft PRs report draft, whatever else is true", () => {
-  assert.equal(prAction({ ...base, isDraft: true, mergeable: "CONFLICTING" }, { now: NOW }).action, "draft");
+  assert.equal(
+    prAction({ ...base, isDraft: true, mergeable: "CONFLICTING" }, { now: NOW }).action,
+    "draft",
+  );
 });
 
 test("conflicts outrank failing checks and reviews (most-blocking first)", () => {
-  const r = prAction({ ...base, mergeable: "CONFLICTING", statusCheckRollup: [{ conclusion: "FAILURE" }], reviewDecision: "CHANGES_REQUESTED" }, { now: NOW });
+  const r = prAction(
+    {
+      ...base,
+      mergeable: "CONFLICTING",
+      statusCheckRollup: [{ conclusion: "FAILURE" }],
+      reviewDecision: "CHANGES_REQUESTED",
+    },
+    { now: NOW },
+  );
   assert.equal(r.action, "conflicts");
 });
 
 test("failing checks beat a changes-requested review", () => {
-  const r = prAction({ ...base, statusCheckRollup: [{ conclusion: "FAILURE" }], reviewDecision: "CHANGES_REQUESTED" }, { now: NOW });
+  const r = prAction(
+    {
+      ...base,
+      statusCheckRollup: [{ conclusion: "FAILURE" }],
+      reviewDecision: "CHANGES_REQUESTED",
+    },
+    { now: NOW },
+  );
   assert.equal(r.action, "checks-failing");
 });
 
 test("changes-requested is surfaced when not conflicted/red", () => {
-  assert.equal(prAction({ ...base, reviewDecision: "CHANGES_REQUESTED" }, { now: NOW }).action, "changes-requested");
+  assert.equal(
+    prAction({ ...base, reviewDecision: "CHANGES_REQUESTED" }, { now: NOW }).action,
+    "changes-requested",
+  );
 });
 
 test("approved + mergeable + green = merge-ready", () => {
-  const r = prAction({ ...base, reviewDecision: "APPROVED", statusCheckRollup: [{ conclusion: "SUCCESS" }] }, { now: NOW });
+  const r = prAction(
+    { ...base, reviewDecision: "APPROVED", statusCheckRollup: [{ conclusion: "SUCCESS" }] },
+    { now: NOW },
+  );
   assert.equal(r.action, "merge-ready");
 });
 
 test("approved but conflicting is NOT merge-ready", () => {
-  const r = prAction({ ...base, reviewDecision: "APPROVED", mergeable: "CONFLICTING" }, { now: NOW });
+  const r = prAction(
+    { ...base, reviewDecision: "APPROVED", mergeable: "CONFLICTING" },
+    { now: NOW },
+  );
   assert.equal(r.action, "conflicts");
 });
 
 test("awaiting review, fresh → needs-review; stale → stale-nudge", () => {
-  assert.equal(prAction({ ...base, reviewDecision: "REVIEW_REQUIRED", updatedAt: daysAgo(1) }, { now: NOW, staleDays: 3 }).action, "needs-review");
-  assert.equal(prAction({ ...base, reviewDecision: "REVIEW_REQUIRED", updatedAt: daysAgo(5) }, { now: NOW, staleDays: 3 }).action, "stale-nudge");
+  assert.equal(
+    prAction(
+      { ...base, reviewDecision: "REVIEW_REQUIRED", updatedAt: daysAgo(1) },
+      { now: NOW, staleDays: 3 },
+    ).action,
+    "needs-review",
+  );
+  assert.equal(
+    prAction(
+      { ...base, reviewDecision: "REVIEW_REQUIRED", updatedAt: daysAgo(5) },
+      { now: NOW, staleDays: 3 },
+    ).action,
+    "stale-nudge",
+  );
 });
 
 test("empty reviewDecision is treated as awaiting review", () => {
-  assert.equal(prAction({ ...base, reviewDecision: "", updatedAt: daysAgo(5) }, { now: NOW, staleDays: 3 }).action, "stale-nudge");
+  assert.equal(
+    prAction({ ...base, reviewDecision: "", updatedAt: daysAgo(5) }, { now: NOW, staleDays: 3 })
+      .action,
+    "stale-nudge",
+  );
 });
 
 test("every action returned is in the known PR_ACTIONS set", () => {
@@ -61,7 +112,10 @@ test("every action returned is in the known PR_ACTIONS set", () => {
 });
 
 test("checksFailing handles array rollup and string summary", () => {
-  assert.equal(checksFailing({ statusCheckRollup: [{ conclusion: "SUCCESS" }, { conclusion: "FAILURE" }] }), true);
+  assert.equal(
+    checksFailing({ statusCheckRollup: [{ conclusion: "SUCCESS" }, { conclusion: "FAILURE" }] }),
+    true,
+  );
   assert.equal(checksFailing({ statusCheckRollup: [{ conclusion: "SUCCESS" }] }), false);
   assert.equal(checksFailing({ statusCheckRollup: "1 failing" }), true);
   assert.equal(checksFailing({ statusCheckRollup: [] }), false);
@@ -73,7 +127,11 @@ test("empty check rollup is not blocking (merge-ready when approved)", () => {
 });
 
 test("shepherdSummary counts by action", () => {
-  const decisions = [{ action: "merge-ready" }, { action: "merge-ready" }, { action: "needs-review" }];
+  const decisions = [
+    { action: "merge-ready" },
+    { action: "merge-ready" },
+    { action: "needs-review" },
+  ];
   assert.deepEqual(shepherdSummary(decisions), { "merge-ready": 2, "needs-review": 1 });
   assert.deepEqual(shepherdSummary([]), {});
 });

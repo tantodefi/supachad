@@ -37,7 +37,7 @@ etc. That is the thing to avoid.
 Reference host: **Mac mini M4 Pro (`Mac16,11`), 12 cores, 24 GB RAM.** The live
 single Chad pod measures **~2.4 GB** resident (gateway Node + gbrain + shim).
 
-```
+```text
 24 GB total
  – ~6 GB   macOS + Docker Desktop
  – ~3 GB   OpenWebUI + cloudflared + nvidia-proxy + launchd services

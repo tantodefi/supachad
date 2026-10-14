@@ -12,9 +12,12 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="${1:-${_SELF_DIR}/nemoclaw-start.sh}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-GWLOG=/tmp/gateway.log   # the path the real functions hardcode
+GWLOG=/tmp/gateway.log # the path the real functions hardcode
 
-fail() { echo "FAIL: $*" >&2; exit 1; }
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
 pass() { echo "PASS: $*"; }
 
 # --- Extract the two real functions verbatim from the entrypoint ---
@@ -55,55 +58,67 @@ refresh_openclaw_supervised_child_pids() { :; }
 # Writes to /tmp/gateway.log (truncating, like the real launcher) then backgrounds
 # a short-lived process so GATEWAY_PID/wait behave like the real path.
 MOCK_LAUNCH_COUNT=0
-MOCK_CONVERGE_UNTIL=0   # launches 1..N emit the convergence refusal + exit 1
+MOCK_CONVERGE_UNTIL=0 # launches 1..N emit the convergence refusal + exit 1
 mock_launch() {
   MOCK_LAUNCH_COUNT=$((MOCK_LAUNCH_COUNT + 1))
-  : > "$GWLOG"
+  : >"$GWLOG"
   if [ "$MOCK_LAUNCH_COUNT" -le "$MOCK_CONVERGE_UNTIL" ]; then
     echo "OpenClaw plugin migration inputs changed during startup convergence; refusing to report the gateway ready. Restart OpenClaw." >>"$GWLOG"
     # shellcheck disable=SC2034  # read by the sourced respawn function via `wait`
-    ( exit 1 ) & GATEWAY_PID=$!
+    (exit 1) &
+    GATEWAY_PID=$!
   else
     echo "[gateway] ready" >>"$GWLOG"
     # shellcheck disable=SC2034  # read by the sourced respawn function via `wait`
-    ( exit 0 ) & GATEWAY_PID=$!   # clean (non-convergence) exit ends the loop
+    (exit 0) &
+    # shellcheck disable=SC2034 # mirrors the real respawn loop's bookkeeping
+    GATEWAY_PID=$! # clean (non-convergence) exit ends the loop
   fi
 }
 
 # --- Test 1: converges after 2 refusals, then ready → returns 0, relaunched twice ---
-MOCK_LAUNCH_COUNT=0; MOCK_CONVERGE_UNTIL=2
+MOCK_LAUNCH_COUNT=0
+MOCK_CONVERGE_UNTIL=2
 export NEMOCLAW_GATEWAY_CONVERGENCE_MAX=6
 _NEMOCLAW_GATEWAY_CONVERGENCE_MAX=6
-mock_launch   # initial launch (as the caller does before the wait helper)
-wait_openclaw_gateway_with_convergence_respawn mock_launch; rc=$?
+mock_launch # initial launch (as the caller does before the wait helper)
+wait_openclaw_gateway_with_convergence_respawn mock_launch
+rc=$?
 [ "$rc" -eq 0 ] || fail "T1 expected rc=0, got $rc"
 [ "$MOCK_LAUNCH_COUNT" -eq 3 ] || fail "T1 expected 3 launches (1 initial + 2 respawns), got $MOCK_LAUNCH_COUNT"
 pass "T1 converges after 2 refusals (3 launches, rc=0)"
 
 # --- Test 2: ready on first launch → no respawn, returns 0 ---
-MOCK_LAUNCH_COUNT=0; MOCK_CONVERGE_UNTIL=0
+MOCK_LAUNCH_COUNT=0
+MOCK_CONVERGE_UNTIL=0
 mock_launch
-wait_openclaw_gateway_with_convergence_respawn mock_launch; rc=$?
+wait_openclaw_gateway_with_convergence_respawn mock_launch
+rc=$?
 [ "$rc" -eq 0 ] || fail "T2 expected rc=0, got $rc"
 [ "$MOCK_LAUNCH_COUNT" -eq 1 ] || fail "T2 expected 1 launch (no respawn), got $MOCK_LAUNCH_COUNT"
 pass "T2 ready on first launch (no respawn)"
 
 # --- Test 3: persistent refusal is bounded by the cap (no infinite loop) ---
-MOCK_LAUNCH_COUNT=0; MOCK_CONVERGE_UNTIL=999
+MOCK_LAUNCH_COUNT=0
+MOCK_CONVERGE_UNTIL=999
 _NEMOCLAW_GATEWAY_CONVERGENCE_MAX=3
 mock_launch
-wait_openclaw_gateway_with_convergence_respawn mock_launch; rc=$?
+wait_openclaw_gateway_with_convergence_respawn mock_launch
+rc=$?
 [ "$rc" -eq 1 ] || fail "T3 expected final rc=1 (gave up), got $rc"
 # 1 initial + 3 bounded respawns = 4 launches
 [ "$MOCK_LAUNCH_COUNT" -eq 4 ] || fail "T3 expected 4 launches (cap=3), got $MOCK_LAUNCH_COUNT"
 pass "T3 persistent refusal bounded at cap=3 (4 launches, rc=1)"
 
 # --- Test 4: detector matches both message variants, rejects unrelated output ---
-: > "$GWLOG"; echo "refusing to report the gateway ready" >>"$GWLOG"
+: >"$GWLOG"
+echo "refusing to report the gateway ready" >>"$GWLOG"
 gateway_exited_for_convergence || fail "T4a should match 'refusing to report'"
-: > "$GWLOG"; echo "migration inputs changed during startup convergence" >>"$GWLOG"
+: >"$GWLOG"
+echo "migration inputs changed during startup convergence" >>"$GWLOG"
 gateway_exited_for_convergence || fail "T4b should match 'migration inputs changed'"
-: > "$GWLOG"; echo "[gateway] ready" >>"$GWLOG"
+: >"$GWLOG"
+echo "[gateway] ready" >>"$GWLOG"
 gateway_exited_for_convergence && fail "T4c must NOT match a clean ready log"
 pass "T4 convergence detector matches signals, ignores clean exit"
 

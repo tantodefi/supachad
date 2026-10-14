@@ -18,12 +18,17 @@
 import { readFileSync } from "node:fs";
 
 function loadJson(rel) {
-  try { return JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf8")); } catch { return null; }
+  try {
+    return JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 let _reg, _cat;
-const registry = () => (_reg ??= (loadJson("../../model-registry.json") || { models: {}, defaults: {} }));
-const catalog = () => (_cat ??= (loadJson("../state/models.json") || { chat: [], featured: [] }));
+const registry = () =>
+  (_reg ??= loadJson("../../model-registry.json") || { models: {}, defaults: {} });
+const catalog = () => (_cat ??= loadJson("../state/models.json") || { chat: [], featured: [] });
 
 const FALLBACK = { contextWindow: 131072, maxOutputTokens: 8192 };
 
@@ -75,21 +80,39 @@ export function clampOutput(modelId, requested) {
  */
 export function preflight(opts = {}) {
   const models = (opts.models || []).filter(Boolean);
-  const errors = [], warnings = [], clamped = {};
-  const reqOut = opts.maxOutputTokens != null && opts.maxOutputTokens !== "" ? Number(opts.maxOutputTokens) : null;
+  const errors = [],
+    warnings = [],
+    clamped = {};
+  const reqOut =
+    opts.maxOutputTokens != null && opts.maxOutputTokens !== ""
+      ? Number(opts.maxOutputTokens)
+      : null;
 
   if (reqOut != null && (!Number.isFinite(reqOut) || reqOut <= 0)) {
     errors.push("max output tokens must be a positive number.");
   }
   for (const m of models) {
     const lim = limitsFor(m);
-    if (lim.source !== "registry") warnings.push(`"${m}" is not in the model registry — using conservative ${lim.contextWindow} ctx / ${lim.maxOutputTokens} out.`);
-    else if (lim.estimated) warnings.push(`"${m}" limits are estimated (${lim.contextWindow} ctx / ${lim.maxOutputTokens} out) — verify the model card.`);
+    if (lim.source !== "registry")
+      warnings.push(
+        `"${m}" is not in the model registry — using conservative ${lim.contextWindow} ctx / ${lim.maxOutputTokens} out.`,
+      );
+    else if (lim.estimated)
+      warnings.push(
+        `"${m}" limits are estimated (${lim.contextWindow} ctx / ${lim.maxOutputTokens} out) — verify the model card.`,
+      );
     if (reqOut != null && Number.isFinite(reqOut) && reqOut > 0) {
-      if (reqOut > lim.contextWindow) errors.push(`max output ${reqOut} exceeds "${m}" context window ${lim.contextWindow}.`);
-      else if (reqOut > lim.maxOutputTokens) { warnings.push(`max output ${reqOut} exceeds "${m}" ceiling ${lim.maxOutputTokens} → will clamp.`); clamped[m] = lim.maxOutputTokens; }
+      if (reqOut > lim.contextWindow)
+        errors.push(`max output ${reqOut} exceeds "${m}" context window ${lim.contextWindow}.`);
+      else if (reqOut > lim.maxOutputTokens) {
+        warnings.push(
+          `max output ${reqOut} exceeds "${m}" ceiling ${lim.maxOutputTokens} → will clamp.`,
+        );
+        clamped[m] = lim.maxOutputTokens;
+      }
     }
-    if (opts.reasoning === "on" && lim.reasoningSupported === false) warnings.push(`"${m}" does not support reasoning; the toggle will be ignored.`);
+    if (opts.reasoning === "on" && lim.reasoningSupported === false)
+      warnings.push(`"${m}" does not support reasoning; the toggle will be ignored.`);
   }
   return { ok: errors.length === 0, errors, warnings, clamped };
 }
@@ -100,7 +123,12 @@ export function listLimits() {
   const out = {};
   for (const [k, v] of Object.entries(reg.models || {})) {
     if (k.startsWith("_") || typeof v !== "object") continue;
-    out[k] = { contextWindow: v.contextWindow, maxOutputTokens: v.maxOutputTokens, estimated: !!v._estimated, displayName: v.displayName };
+    out[k] = {
+      contextWindow: v.contextWindow,
+      maxOutputTokens: v.maxOutputTokens,
+      estimated: !!v._estimated,
+      displayName: v.displayName,
+    };
   }
   out._default = reg.defaults?.unknownModel || FALLBACK;
   return out;

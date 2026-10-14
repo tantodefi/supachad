@@ -76,6 +76,7 @@ so the arena measures whether Ultra's quality justifies its latency.
 ### Do we need to add API keys to credentials?
 
 **No new keys.** The `ai` SDK itself needs no key; only the *provider* does:
+
 - **nemotron / NIM** → `NVIDIA_API_KEY` (already in the pod credentials; the
   hosted Nemotron API is free with it). This is the only key the default path needs.
 - **claudecode** → none; the `claude` CLI uses the Max subscription/OAuth.
@@ -96,6 +97,7 @@ so the arena measures whether Ultra's quality justifies its latency.
 `opencode` is installed on the host, so the 500k-ctx / 200-req-hr path is real.
 Smithers ships no `OpenCodeAgent`, so the backend in `agents.js` currently
 throws a clear TODO. To finish it, confirm:
+
 1. `CHAD_OPENCODE_MODEL` — the actual model id ("big pickle"), and
 2. whether opencode exposes an OpenAI-compatible server (`opencode serve`) we
    can point the nemotron-style `createOpenAICompatible` at, or whether it needs

@@ -188,7 +188,7 @@ and is implemented by six baked-in binaries.
 | `chad-spawn` | Canonical spawner. Loads the kind manifest, checks budget, runs the sub-agent, writes `result.json`. |
 | `chad-spawn-status` | Query the task ledger by id / state. |
 | `chad-collect` | Merge recent `result.json` files into today's `memory/<YYYY-MM-DD>.md`. |
-| `chad-intake` | Source-agnostic wrapper. `--from chat|proton|cron|issue`, does route→spawn→collect. |
+| `chad-intake` | Source-agnostic wrapper. `--from chat\|proton\|cron\|issue`, does route→spawn→collect. |
 
 All six are baked into `/usr/local/bin/` at image build time (see
 `Dockerfile` lines ~115–133) **and** shipped from
@@ -396,7 +396,7 @@ deleted.
 gstack ships two distinct tiers; only the first works inside Chad's
 sandbox.
 
-**Tier 1 — openclaw reasoning skills (sandbox-safe, synced by chad-setup.sh)**
+##### Tier 1 — openclaw reasoning skills (sandbox-safe, synced by chad-setup.sh)
 
 The full canonical 40-skill OpenClaw-adapter bundle from
 `garrytan/gstack`'s `.openclaw/skills/` directory — no browser daemon, no
@@ -421,13 +421,14 @@ names. If gstack is not installed on the host the step warns and skips —
 it is not a hard dependency.
 
 Install gstack on the host once:
+
 ```bash
 git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git \
   ~/.claude/skills/gstack
 cd ~/.claude/skills/gstack && ./setup
 ```
 
-**Tier 2 — full gstack with browse daemon (host-only, not in sandbox)**
+###### Tier 2 — full gstack with browse daemon (host-only, not in sandbox)
 
 Skills like `/review`, `/qa`, `/ship`, `/browse`, `/gstack-ceo` rely on a
 persistent headless Chromium daemon (`bun build --compile`). This tier
@@ -720,11 +721,13 @@ processes.
 > with `docker exec openshell-cluster-nemoclaw kubectl get pod chad -n openshell -o jsonpath='{.spec.volumes[*].name}'`.
 >
 > Before any pod-recreating operation, take a Tier-2 backup:
+>
 > ```bash
 > TS=$(date -u +%Y%m%dT%H%M%SZ)
 > ssh openshell-chad 'cd / && tar -cf - sandbox' \
 >   | gzip > ~/.nemoclaw/backups/sandbox-state-${TS}.tar.gz
 > ```
+>
 > Restore is `kubectl cp` the un-tarred tree back into the new pod plus
 > `chmod +x` on the wrappers. The proper fix is adding a PVC for
 > `/sandbox` in the nemoclaw-blueprint StatefulSet — until that lands,

@@ -36,6 +36,7 @@ COPY main.py.patched /app/backend/open_webui/main.py
 #    loader.js is copied in only to be hashed; the bind mount from
 #    docker-compose.yml is what actually serves it at runtime.
 COPY static/loader.js /tmp/loader.js
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -eu; \
     V=$(sha256sum /tmp/loader.js | cut -c1-12); \
     sed -i "s#<script src=\"/static/loader.js\" defer crossorigin=\"use-credentials\"></script>#<script src=\"/static/loader.js?v=$V\" defer></script>#" /app/build/index.html; \

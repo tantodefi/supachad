@@ -20,7 +20,7 @@ LOG="/tmp/chad-workspace-backup-${TS_TAG}.log"
   echo "## Workspace Backup — ${TS}"
   echo "Status: detached"
   echo "Log: ${LOG}"
-} >> "$MEMORY_FILE"
+} >>"$MEMORY_FILE"
 
 nohup bash -c "
   if /usr/local/bin/chad-backup-to-github > '${LOG}' 2>&1; then
@@ -42,7 +42,7 @@ nohup bash -c "
       echo '\`\`\`'
     } >> '${MEMORY_FILE}'
   fi
-" >/dev/null 2>&1 < /dev/null &
+" >/dev/null 2>&1 </dev/null &
 disown 2>/dev/null || true
 
 echo "workspace-backup detached → ${LOG} (result will append to ${MEMORY_FILE})"

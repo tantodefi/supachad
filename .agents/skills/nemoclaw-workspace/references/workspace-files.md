@@ -37,11 +37,12 @@ The Chad agent persists additional orchestration state under `/sandbox/.openclaw
 These are tracked alongside workspace files in the [sectioned manifest](#sectioned-manifest) below so backup tooling round-trips them automatically.
 
 (sectioned-manifest)=
+
 ## Sectioned Manifest
 
 `scripts/chad-workspace-files.txt` is the single source of truth for what backup tooling round-trips. It uses a sectioned format that both `chad-backup-to-github.sh` and `chad-restore-from-github.sh` parse:
 
-```
+```text
 [workspace]                  ← persona prose under /sandbox/.openclaw/workspace/
 SOUL.md
 USER.md

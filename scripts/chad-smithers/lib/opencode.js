@@ -29,12 +29,20 @@ const PURE = process.env.CHAD_CODING_INTERACTIVE !== "1";
 
 function exec(cmd, args, opts = {}) {
   return new Promise((resolve) => {
-    const cp = execFile(cmd, args, { maxBuffer: 16 * 1024 * 1024, ...opts },
-      (err, out, errout) => resolve({ code: err ? (err.code ?? 1) : 0, out: (out || "").toString() + (errout || "").toString() }));
+    const cp = execFile(cmd, args, { maxBuffer: 16 * 1024 * 1024, ...opts }, (err, out, errout) =>
+      resolve({
+        code: err ? (err.code ?? 1) : 0,
+        out: (out || "").toString() + (errout || "").toString(),
+      }),
+    );
     // CRITICAL: close the child's stdin. execFile leaves it an OPEN pipe, and
     // `opencode run` blocks waiting on stdin — it only proceeds on EOF. Without
     // this the coder hangs until the timeout (the demo-build wedge).
-    try { cp.stdin && cp.stdin.end(); } catch { /* */ }
+    try {
+      cp.stdin && cp.stdin.end();
+    } catch {
+      /* */
+    }
   });
 }
 
@@ -49,8 +57,21 @@ const shq = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
 function runOpencodeShell(task, { cwd, timeout, logPath, model }) {
   return new Promise((resolve) => {
     const cmd = `${OPENCODE_BIN} run "$OC_TASK" -m ${shq(model)} --print-logs ${PURE ? "--pure" : ""} </dev/null > ${shq(logPath)} 2>&1`;
-    const cp = spawn("sh", ["-c", cmd], { cwd, timeout, env: { ...process.env, OC_TASK: task }, stdio: "ignore" });
-    const done = (code) => { let out = ""; try { out = readFileSync(logPath, "utf8"); } catch { /* */ } resolve({ code: code ?? 0, out }); };
+    const cp = spawn("sh", ["-c", cmd], {
+      cwd,
+      timeout,
+      env: { ...process.env, OC_TASK: task },
+      stdio: "ignore",
+    });
+    const done = (code) => {
+      let out = "";
+      try {
+        out = readFileSync(logPath, "utf8");
+      } catch {
+        /* */
+      }
+      resolve({ code: code ?? 0, out });
+    };
     cp.on("close", (code) => done(code));
     cp.on("error", () => done(1));
   });
@@ -63,7 +84,12 @@ function listFiles(dir, base = dir, acc = [], depth = 0) {
   for (const name of readdirSync(dir)) {
     if (name === ".git" || name === "node_modules" || name.startsWith(".")) continue;
     const p = join(dir, name);
-    let st; try { st = statSync(p); } catch { continue; }
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      continue;
+    }
     if (st.isDirectory()) listFiles(p, base, acc, depth + 1);
     else acc.push(p.slice(base.length + 1));
   }
@@ -77,21 +103,41 @@ function listFiles(dir, base = dir, acc = [], depth = 0) {
  * workdir }. Never throws (a coder failure must not sink the run).
  */
 export async function runOpencodeDirect({ task = "", id, workdir, timeoutMs } = {}) {
-  const shape = (o) => ({ kind: "opencode", substrate: "direct", task_id: id || `oc-${Date.now().toString(36)}`, follow_ups: [], ...o });
+  const shape = (o) => ({
+    kind: "opencode",
+    substrate: "direct",
+    task_id: id || `oc-${Date.now().toString(36)}`,
+    follow_ups: [],
+    ...o,
+  });
   const okBin = await exec(OPENCODE_BIN, ["--version"]);
-  if (okBin.code !== 0) return shape({ status: "failed", exit_code: 2, summary: `opencode not runnable (${okBin.out.slice(0, 120)}) — use the spawn coder or install opencode` });
+  if (okBin.code !== 0)
+    return shape({
+      status: "failed",
+      exit_code: 2,
+      summary: `opencode not runnable (${okBin.out.slice(0, 120)}) — use the spawn coder or install opencode`,
+    });
 
   const dir = workdir || mkdtempSync(join(TMP_BASE, "chad-coding-"));
   const t = Number(timeoutMs || process.env.CHAD_SPAWN_TIMEOUT_MS || 1_800_000);
   // Launch under a shell with stdout→file (dotfile, excluded from artifacts) so
   // opencode runs its full tool loop and actually writes.
-  const r = await runOpencodeShell(task, { cwd: dir, timeout: t, logPath: join(dir, ".opencode-run.log"), model: MODEL });
+  const r = await runOpencodeShell(task, {
+    cwd: dir,
+    timeout: t,
+    logPath: join(dir, ".opencode-run.log"),
+    model: MODEL,
+  });
   const files = existsSync(dir) ? listFiles(dir) : [];
   const tail = r.out.slice(-1500);
   return shape({
     status: r.code === 0 ? "done" : "failed",
     exit_code: r.code,
-    summary: (r.code === 0 ? "opencode big-pickle wrote " + files.length + " file(s)" : "opencode run exited " + r.code) + (tail ? ` — ${tail.split("\n").slice(-3).join(" ").slice(0, 240)}` : ""),
+    summary:
+      (r.code === 0
+        ? "opencode big-pickle wrote " + files.length + " file(s)"
+        : "opencode run exited " + r.code) +
+      (tail ? ` — ${tail.split("\n").slice(-3).join(" ").slice(0, 240)}` : ""),
     artifacts: files.slice(0, 50),
     workdir: dir,
   });

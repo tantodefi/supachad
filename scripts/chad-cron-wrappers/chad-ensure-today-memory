@@ -21,7 +21,7 @@ TARGET="${MEMORY_DIR}/${TODAY}.md"
 mkdir -p "$MEMORY_DIR"
 
 if [ ! -f "$TARGET" ]; then
-  printf '# %s\n' "$TODAY" > "$TARGET"
+  printf '# %s\n' "$TODAY" >"$TARGET"
 fi
 
 echo "$TARGET"

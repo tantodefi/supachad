@@ -86,7 +86,7 @@ while [ "$#" -gt 0 ]; do
       dry_run=1
       shift
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -119,7 +119,7 @@ if [ -z "$session_log" ] && command -v nemoclaw >/dev/null 2>&1; then
   session_log="$(nemoclaw "$sandbox_name" logs 2>/dev/null | tail -100)" || true
 fi
 
-title="$($SCRIPT_DIR/normalize-bug-title.sh "$subject")"
+title="$("$SCRIPT_DIR"/normalize-bug-title.sh "$subject")"
 
 if [ -z "$repo" ]; then
   # Prefer the local git context; fall back to the fork.
@@ -152,7 +152,7 @@ if [ "$duplicate_check" -eq 1 ]; then
 fi
 
 if [ -n "$existing_issue" ]; then
-  IFS='|' read -r issue_number issue_title issue_url issue_state <<< "$existing_issue"
+  IFS='|' read -r issue_number issue_title issue_url issue_state <<<"$existing_issue"
   printf 'DUPLICATE_NUMBER=%s\n' "$issue_number"
   printf 'DUPLICATE_STATE=%s\n' "$issue_state"
   printf 'DUPLICATE_ISSUE=%s\n' "$issue_url"

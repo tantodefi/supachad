@@ -57,7 +57,7 @@ if [ "$REMAINING" -lt "$MIN_BUDGET" ]; then
     echo ""
     echo "## Mail check skipped (low budget) — ${TS}"
     echo "remaining_tokens=${REMAINING} (< ${MIN_BUDGET})"
-  } >> "$MEMORY_FILE"
+  } >>"$MEMORY_FILE"
   echo "skipped: budget=${REMAINING}"
   exit 0
 fi
@@ -79,7 +79,7 @@ if [ -f "$BREAKER_FILE" ]; then
       echo ""
       echo "## Mail check skipped (proton backoff) — ${TS}"
       echo "Last Forbidden $(((now_epoch - ${last_fail:-0}) / 60))m ago; retrying after $((BACKOFF_SECS / 60))m."
-    } >> "$MEMORY_FILE"
+    } >>"$MEMORY_FILE"
     echo "skipped: proton backoff active"
     exit 0
   fi
@@ -98,7 +98,7 @@ fi
 
 # Trip / clear the breaker based on the sweep outcome.
 if grep -q "Forbidden" "$INBOX" 2>/dev/null; then
-  printf '{"last_fail_epoch":%s,"reason":"mail-api Forbidden"}\n' "$(date +%s)" > "$BREAKER_FILE"
+  printf '{"last_fail_epoch":%s,"reason":"mail-api Forbidden"}\n' "$(date +%s)" >"$BREAKER_FILE"
 elif [ "$INBOX_STATUS" = "ok" ]; then
   rm -f "$BREAKER_FILE"
 fi
@@ -108,7 +108,7 @@ fi
 # rate limit.
 if [ -f "$BREAKER_FILE" ]; then
   SENT_STATUS="skipped (proton backoff)"
-  echo "(skipped — proton backoff active)" > "$SENT"
+  echo "(skipped — proton backoff active)" >"$SENT"
 elif /usr/local/bin/proton-tool sent --days=7 --limit=30 >"$SENT" 2>&1; then
   SENT_STATUS="ok"
 else
@@ -116,7 +116,7 @@ else
 fi
 
 # Handled-log view (last 7d, most recent first).
-HANDLED_LOG_PATH="$HANDLED_LOG" python3 <<'PY' > "$HANDLED_VIEW"
+HANDLED_LOG_PATH="$HANDLED_LOG" python3 <<'PY' >"$HANDLED_VIEW"
 import json, os, datetime
 UTC = getattr(datetime, "UTC", datetime.timezone.utc)
 cutoff = datetime.datetime.now(UTC) - datetime.timedelta(days=7)
@@ -166,7 +166,7 @@ PY
   echo '```'
   cat "$HANDLED_VIEW"
   echo '```'
-} >> "$MEMORY_FILE"
+} >>"$MEMORY_FILE"
 
 cat "$INBOX"
 rm -f "$INBOX" "$SENT" "$HANDLED_VIEW"

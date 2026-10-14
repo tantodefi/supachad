@@ -20,7 +20,7 @@ BASE="https://cxrtnc.leaningtech.com/1.3.9"
 mkdir -p "${VENDOR}/r1/tun"
 
 # cheerpx_v3.esm.js is our tiny shim (imports ./cx_esm.js?v=2); write it, not fetch.
-cat > "${VENDOR}/r1/cheerpx_v3.esm.js" <<'SHIM'
+cat >"${VENDOR}/r1/cheerpx_v3.esm.js" <<'SHIM'
 import cx from './cx_esm.js?v=2'
 const CheerpX = (await cx()).CheerpX;
 export const Linux = CheerpX.Linux;
@@ -40,14 +40,17 @@ core="cx_esm.js cheerpOS.js cxcore.js cxcore-no-return-call.js cxbridge.js worke
 tun="direct.js tailscale_tun_auto.js tailscale_tun.js ipstack.js wasm_exec.js tailscale.wasm ipstack.wasm"
 
 fetch() { # url dest
-  local code; code=$(curl -fsS -o "$2" -w '%{http_code}' "$1" || echo 000)
+  local code
+  code=$(curl -fsS -o "$2" -w '%{http_code}' "$1" || echo 000)
   echo "  $(basename "$2") <- HTTP ${code} ($(wc -c <"$2" 2>/dev/null || echo 0)b)"
 }
 
-echo "== core (r1/) =="; for f in $core; do fetch "${BASE}/${f}" "${VENDOR}/r1/${f}"; done
-echo "== tun (r1/tun/) =="; for f in $tun; do fetch "${BASE}/tun/${f}" "${VENDOR}/r1/tun/${f}"; done
+echo "== core (r1/) =="
+for f in $core; do fetch "${BASE}/${f}" "${VENDOR}/r1/${f}"; done
+echo "== tun (r1/tun/) =="
+for f in $tun; do fetch "${BASE}/tun/${f}" "${VENDOR}/r1/tun/${f}"; done
 # Optional/debug assets the CDN returns 204 (empty) for — stub so they 200 not 404.
-for f in runtime.wasm dump.wasm fail.wasm t.wasm; do : > "${VENDOR}/r1/${f}"; done
+for f in runtime.wasm dump.wasm fail.wasm t.wasm; do : >"${VENDOR}/r1/${f}"; done
 
 # xterm (the dock terminal emulator) — also self-hosted.
 fetch "https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.mjs" "${VENDOR}/xterm.mjs"

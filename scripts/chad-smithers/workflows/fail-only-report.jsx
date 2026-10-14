@@ -22,8 +22,16 @@ const POD = process.env.CHAD_POD_SSH || "openshell-chad";
 
 // Health commands: nonzero exit OR a matching red-pattern = notable.
 const CHECKS = [
-  { name: "gbrain-coverage", cmd: `ssh -n -o ConnectTimeout=15 ${POD} 'gbrain get-health 2>&1 | head -c 300'`, red: /0%|error|unhealthy/i },
-  { name: "cron-errors-today", cmd: `ssh -n -o ConnectTimeout=15 ${POD} 'grep -ric error /sandbox/.openclaw/workspace/memory/events-$(date -u +%Y-%m-%d).jsonl 2>/dev/null || echo 0'`, red: /^[1-9]/ },
+  {
+    name: "gbrain-coverage",
+    cmd: `ssh -n -o ConnectTimeout=15 ${POD} 'gbrain get-health 2>&1 | head -c 300'`,
+    red: /0%|error|unhealthy/i,
+  },
+  {
+    name: "cron-errors-today",
+    cmd: `ssh -n -o ConnectTimeout=15 ${POD} 'grep -ric error /sandbox/.openclaw/workspace/memory/events-$(date -u +%Y-%m-%d).jsonl 2>/dev/null || echo 0'`,
+    red: /^[1-9]/,
+  },
 ];
 
 const schemas = {
@@ -32,13 +40,18 @@ const schemas = {
 };
 
 const api = createSmithers(schemas, { dbPath: DB });
-const { smithers, Workflow, Task, Sequence, Branch, outputs } = api;
+const { smithers, Workflow, Task, Sequence, outputs } = api;
 
 function runChecks() {
   return CHECKS.map((c) => {
-    let exitCode = 0, out = "";
-    try { out = execSync(c.cmd, { encoding: "utf8" }).trim(); }
-    catch (e) { exitCode = e.status ?? 1; out = String(e.stdout || e.message || "").trim(); }
+    let exitCode = 0,
+      out = "";
+    try {
+      out = execSync(c.cmd, { encoding: "utf8" }).trim();
+    } catch (e) {
+      exitCode = e.status ?? 1;
+      out = String(e.stdout || e.message || "").trim();
+    }
     const notable = exitCode !== 0 || (c.red && c.red.test(out));
     return { name: c.name, exitCode, out: out.slice(0, 400), notable };
   });
@@ -53,19 +66,29 @@ export const workflow = smithers((ctx) => {
         <Task id="runs" output={outputs.runs}>
           {() => {
             const results = runChecks();
-            return { results: JSON.stringify(results), notableCount: results.filter((r) => r.notable).length };
+            return {
+              results: JSON.stringify(results),
+              notableCount: results.filter((r) => r.notable).length,
+            };
           }}
         </Task>
 
         {/* Only invoke the agent when there's something red — green stays silent
             (per-task skipIf; a `<Branch if={upstreamOutput}>` doesn't reopen). */}
-        <Task id="report" skipIf={notable.length === 0} output={outputs.report} agent={pickAgent("summarize")} fallbackAgent={pickFallback("summarize")} {...taskOpts("summarize")}>
-            {[
-              "Chad health check found notable results. Give a one-paragraph root-cause summary and the single next command to run.",
-              `Notable results (JSON): ${JSON.stringify(notable)}`,
-              "Return JSON { reported: true, summary: string }.",
-            ].join("\n\n")}
-          </Task>
+        <Task
+          id="report"
+          skipIf={notable.length === 0}
+          output={outputs.report}
+          agent={pickAgent("summarize")}
+          fallbackAgent={pickFallback("summarize")}
+          {...taskOpts("summarize")}
+        >
+          {[
+            "Chad health check found notable results. Give a one-paragraph root-cause summary and the single next command to run.",
+            `Notable results (JSON): ${JSON.stringify(notable)}`,
+            "Return JSON { reported: true, summary: string }.",
+          ].join("\n\n")}
+        </Task>
       </Sequence>
     </Workflow>
   );

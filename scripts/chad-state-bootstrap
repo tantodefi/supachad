@@ -31,17 +31,37 @@ TEMPLATES_DIR="${SCRIPT_DIR}/chad-state-templates"
 mode="pr"
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --no-pr)   mode="direct"; shift ;;
-    --dry-run) mode="dry"; shift ;;
-    -h|--help)
-      sed -n '/^# Usage:/,/^$/p' "$0" | sed 's/^# //'; exit 0 ;;
-    *) echo "chad-state-bootstrap: unknown arg: $1" >&2; exit 2 ;;
+    --no-pr)
+      mode="direct"
+      shift
+      ;;
+    --dry-run)
+      mode="dry"
+      shift
+      ;;
+    -h | --help)
+      sed -n '/^# Usage:/,/^$/p' "$0" | sed 's/^# //'
+      exit 0
+      ;;
+    *)
+      echo "chad-state-bootstrap: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
-[ -d "$TEMPLATES_DIR" ] || { echo "templates dir missing: $TEMPLATES_DIR" >&2; exit 3; }
-command -v gh >/dev/null 2>&1 || { echo "gh CLI not found" >&2; exit 3; }
-gh auth status --hostname github.com >/dev/null 2>&1 || { echo "gh not authenticated" >&2; exit 3; }
+[ -d "$TEMPLATES_DIR" ] || {
+  echo "templates dir missing: $TEMPLATES_DIR" >&2
+  exit 3
+}
+command -v gh >/dev/null 2>&1 || {
+  echo "gh CLI not found" >&2
+  exit 3
+}
+gh auth status --hostname github.com >/dev/null 2>&1 || {
+  echo "gh not authenticated" >&2
+  exit 3
+}
 
 work="$(mktemp -d -t "chad-state-bootstrap-XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -56,9 +76,11 @@ git checkout "$default_branch" --quiet
 
 # Sync templates (preserve directory structure)
 echo "==> syncing templates from $TEMPLATES_DIR"
-new_count=0; updated_count=0; same_count=0
+new_count=0
+updated_count=0
+same_count=0
 while IFS= read -r src; do
-  rel="${src#$TEMPLATES_DIR/}"
+  rel="${src#"$TEMPLATES_DIR"/}"
   dest="$work/$rel"
   mkdir -p "$(dirname "$dest")"
   if [ ! -e "$dest" ]; then

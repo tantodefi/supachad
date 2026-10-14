@@ -10,7 +10,7 @@ INSTALL_DIR="/sandbox/go1.26.1"
 ARCH="$(uname -m)"
 case "$ARCH" in
   x86_64) GOARCH="amd64" ;;
-  aarch64|arm64) GOARCH="arm64" ;;
+  aarch64 | arm64) GOARCH="arm64" ;;
   *)
     echo "Unsupported arch: $ARCH" >&2
     exit 1
@@ -35,7 +35,7 @@ mkdir -p "$INSTALL_DIR"
 tar -xzf "$TARBALL" --strip-components=1 -C "$INSTALL_DIR"
 rm -f "$TARBALL"
 
-cat > /tmp/go-env.sh <<EOF
+cat >/tmp/go-env.sh <<EOF
 export GOROOT=$INSTALL_DIR
 export GOPATH=/sandbox/gopath
 export GOCACHE=/sandbox/gocache

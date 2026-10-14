@@ -22,6 +22,7 @@ So the browser leg of the relay is exposed through Cloudflare directly.
 | HTTP settings | No TLS origin; websocket is automatic       |
 
 Two gotchas learned here:
+
 - **Matches are first-match-wins**, and a pathless rule matches every path. The
   relay's `/vm-bridge/*` ingress rule MUST sit *before* the `chad.supachad.com`
   → `http://open-webui:8080` pathless rule, or OpenWebUI swallows the path.
@@ -189,7 +190,8 @@ shows up on refresh. It does not:
   `docker cp`, not `md5sum` over `exec`, or you will chase a phantom drift.
 
 Verified after this pass: host == served == `83e952f8…`, and that digest
-survives a container restart.
+survives a container restart
+
 ---
 
 ## As built 2026-09-27 — composer injection, duplicate menu rows, and a 307

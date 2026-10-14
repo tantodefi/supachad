@@ -40,7 +40,7 @@ is_running() {
 }
 
 case "$ACTION" in
-  up|--up)
+  up | --up)
     if is_running; then
       echo "${ok}    ✓${color_off} tunnel already running on 127.0.0.1:${PORT}"
       exit 0
@@ -59,7 +59,7 @@ case "$ACTION" in
       exit 1
     fi
     ;;
-  down|--down|stop)
+  down | --down | stop)
     if ! is_running; then
       echo "${warn}    ·${color_off} tunnel not running"
       exit 0
@@ -72,7 +72,7 @@ case "$ACTION" in
     fi
     echo "${ok}    ✓${color_off} tunnel down"
     ;;
-  status|--status)
+  status | --status)
     if is_running; then
       pid=$(pgrep -f "ssh.*-L ${PORT}:" | head -1)
       echo "${ok}    ✓${color_off} ssh tunnel pid=${pid} (localhost:${PORT} → ${HOST}:${PORT})"
@@ -93,7 +93,7 @@ case "$ACTION" in
       echo "${warn}    ·${color_off} launchd agent not installed (run: bash $0 install)"
     fi
     ;;
-  install|--install)
+  install | --install)
     # Install a per-user launchd agent that keeps the SSH port-forward alive
     # across logout/reboot. KeepAlive=true makes launchd respawn ssh whenever
     # it exits (network blip, sandbox restart, manual `down`).
@@ -104,7 +104,7 @@ case "$ACTION" in
       pkill -f "ssh.*-L ${PORT}:" || true
       sleep 1
     fi
-    cat > "$PLIST_PATH" <<EOF
+    cat >"$PLIST_PATH" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -145,7 +145,7 @@ EOF
       exit 1
     fi
     ;;
-  uninstall|--uninstall)
+  uninstall | --uninstall)
     if [ -f "$PLIST_PATH" ]; then
       launchctl bootout "gui/$(id -u)/${PLIST_LABEL}" >/dev/null 2>&1 \
         || launchctl unload "$PLIST_PATH" >/dev/null 2>&1 || true

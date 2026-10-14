@@ -46,7 +46,7 @@ explicit success metric, and act on the results.
 
 This is the structured iteration loop:
 
-```
+```text
    ┌──────────────┐   propose     ┌──────────────┐   design     ┌──────────────┐
    │ memory scan  │ ─────────────▶│  candidates  │ ────────────▶│  designed    │
    └──────────────┘               └──────────────┘              └──────────────┘
@@ -126,6 +126,7 @@ chad-experiment design \
 ```
 
 The wrapper:
+
 - Verifies the operator has budget (`max_active_per_operator`)
 - Allocates a stable id (`exp-YYYY-MM-DD-<operator>-NNN`)
 - Writes the record to `active/<id>.json`
@@ -153,6 +154,7 @@ chad-experiment start \
 ```
 
 The wrapper:
+
 - Verifies state is `designed`
 - Invokes `chad-webui <surface-cmd> --flag value …` translating
   snake_case → kebab flags
@@ -268,8 +270,9 @@ When to use: an automation, function, or tool is firing but the
 operator engages with the output less than expected. A/B test the
 prompt to find what lands.
 
-**Pattern 1.1 — Tone A/B on a daily-brief automation**
-```
+#### Pattern 1.1 — Tone A/B on a daily-brief automation
+
+```text
 chad-experiment ab-start \
   --hypothesis "Terse 3-bullet prompts outperform warm-prose prompts for early-morning briefs" \
   --type automation \
@@ -285,8 +288,9 @@ Two versions of a filter function: one with explicit instructions
 inline, one that calls a knowledge collection for grounding. Compare
 output quality on the same chat inputs.
 
-**Pattern 1.3 — System-prompt experiment on a custom model row**
-```
+##### Pattern 1.3 — System-prompt experiment on a custom model row
+
+```text
 # Create a model with custom params (admin only)
 chad-webui models create \
   --id chad-terse-experiment \
@@ -312,7 +316,8 @@ into a single automation, measure time saved.
 **Pattern 2.1 — Pre-research automation**
 Operator regularly searches before drafting content. Automation
 pre-fetches search results into a daily knowledge brief.
-```
+
+```text
 chad-experiment design \
   --hypothesis "Pre-research at Mon 6am saves operator ~20min of drafting search before content writing" \
   --type automation \
@@ -323,7 +328,8 @@ chad-experiment design \
 **Pattern 2.2 — Calendar-aware automation**
 Automation that fires only on days the operator has training (per
 their calendar) and skips on rest days.
-```
+
+```text
 chad-experiment design \
   --hypothesis "Training-day-only fitness reminders feel less spammy and get more compliance than daily reminders" \
   --type automation \
@@ -345,7 +351,8 @@ in real chats, then promote or retire.
 **Pattern 3.1 — Tool addition A/B**
 Two filter functions, one of which adds context about operator's
 recent calendar; compare model's contextual awareness in outputs.
-```
+
+```text
 chad-experiment ab-start \
   --hypothesis "Adding calendar-context as a pipe filter reduces operator's need to remind chad about meetings/conflicts" \
   --type function \
@@ -361,13 +368,15 @@ When to use: chat history shows the operator asking about a topic
 the model hallucinates on. Build a knowledge collection, measure
 hallucination reduction.
 
-**Pattern 4.1 — Topical RAG collection**
-```
+#### Pattern 4.1 — Topical RAG collection
+
+```text
 chad-experiment design \
   --hypothesis "A topical knowledge collection on Strength Training fundamentals will reduce hallucinated technique advice when tjcooke asks programming questions" \
   --type knowledge \
   --success-metric "On 5 follow-up training questions over 7d, no operator-flagged corrections AND citations from knowledge file in >=3 responses"
 ```
+
 After design, use `chad-webui knowledge create` then `chad-webui files
 upload` then `chad-webui knowledge add-file` to populate the
 collection. The next chat turn from the operator will RAG against it.
@@ -378,8 +387,9 @@ When to use: operator-specific preferences are not being surfaced
 reliably. Create or update memories to test what context the model
 adapts to.
 
-**Pattern 5.1 — Preference capture experiment**
-```
+#### Pattern 5.1 — Preference capture experiment
+
+```text
 chad-experiment design \
   --hypothesis "Surfacing the operator's stated lift order preference as a memory makes the model match it without re-prompting" \
   --type memory \
@@ -391,8 +401,9 @@ chad-experiment design \
 When to use: an automation is firing but at a bad time. Test alternate
 fire times.
 
-**Pattern 6.1 — Fire-time A/B**
-```
+#### Pattern 6.1 — Fire-time A/B
+
+```text
 chad-experiment ab-start \
   --hypothesis "07:00 fire time outperforms 08:00 for operator engagement with the morning summary" \
   --type automation \
@@ -412,7 +423,8 @@ version, new prompt, new function).
 **Pattern 7.1 — Pre/post change monitoring**
 Design an experiment WITHOUT starting a new artifact — observe an
 existing one before vs after a change.
-```
+
+```text
 chad-experiment design \
   --hypothesis "Upgrading openwebui model dropdown to include the new gpt-oss model improves variance in answers (more model diversity used)" \
   --type chad-cron \
@@ -424,7 +436,7 @@ chad-experiment design \
 When chad scans memory and finds candidates, he applies this
 decision tree:
 
-```
+```text
 operator says "I always do X" / "remind me to Y"
     → Category 1 (prompt opt) if it's about model behavior
     → Category 2 (workflow opt) if it's a multi-step process
@@ -490,6 +502,7 @@ any time via `webui__models_list` or `chad-webui models list`.
 ### The 4 inactive models worth knowing about
 
 `select id from model where is_active=0`:
+
 - `microsoft/phi-4-multimodal-instruct` — vision-capable; toggle on if image experiments come up
 - `meta/llama-3.1-405b-instruct` — deep reasoning, slow
 - `google/gemma-3-27b-it` — writing + Q&A
@@ -809,6 +822,7 @@ question:
 ## Operator-specific patterns
 
 **tantodefi** (developer, admin role):
+
 - Most-likely categories: 1 (prompt opt for daily briefs / chad
   responses), 3 (tool spec for new dev workflows), 7 (drift detection
   on model changes)
@@ -816,6 +830,7 @@ question:
   honor the budget cap
 
 **tjcooke** (personal trainer, user role):
+
 - Most-likely categories: 2 (workflow opt for content drafting,
   client coordination), 4 (knowledge curation around training
   protocols), 6 (calendar timing for client touchpoints)
@@ -996,7 +1011,7 @@ to today's memory so operators see what changed and why.
 
 ## CLI reference (quick scan)
 
-```
+```text
 chad-experiment design     --hypothesis "..." --type ... --success-metric "..." [--baseline] [--rollback-path] [--operator] [--evaluation-days]
 chad-experiment start      --id ... --surface-cmd "group cmd" --surface-args '{...}'
 chad-experiment observe    --id ... --kind <kind> [--data '{...}']
