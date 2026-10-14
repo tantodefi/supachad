@@ -25,6 +25,8 @@
 #   chad-ops restart-shim   Bounce chad-shim + wait for :8901
 #   chad-ops restart-gateway  Bounce openclaw gateway + wait for :18789
 #   chad-ops creds-sync     Host creds → pod credentials.json (GITHUB_TOKEN, etc.)
+#   chad-ops gh-auth        Write sandbox gh hosts.yml from GITHUB_TOKEN (github skills)
+#   chad-ops gh-auth        Write sandbox gh hosts.yml from GITHUB_TOKEN (github skills)
 #   chad-ops restore-data   chad-restore-from-github (workspace/memory/gbrain/cron)
 #   chad-ops cron-reload    Re-register crons from the restored jobs.json
 #   chad-ops embed-backfill Backfill gbrain embeddings (bg) after a restore
@@ -251,7 +253,7 @@ cmd_creds_sync() {
   local filtered
   filtered="$(python3 -c "
 import json,sys
-keep=['PROTON_USERNAME','PROTON_PASSWORD','GITHUB_TOKEN','BRAVE_API_KEY','NVIDIA_API_KEY','ANTHROPIC_API_KEY','NEMOCLAW_INVOKER_TOKEN']
+keep=['PROTON_USERNAME','PROTON_PASSWORD','GITHUB_TOKEN','BRAVE_API_KEY','NVIDIA_API_KEY','ANTHROPIC_API_KEY','NEMOCLAW_INVOKER_TOKEN','OPENWEBUI_API_KEY','CF_ACCESS_CLIENT_ID','CF_ACCESS_CLIENT_SECRET','CHAD_STATE_REPO']
 src=json.load(open('$HOST_CREDS'))
 json.dump({k:src[k] for k in keep if k in src}, sys.stdout)
 " 2>/dev/null)"
@@ -272,16 +274,34 @@ json.dump({k:src[k] for k in keep if k in src}, sys.stdout)
     || bad "failed to write pod credentials.json"
 }
 
+cmd_gh_auth() {
+  step "gh-auth (sandbox gh hosts.yml from GITHUB_TOKEN — github/gh-issues skills)"
+  # `gh auth login --with-token` rejects chad's classic PAT (no read:org), and the
+  # openclaw exec tool strips GH_TOKEN from the env — so write gh's own hosts.yml.
+  # Token is read inside the sandbox; it never transits the host command line.
+  sshp 'python3 - <<EOF
+import json, os
+t = json.load(open("/sandbox/.nemoclaw/credentials.json")).get("GITHUB_TOKEN", "")
+if t:
+    d = "/sandbox/.config/gh"; os.makedirs(d, exist_ok=True); p = d + "/hosts.yml"
+    open(p, "w").write("github.com:\n    oauth_token: %s\n    git_protocol: https\n" % t); os.chmod(p, 0o600)
+EOF' >/dev/null
+  local who
+  who=$(sshp 'env -u GH_TOKEN -u GITHUB_TOKEN gh api user --jq .login 2>/dev/null')
+  [[ "$who" =~ ^[A-Za-z0-9-]+$ ]] && ok "gh authenticated as $who" || bad "gh not authenticated (GITHUB_TOKEN missing/invalid?)"
+}
+
 cmd_restore_data() {
   step "restore-data (chad-restore-from-github: workspace/memory/gbrain/cron)"
   # A container/pod restart wipes the image layer (bin/, cron store) but /sandbox
   # data often survives. Restoring then REPLACES the live brain with the older
   # GitHub snapshot — only do it when the state is actually gone, or on FORCE.
+  # Page count, not size: an empty PGLite brain is already ~39M on disk.
   local gb idn
-  gb=$(sshp 'du -sm /sandbox/.gbrain 2>/dev/null | cut -f1')
+  gb=$(sshp 'gbrain stats 2>&1 | sed -n "s/^Pages: *//p" | head -1')
   idn=$(sshp 'test -s /sandbox/.openclaw/workspace/IDENTITY.md && echo y')
-  if [ "${CHAD_FORCE_RESTORE:-0}" != 1 ] && [[ "$gb" =~ ^[0-9]+$ ]] && [ "$gb" -ge 5 ] && [ "$idn" = y ]; then
-    ok "state survived (gbrain ${gb}M + identity) — skipping restore (CHAD_FORCE_RESTORE=1 to override)"
+  if [ "${CHAD_FORCE_RESTORE:-0}" != 1 ] && [[ "$gb" =~ ^[0-9]+$ ]] && [ "$gb" -gt 0 ] && [ "$idn" = y ]; then
+    ok "state survived (gbrain ${gb} pages + identity) — skipping restore (CHAD_FORCE_RESTORE=1 to override)"
     return 0
   fi
   warn "overwrites pod workspace state from the chad-state backup"
@@ -378,8 +398,21 @@ cmd_doctor() {
   [ "$(sshp "ss -tln 2>/dev/null | grep -q ':$GW_PORT' && echo y")" = "y" ] && ok "gateway listening :$GW_PORT" || bad "gateway not listening :$GW_PORT"
   # gbrain
   local gh
+  # Health score alone passes an EMPTY brain (8/10 with 0 pages, 2026-10-14) —
+  # gate on page count + embed coverage too.
+  local gpages gcov
   gh=$(sshp 'gbrain health 2>&1 | grep -i "health score" | head -1')
-  [ -n "$gh" ] && ok "gbrain: $gh" || bad "gbrain not answering (gbrain-bin missing?)"
+  gpages=$(sshp 'gbrain stats 2>&1 | sed -n "s/^Pages: *//p" | head -1')
+  gcov=$(sshp 'gbrain health 2>&1 | sed -n "s/^Embed coverage: *\([0-9.]*\)%.*/\1/p" | head -1')
+  if [ -z "$gh" ]; then
+    bad "gbrain not answering (gbrain-bin missing? PGLite lock held?)"
+  elif ! [[ "$gpages" =~ ^[0-9]+$ ]] || [ "$gpages" -eq 0 ]; then
+    bad "gbrain EMPTY (${gpages:-?} pages) — restore brain/ from chad-state"
+  elif [ "${gcov%.*}" -lt 90 ] 2>/dev/null; then
+    warn "gbrain: $gpages pages, embed coverage ${gcov}% — semantic recall degraded (run: chad-ops embed-backfill)"
+  else
+    ok "gbrain: $gh · $gpages pages · ${gcov}% embedded"
+  fi
   # binaries
   local drift
   drift=$( (cd "$HERE" && ./chad-deploy.sh --verify 2>/dev/null | grep -oE 'drift=[0-9]+  absent=[0-9]+'))
@@ -393,6 +426,10 @@ cmd_doctor() {
   crons=$(sshp "openclaw cron list 2>/dev/null | grep -cE 'cron [0-9*]'")
   [[ "$crons" =~ ^[0-9]+$ ]] || crons=0
   [ "$crons" -ge 10 ] && ok "crons registered ($crons)" || warn "only ${crons:-0} crons registered (expect 10) — run: chad-ops cron-reload"
+  # gh auth (github/gh-issues skills shell out to gh)
+  local ghw
+  ghw=$(sshp 'env -u GH_TOKEN -u GITHUB_TOKEN gh api user --jq .login 2>/dev/null')
+  [[ "$ghw" =~ ^[A-Za-z0-9-]+$ ]] && ok "gh authenticated ($ghw)" || bad "gh not authenticated (run: chad-ops gh-auth)"
   # Chad's custom skills loaded (extraDirs)
   local sk
   sk=$(sshp "python3 -c \"import json;print('y' if 'openclaw-data/skills' in str(json.load(open('/sandbox/.openclaw/openclaw.json')).get('skills',{}).get('load',{}).get('extraDirs')) else 'n')\"")
@@ -431,6 +468,7 @@ cmd_recover() {
   #    source for binaries/config, so it must win — run it last of the two.
   #  - restart gateway/shim after deploy+chown so they pick up fresh binaries.
   cmd_creds_sync
+  cmd_gh_auth
   cmd_chown
   cmd_gbrain_fix
   cmd_gbrain_config # NVIDIA embed key/model (clobbered by gbrain init on restart)
@@ -462,6 +500,7 @@ main() {
     restart-shim) cmd_restart_shim ;;
     restart-gateway) cmd_restart_gateway ;;
     creds-sync) cmd_creds_sync ;;
+    gh-auth) cmd_gh_auth ;;
     restore-data) cmd_restore_data ;;
     cron-reload) cmd_cron_reload ;;
     embed-backfill) cmd_embed_backfill ;;

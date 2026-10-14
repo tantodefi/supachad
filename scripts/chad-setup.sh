@@ -19,6 +19,11 @@
 # Every cron job and credential path lives here — not in the sandbox's internal
 # state — so a reset is a one-command recovery.
 
+# Nearly every command here is a remote `ssh "$REMOTE_HOST" "..."` string: values
+# are expanded client-side on purpose (SC2029) and '$' inside single-quoted
+# remote snippets is meant for the sandbox shell (SC2016).
+# shellcheck disable=SC2016,SC2029
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -209,7 +214,7 @@ if [ "$skip_skills" -eq 0 ]; then
           # --exclude='._*' strips macOS AppleDouble metadata files —
           # see sync-skills-to-sandbox.sh for the same guard.
           tar -C "$gstack_skills_src" --exclude='._*' --exclude='.DS_Store' \
-              -cf - "$skill_name" \
+            -cf - "$skill_name" \
             | ssh "$REMOTE_HOST" \
               "mkdir -p /sandbox/.openclaw-data/skills && \
                  tar -C /sandbox/.openclaw-data/skills -xf -" \
@@ -278,7 +283,9 @@ if [ "$skip_creds" -eq 0 ]; then
   sandbox_creds="$(python3 -c "
 import json, sys
 src = json.load(open('${CREDENTIALS_SRC}'))
-keep = ['PROTON_USERNAME', 'PROTON_PASSWORD', 'GITHUB_TOKEN', 'BRAVE_API_KEY', 'NVIDIA_API_KEY', 'ANTHROPIC_API_KEY', 'NEMOCLAW_INVOKER_TOKEN']
+keep = ['PROTON_USERNAME', 'PROTON_PASSWORD', 'GITHUB_TOKEN', 'BRAVE_API_KEY', 'NVIDIA_API_KEY', 'ANTHROPIC_API_KEY', 'NEMOCLAW_INVOKER_TOKEN',
+        # chad-webui (OpenWebUI tools via the CF-Access-protected URL) + chad-spawn/dispatch
+        'OPENWEBUI_API_KEY', 'CF_ACCESS_CLIENT_ID', 'CF_ACCESS_CLIENT_SECRET', 'CHAD_STATE_REPO']
 out = {k: src[k] for k in keep if k in src}
 print(json.dumps(out, indent=2))
 ")"
