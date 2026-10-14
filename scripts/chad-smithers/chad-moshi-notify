@@ -36,18 +36,9 @@ async function readStdin() {
 }
 
 (async () => {
-  const tok = token();
-  if (!tok) { console.error("chad-moshi-notify: no MOSHI_DEVICE_TOKEN (env or credentials.json)"); process.exit(2); }
+  if (!moshiToken()) { console.error("chad-moshi-notify: no MOSHI_DEVICE_TOKEN (env or credentials.json)"); process.exit(2); }
   if (message == null) message = await readStdin();
-  const body = { token: tok, title: String(title).slice(0, 200), message: String(message || "").slice(0, 2000) };
-  if (unified) body.unified = true;
-  try {
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 15000);
-    const r = await fetch(ENDPOINT, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: ac.signal });
-    clearTimeout(t);
-    const txt = (await r.text()).slice(0, 300);
-    if (!r.ok) { console.error(`chad-moshi-notify: HTTP ${r.status}: ${txt}`); process.exit(1); }
-    console.log(`moshi: sent "${body.title}"${unified ? " (unified)" : ""}`);
-  } catch (e) { console.error("chad-moshi-notify: send failed:", e.message); process.exit(1); }
+  const r = await moshiPing(title, message, { unified });
+  if (!r.sent) { console.error(`chad-moshi-notify: send failed: ${r.status ? `HTTP ${r.status}` : r.reason}`); process.exit(1); }
+  console.log(`moshi: sent "${String(title).slice(0, 200)}"${unified ? " (unified)" : ""}`);
 })();
