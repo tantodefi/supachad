@@ -44,7 +44,7 @@ the default until each phase's exit criteria pass.
 
 ## Target architecture (hybrid)
 
-```
+```text
 public/index.html (shell, Chad-specific tabs: experiments/chains/directives/…)
   ├─ default:  our JSON API (serve-runs.js)  ← polling  [unchanged]
   └─ CHAD_RUNS_GATEWAY=1:
@@ -137,6 +137,7 @@ documented in `README.md`. Browser behavior via the `browse` tool against
 `http://127.0.0.1:7331/?key=$SMITHERS_RUNS_API_KEY`.
 
 **Unit (`node --test`):**
+
 - [ ] T.1 `lib/gateway-adapter.test.js` — gateway→UI shape mapping: run row,
       node/attempt (loop/retry share id → keyed by structural position), event
       frame, token rollup, status→pill. Round-trips a captured gateway fixture to
@@ -147,11 +148,13 @@ documented in `README.md`. Browser behavior via the `browse` tool against
 - [ ] T.3 Regression: existing 68 lib tests stay green (flag-off path unchanged).
 
 **Integration (Node, real gateway, gated on a running gateway):**
+
 - [ ] T.4 Spin a `smithers gateway` on a seeded fixture DB; assert `SmithersGatewayClient`
       run-event subscription delivers the same events serve-runs' `/api/runs/:id/logs`
       returns for that run. Skips cleanly if no gateway (CI-safe).
 
 **E2E (browse tool):**
+
 - [ ] T.5 Flag OFF: full smoke — list, select, detail, tabs, mobile (no overflow
       360/390, hamburger) — identical to the pre-migration baseline snapshots.
 - [ ] T.6 Flag ON: select a run → detail updates live (drive a frame, assert DOM

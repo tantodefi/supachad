@@ -206,11 +206,13 @@ openclaw cron add \
 ## Proton REST API Reference
 
 The go-proton-api library talks to these Proton API hosts:
+
 - `mail-api.proton.me` (primary REST API)
 - `api.protonmail.ch` (legacy, still functional)
 - `account.proton.me` (auth/account operations)
 
 Key API routes used by the library:
+
 - `POST /auth/v4` — SRP authentication
 - `GET /calendar/v1` — list calendars
 - `GET /calendar/v1/{calID}/events` — list events (paged)
@@ -284,7 +286,7 @@ opens its own TLS connections (CONNECT tunnels through the proxy).
 
 ## File Structure
 
-```
+```text
 proton-calendar/
 ├── SKILL.md              # This file
 ├── EMAIL-POLICY.md       # Email cron job policy (anti-spam, task-weight, ack)

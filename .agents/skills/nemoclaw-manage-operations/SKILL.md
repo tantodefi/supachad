@@ -21,7 +21,7 @@ overlay is a no-op — upstream behavior is preserved.
 
 ## Step 1: Architecture
 
-```
+```text
 ┌──────────────────────────── chad sandbox ────────────────────────────┐
 │                                                                       │
 │   /usr/local/bin/gbrain        (wrapper — exports env from config)    │
@@ -44,7 +44,7 @@ Three pieces are NemoClaw-specific:
 
 1. **`scripts/gbrain-patches/`** — overlay applied in the Dockerfile after `bun add`. Makes the embedder model + dimensions + input_type configurable via env vars (upstream hardcodes `text-embedding-3-large` @ 1536 dims). See `scripts/gbrain-patches/README.md` for the full diff and sync-with-upstream procedure.
 2. **`scripts/sandbox-bin/gbrain-wrapper.sh`** — wrapper installed at `/usr/local/bin/gbrain`. Reads `/sandbox/.gbrain/config.json`, exports the relevant env vars (`OPENAI_BASE_URL`, `OPENAI_API_KEY`, `GBRAIN_EMBED_*`), then `exec`s the real `gbrain-bin`. The OpenAI SDK inside gbrain auto-picks-up `OPENAI_BASE_URL` / `OPENAI_API_KEY`.
-3. **`scripts/chad-cron-wrappers/chad-gbrain-dream`** + `chad-log-event` — daily maintenance + structured event log that the cron prompts call. See [Memory workflow](#memory-workflow) below.
+3. **`scripts/chad-cron-wrappers/chad-gbrain-dream`** + `chad-log-event` — daily maintenance + structured event log that the cron prompts call. See the Memory workflow section below.
 
 ## Step 2: Embedder env-var contract
 
@@ -251,6 +251,6 @@ gains native config-driven embedder support, **delete the overlay** —
 - [references/wrapper-bugs.md](references/wrapper-bugs.md)
 - **[references/chad-autonomy.md](references/chad-autonomy.md)** — Reference for the autonomy surface area: which loops exist, where their wrappers live, what they read and write, how sub-agents are spawned/reconciled, and the safety boundaries.
 - **Load [references/chad-devflow.md](references/chad-devflow.md)** when the user asks `which command does X` or wants the canonical list of devflow commands. Reference catalog of host-side and in-sandbox scripts under scripts/ and scripts/chad-cron-wrappers/.
-- **Load [references/chad-skills.md](references/chad-skills.md)** when the user asks `which skills does chad have` or wants to know the difference between chad-* and gstack-* skills. Reference table of skills the chad agent can discover via skills.load.extraDirs.
+- **Load [references/chad-skills.md](references/chad-skills.md)** when the user asks `which skills does chad have` or wants to know the difference between chad-*and gstack-* skills. Reference table of skills the chad agent can discover via skills.load.extraDirs.
 - **Load [references/chad-workflows.md](references/chad-workflows.md)** when the user asks `what should Chad do for X` or wants to test/regress a specific path. Reference catalog of named workflow scenarios for tantodefi (engineer) and tjcooke (fitness coach).
 - **Load [references/log-locations.md](references/log-locations.md)** when debugging chad behavior or pointing the user at a specific log file. Catalog of host (Mac), sandbox (k8s pod), gateway, cron, sub-agent, and TUI logs.

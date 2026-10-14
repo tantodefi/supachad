@@ -6,7 +6,7 @@ results land back in the repo, and Chad collects them on the next wake.
 
 ## Architecture
 
-```
+```text
 Chad sandbox (isolated session)
   └── chad-dispatch --kind research --prompt "..."
         └── gh api PUT jobs/pending/job-xxx.json → tantodefi/chad-state
@@ -45,6 +45,7 @@ git push
 ### 3. Add ANTHROPIC_API_KEY secret
 
 GitHub → tantodefi/chad-state → Settings → Secrets → Actions → New secret:
+
 - Name: `ANTHROPIC_API_KEY`
 - Value: your Anthropic API key
 
@@ -91,6 +92,7 @@ chad-dispatch --collect
 ## Token Budget
 
 Each job uses the Anthropic API directly (not Chad's openclaw budget).
+
 - haiku: ~$0.0025 / 1k output tokens
 - sonnet: ~$0.015 / 1k output tokens
 - 100 haiku jobs × 1k tokens ≈ $0.25
@@ -98,6 +100,7 @@ Each job uses the Anthropic API directly (not Chad's openclaw budget).
 ## Adding to Cron
 
 Add a collect step to gbrain-dream or email-check:
-```
+
+```text
 chad-dispatch --collect
 ```

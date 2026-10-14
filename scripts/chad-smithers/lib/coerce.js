@@ -35,7 +35,11 @@ export function extractJson(text) {
 }
 
 function tryParse(s) {
-  try { return JSON.parse(s); } catch { return undefined; }
+  try {
+    return JSON.parse(s);
+  } catch {
+    return undefined;
+  }
 }
 
 // First balanced {…} or […] region, string/escape aware (so braces inside JSON
@@ -45,7 +49,9 @@ function firstBalanced(s) {
   if (start < 0) return undefined;
   const open = s[start];
   const close = open === "{" ? "}" : "]";
-  let depth = 0, inStr = false, esc = false;
+  let depth = 0,
+    inStr = false,
+    esc = false;
   for (let i = start; i < s.length; i++) {
     const c = s[i];
     if (inStr) {
@@ -56,7 +62,10 @@ function firstBalanced(s) {
     }
     if (c === '"') inStr = true;
     else if (c === open) depth++;
-    else if (c === close) { depth--; if (depth === 0) return s.slice(start, i + 1); }
+    else if (c === close) {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
   }
   return undefined;
 }
@@ -73,5 +82,7 @@ export function coerceJson(text, schema) {
   try {
     const r = schema.safeParse(v);
     return r.success ? r.data : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }

@@ -42,7 +42,7 @@ GitHub Actions workflow run.** Same isolation goal, different substrate.
 A spawn becomes a **branch in `tantodefi/chad-state`** plus a workflow
 trigger:
 
-```
+```text
 chad-spawn --kind <K> --task-file <T>
   ↓
 1. mint task_id (uuid)

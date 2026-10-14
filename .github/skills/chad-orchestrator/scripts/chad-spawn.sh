@@ -81,25 +81,70 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --kind)          kind="$2"; shift 2 ;;
-    --task-file)     task_file="$2"; shift 2 ;;
-    --workdir)       workdir="$2"; shift 2 ;;
-    --result-file)   result_file="$2"; shift 2 ;;
-    --timeout)       timeout_secs="$2"; shift 2 ;;
-    --budget-tokens) budget_tokens="$2"; shift 2 ;;
-    --dry-run)       dry_run=1; shift ;;
-    --id)            override_id="$2"; shift 2 ;;
-    --substrate)        substrate_override="$2"; shift 2 ;;
-    --async)            async_mode=1; shift ;;
-    --binary-override)  binary_override="$2"; shift 2 ;;
-    -h|--help)       usage ;;
-    *) echo "chad-spawn: unknown argument: $1" >&2; exit 2 ;;
+    --kind)
+      kind="$2"
+      shift 2
+      ;;
+    --task-file)
+      task_file="$2"
+      shift 2
+      ;;
+    --workdir)
+      workdir="$2"
+      shift 2
+      ;;
+    --result-file)
+      result_file="$2"
+      shift 2
+      ;;
+    --timeout)
+      timeout_secs="$2"
+      shift 2
+      ;;
+    --budget-tokens)
+      budget_tokens="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    --id)
+      override_id="$2"
+      shift 2
+      ;;
+    --substrate)
+      substrate_override="$2"
+      shift 2
+      ;;
+    --async)
+      async_mode=1
+      shift
+      ;;
+    --binary-override)
+      binary_override="$2"
+      shift 2
+      ;;
+    -h | --help) usage ;;
+    *)
+      echo "chad-spawn: unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
-[ -n "$kind" ]      || { echo "chad-spawn: --kind is required" >&2; exit 2; }
-[ -n "$task_file" ] || { echo "chad-spawn: --task-file is required" >&2; exit 2; }
-[ -f "$task_file" ] || { echo "chad-spawn: task file not found: $task_file" >&2; exit 4; }
+[ -n "$kind" ] || {
+  echo "chad-spawn: --kind is required" >&2
+  exit 2
+}
+[ -n "$task_file" ] || {
+  echo "chad-spawn: --task-file is required" >&2
+  exit 2
+}
+[ -f "$task_file" ] || {
+  echo "chad-spawn: task file not found: $task_file" >&2
+  exit 4
+}
 
 manifest_file="${ORCH_DIR}/kinds/${kind}.yaml"
 [ -f "$manifest_file" ] || {
@@ -114,7 +159,8 @@ manifest_file="${ORCH_DIR}/kinds/${kind}.yaml"
 # prompt_template. The eval pattern is safe because shlex.quote is
 # used for every value before it is printed.
 set +e
-manifest_eval="$(python3 - "$manifest_file" <<'PY'
+manifest_eval="$(
+  python3 - "$manifest_file" <<'PY'
 import sys, shlex
 
 def load_fallback(path):
@@ -182,7 +228,10 @@ set -e
 [ "$manifest_rc" -eq 0 ] || exit 3
 eval "$manifest_eval"
 
-[ -n "$manifest_binary" ] || { echo "chad-spawn: manifest missing 'binary'" >&2; exit 3; }
+[ -n "$manifest_binary" ] || {
+  echo "chad-spawn: manifest missing 'binary'" >&2
+  exit 3
+}
 
 # --binary-override wins over manifest binary for this spawn only.
 # Use with care: the network policy preset is still the kind's, so the
@@ -196,8 +245,11 @@ fi
 # (including the queued entry, which chad-spawn-poll uses to filter).
 effective_substrate="${substrate_override:-${manifest_substrate:-local}}"
 case "$effective_substrate" in
-  local|gha) ;;
-  *) echo "chad-spawn: invalid substrate: $effective_substrate (must be local|gha)" >&2; exit 2 ;;
+  local | gha) ;;
+  *)
+    echo "chad-spawn: invalid substrate: $effective_substrate (must be local|gha)" >&2
+    exit 2
+    ;;
 esac
 
 # --async only meaningful with gha substrate. Refuse silently-wrong combos.
@@ -236,10 +288,10 @@ fi
 # quotes, backticks, dollar signs, or newlines.
 prompt_file="${workdir}/prompt.txt"
 CHAD_MANIFEST_FILE="$manifest_file" \
-CHAD_TASK_FILE="$task_file" \
-CHAD_TASK_ID="$task_id" \
-CHAD_PROMPT_OUT="$prompt_file" \
-python3 <<'PY'
+  CHAD_TASK_FILE="$task_file" \
+  CHAD_TASK_ID="$task_id" \
+  CHAD_PROMPT_OUT="$prompt_file" \
+  python3 <<'PY'
 import os
 
 def load_fallback(path):
@@ -296,7 +348,7 @@ PY
 # Copy the raw task file into the workdir for backup + audit.
 case "$task_file" in
   *.json) cp "$task_file" "${workdir}/task.json" ;;
-  *)      cp "$task_file" "${workdir}/task.txt"  ;;
+  *) cp "$task_file" "${workdir}/task.txt" ;;
 esac
 
 # ── Ledger: queued ─────────────────────────────────────────────────
@@ -306,14 +358,14 @@ esac
 ledger_append() {
   local status="$1"
   CHAD_LEDGER_ID="$task_id" \
-  CHAD_LEDGER_KIND="$kind" \
-  CHAD_LEDGER_STATUS="$status" \
-  CHAD_LEDGER_WORKDIR="$workdir" \
-  CHAD_LEDGER_BUDGET="$budget_tokens" \
-  CHAD_LEDGER_FILE="$QUEUE_FILE" \
-  CHAD_LEDGER_SUBSTRATE="${effective_substrate:-local}" \
-  CHAD_LEDGER_ASYNC="$async_mode" \
-  python3 <<'PY'
+    CHAD_LEDGER_KIND="$kind" \
+    CHAD_LEDGER_STATUS="$status" \
+    CHAD_LEDGER_WORKDIR="$workdir" \
+    CHAD_LEDGER_BUDGET="$budget_tokens" \
+    CHAD_LEDGER_FILE="$QUEUE_FILE" \
+    CHAD_LEDGER_SUBSTRATE="${effective_substrate:-local}" \
+    CHAD_LEDGER_ASYNC="$async_mode" \
+    python3 <<'PY'
 import os, json, datetime
 _UTC = getattr(datetime, "UTC", datetime.timezone.utc)
 rec = {
@@ -334,14 +386,15 @@ ledger_append queued
 
 # ── Dry-run fast path ──────────────────────────────────────────────
 if [ "$dry_run" -eq 1 ]; then
+  # shellcheck disable=SC2154 # manifest_* are set by eval "$manifest_eval" above
   CHAD_DR_TASK_ID="$task_id" \
-  CHAD_DR_KIND="$kind" \
-  CHAD_DR_BINARY="$manifest_binary" \
-  CHAD_DR_INVOCATION="$manifest_invocation" \
-  CHAD_DR_PROMPT="$prompt_file" \
-  CHAD_DR_BUDGET="$budget_tokens" \
-  CHAD_DR_OUT="$result_file" \
-  python3 <<'PY'
+    CHAD_DR_KIND="$kind" \
+    CHAD_DR_BINARY="$manifest_binary" \
+    CHAD_DR_INVOCATION="$manifest_invocation" \
+    CHAD_DR_PROMPT="$prompt_file" \
+    CHAD_DR_BUDGET="$budget_tokens" \
+    CHAD_DR_OUT="$result_file" \
+    python3 <<'PY'
 import os, json
 out = {
     "status": "done",
@@ -357,7 +410,7 @@ out = {
 with open(os.environ["CHAD_DR_OUT"], "w") as f:
     json.dump(out, f, indent=2)
 PY
-  ledger_append done
+  ledger_append "done"
   echo "$task_id"
   exit 0
 fi
@@ -375,17 +428,17 @@ if [ "$effective_substrate" = "gha" ]; then
   # chad-spawn-poll cron picks up the result later.
   set +e
   CHAD_GHA_TASK_ID="$task_id" \
-  CHAD_GHA_KIND="$kind" \
-  CHAD_GHA_WORKDIR="$workdir" \
-  CHAD_GHA_RESULT_FILE="$result_file" \
-  CHAD_GHA_PROMPT_FILE="$prompt_file" \
-  CHAD_GHA_TASK_FILE="$task_file" \
-  CHAD_GHA_MANIFEST_FILE="$manifest_file" \
-  CHAD_GHA_BINARY="$manifest_binary" \
-  CHAD_GHA_INVOCATION="$manifest_invocation" \
-  CHAD_GHA_TIMEOUT="$timeout_secs" \
-  CHAD_GHA_BUDGET_TOKENS="$budget_tokens" \
-  CHAD_GHA_NO_POLL="$async_mode" \
+    CHAD_GHA_KIND="$kind" \
+    CHAD_GHA_WORKDIR="$workdir" \
+    CHAD_GHA_RESULT_FILE="$result_file" \
+    CHAD_GHA_PROMPT_FILE="$prompt_file" \
+    CHAD_GHA_TASK_FILE="$task_file" \
+    CHAD_GHA_MANIFEST_FILE="$manifest_file" \
+    CHAD_GHA_BINARY="$manifest_binary" \
+    CHAD_GHA_INVOCATION="$manifest_invocation" \
+    CHAD_GHA_TIMEOUT="$timeout_secs" \
+    CHAD_GHA_BUDGET_TOKENS="$budget_tokens" \
+    CHAD_GHA_NO_POLL="$async_mode" \
     "${ORCH_DIR}/scripts/chad-spawn-gha.sh"
   helper_rc=$?
   set -e
@@ -408,11 +461,11 @@ if [ "$effective_substrate" = "gha" ]; then
   # result.json from the runner's commit.
   if [ "$helper_rc" -ne 0 ] && [ ! -s "$result_file" ]; then
     CHAD_GHA_RC="$helper_rc" \
-    CHAD_GHA_TID="$task_id" \
-    CHAD_GHA_KND="$kind" \
-    CHAD_GHA_OUT="$result_file" \
-    CHAD_GHA_ERR="$stderr_log" \
-    python3 <<'PY'
+      CHAD_GHA_TID="$task_id" \
+      CHAD_GHA_KND="$kind" \
+      CHAD_GHA_OUT="$result_file" \
+      CHAD_GHA_ERR="$stderr_log" \
+      python3 <<'PY'
 import os, json
 json.dump({
     "status": "failed",
@@ -448,15 +501,15 @@ set +e
 case "$manifest_invocation" in
   prompt-stdin)
     timeout --kill-after=10 "${timeout_secs}s" "$manifest_binary" \
-      < "$prompt_file" \
-      > "$stdout_log" 2> "$stderr_log"
+      <"$prompt_file" \
+      >"$stdout_log" 2>"$stderr_log"
     exit_code=$?
     ;;
   prompt-arg)
     prompt_body="$(cat "$prompt_file")"
     timeout --kill-after=10 "${timeout_secs}s" "$manifest_binary" \
       "$prompt_body" \
-      > "$stdout_log" 2> "$stderr_log"
+      >"$stdout_log" 2>"$stderr_log"
     exit_code=$?
     ;;
   openclaw-agent)
@@ -470,13 +523,13 @@ case "$manifest_invocation" in
     timeout --kill-after=10 "${timeout_secs}s" \
       env HOME=/sandbox \
       openclaw agent --agent main --timeout "${timeout_secs}" \
-        --session-id "sub-${task_id}" \
-        -m "$prompt_body" \
-      > "$stdout_log" 2> "$stderr_log"
+      --session-id "sub-${task_id}" \
+      -m "$prompt_body" \
+      >"$stdout_log" 2>"$stderr_log"
     exit_code=$?
     ;;
   *)
-    echo "chad-spawn: unknown invocation style: $manifest_invocation" > "$stderr_log"
+    echo "chad-spawn: unknown invocation style: $manifest_invocation" >"$stderr_log"
     exit_code=3
     ;;
 esac
@@ -486,11 +539,11 @@ set -e
 # Sub-agents are required to emit a JSON summary on the very last line
 # of stdout. Fall back to a synthetic result if they didn't.
 CHAD_RES_STDOUT="$stdout_log" \
-CHAD_RES_EXIT="$exit_code" \
-CHAD_RES_TASK_ID="$task_id" \
-CHAD_RES_KIND="$kind" \
-CHAD_RES_OUT="$result_file" \
-python3 <<'PY'
+  CHAD_RES_EXIT="$exit_code" \
+  CHAD_RES_TASK_ID="$task_id" \
+  CHAD_RES_KIND="$kind" \
+  CHAD_RES_OUT="$result_file" \
+  python3 <<'PY'
 import os, json
 exit_code = int(os.environ["CHAD_RES_EXIT"])
 last = ""

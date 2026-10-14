@@ -9,19 +9,27 @@ import assert from "node:assert/strict";
 import { canonicalModelId, isKnownModel, rosterSet } from "./models.js";
 
 test("canonicalModelId collapses a repeated vendor prefix", () => {
-  assert.equal(canonicalModelId("nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"),
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning");
+  assert.equal(
+    canonicalModelId("nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"),
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  );
   assert.equal(canonicalModelId("nvidia/nvidia/nvidia/x"), "nvidia/x");
 });
 
 test("canonicalModelId leaves a clean id unchanged + trims", () => {
-  assert.equal(canonicalModelId("nvidia/nemotron-3-ultra-550b-a55b"), "nvidia/nemotron-3-ultra-550b-a55b");
+  assert.equal(
+    canonicalModelId("nvidia/nemotron-3-ultra-550b-a55b"),
+    "nvidia/nemotron-3-ultra-550b-a55b",
+  );
   assert.equal(canonicalModelId("  openai/gpt-oss-120b  "), "openai/gpt-oss-120b");
 });
 
 test("canonicalModelId does NOT touch a distinct second segment", () => {
   // only a REPEATED same segment collapses; vendor/name stays
-  assert.equal(canonicalModelId("meta/llama-4-maverick-17b-128e-instruct"), "meta/llama-4-maverick-17b-128e-instruct");
+  assert.equal(
+    canonicalModelId("meta/llama-4-maverick-17b-128e-instruct"),
+    "meta/llama-4-maverick-17b-128e-instruct",
+  );
 });
 
 test("canonicalModelId is idempotent", () => {

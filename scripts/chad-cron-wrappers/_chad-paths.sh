@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# shellcheck shell=bash
 #
 # _chad-paths.sh — single source of truth for chad-cron-wrapper file paths.
 #

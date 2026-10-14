@@ -21,10 +21,10 @@ test("parses a bare ``` fenced array", () => {
 });
 
 test("extracts JSON embedded in reasoning prose", () => {
-  assert.deepEqual(
-    extractJson('thinking about it... {"model":"x","text":"hi"} done'),
-    { model: "x", text: "hi" },
-  );
+  assert.deepEqual(extractJson('thinking about it... {"model":"x","text":"hi"} done'), {
+    model: "x",
+    text: "hi",
+  });
 });
 
 test("ignores braces inside string values", () => {

@@ -63,7 +63,7 @@ reclaimed. Do **not** touch `credentials.json`, `sandboxes.json`, `source/`.
 
 These are untracked and **not** in `.gitignore`:
 
-```
+```text
 scripts/chad-smithers/token-optimize.db.bak.20260707T035155Z   66 MB
 scripts/chad-smithers/bug-report.db.bak.20260707T035155Z        5.1 MB
 scripts/chad-smithers/skill-improve.db.bak.20260707T035155Z     1.9 MB
@@ -93,6 +93,7 @@ Source of truth: `docs/design/multi-user-chad.md` and
 `scripts/chad-smithers/GATEWAY-UI-MIGRATION-PLAN.md`.
 
 **Multi-user (`multi-user-chad.md`)**
+
 - ✅ Tier 0 "Chad Lite": `chad-provision-tier0.sh` (Nemotron Ultra + generic
   prompt), SearXNG web search, OWUI per-user memory, `--access-control`
   passthrough in `chad-webui`.
@@ -106,6 +107,7 @@ Source of truth: `docs/design/multi-user-chad.md` and
 - ❌ Adaptive-memory Function for Tier 0.
 
 **Runs UI (`GATEWAY-UI-MIGRATION-PLAN.md`)**
+
 - 🟡 Plan written: Upgrade A (live sync via `@smithers-orchestrator/gateway-client`)
   + Upgrade B (drop-in `gateway-ui` components), both behind `CHAD_RUNS_GATEWAY=1`.
   Hybrid (keeps ~40 custom endpoints). **Not implemented.**
@@ -119,6 +121,7 @@ wrappers incl. `chad-self-improve`, `chad-skill-watch`, `chad-memory-curator`,
 ## 3. Roadmap by workstream (current state → plan → sequence)
 
 ### A. Tiers + allowlist (free Chad-Lite / premium Chad)
+
 - **Now:** two tiers conceptually; premium gated by shim allowlist in
   `credentials.json`.
 - **Build:** a single source-of-truth **tier registry** (`email → {tier, status,
@@ -130,6 +133,7 @@ wrappers incl. `chad-self-improve`, `chad-skill-watch`, `chad-memory-curator`,
 ### B. Onboarding: intake → rate-limit → paywall → subscribe
 
 **Built 2026-10-01 (scaffold complete, deploy-pending):**
+
 - **Intake:** `supachad-landing/worker.js` `POST /api/signup` → KV `signup:<email>`.
 - **Rate-limit:** `chad_rate_limit` OWUI filter — **now `is_active=1 + is_global=1`**
   (the §F audit found it was active-but-not-global, i.e. not enforcing; fixed). Caps
@@ -169,6 +173,7 @@ KV `invite:<token>`; `GET /invite/<token>` → consume + `addToCloudflareAccess(
 (queued until ready) + premium recorded. See `INVITE-SETUP.md`.
 
 **CF API token scope — the one blocker (explained):**
+
 - The current `CF_API_TOKEN` (in `scripts/openwebui/.env`) is **too narrow** — a live
   `purge_cache` call failed with "Authentication error", confirming no Cache-Purge,
   and it has no Access edit either.
@@ -198,12 +203,15 @@ KV `invite:<token>`; `GET /invite/<token>` → consume + `addToCloudflareAccess(
 - **Residual risk:** behavioral prop/semantic drift in `createSmithers` options + composite props across 6 minors. No compile step exists (JSX run via `smithers up`), so the validation gate is `DRY_RUN=1 smithers up experiments.jsx` on a branch after the bump — not catchable statically.
 
 **Upgrade plan:**
+
 1. Branch; bump both deps to `^0.32.0`; `npm install` in `scripts/chad-smithers/`.
 2. `DRY_RUN=1 smithers up experiments.jsx` + `node agents.js --probe` → fix any prop drift the dry-run surfaces. Gate: scaffolds parse + plan.
 3. Then execute `GATEWAY-UI-MIGRATION-PLAN.md` Upgrade A (live run detail via `smithers-orchestrator/gateway-client`, behind `CHAD_RUNS_GATEWAY=1`), verify exit criteria, then Upgrade B (gateway-ui island + Bun build).
+
 - **Effort:** core bump **S** (verified low-risk); Upgrade A **M**; Upgrade B **L** (new build toolchain).
 
 ### E. Upstream nemoclaw auto-sync + merge
+
 - **Now:** none; maintainer skills (`nemoclaw-maintainer-day/*`) are manual.
 - **Build:** a scheduled routine (cron agent) that: `git fetch upstream` →
   create a sync branch → merge → on conflict, open a PR with the conflict surface
@@ -215,6 +223,7 @@ KV `invite:<token>`; `GET /invite/<token>` → consume + `addToCloudflareAccess(
   writes to a shared branch (see [[project_chad_autonomy_git_boundary]]).
 
 ### F. Code/feature audit for full functionality
+
 - Terminal stack: ✅ hardened this week (WebVM + Docker + agent bridge + tools).
 
 **Live audit — 2026-10-01 (post-recovery):**
@@ -237,6 +246,7 @@ KV `invite:<token>`; `GET /invite/<token>` → consume + `addToCloudflareAccess(
   item, not a regression. **Effort remaining: S** (optional: wire a delivery channel).
 
 ### G. Skills + gbrain/gstack re-test
+
 - **Now:** openwebui skill updated this week.
 - **Build:** run each gstack skill's self-check; re-test gbrain MCP wiring
   (embed stack is fragile — see [[project_gbrain_embed_stack]]: model EOL/dim
@@ -245,6 +255,7 @@ KV `invite:<token>`; `GET /invite/<token>` → consume + `addToCloudflareAccess(
 - **Effort:** M.
 
 ### H. Missing policies (L7/OPA + security)
+
 - **Now:** 80 allowlist refs; L7 presets per-binary (see
   [[feedback_openshell_l7_binary_identity]], [[feedback_l7_binary_symlink]]).
 - **Build:** consolidated policy audit — every outbound host the shim/wrappers
@@ -253,12 +264,14 @@ KV `invite:<token>`; `GET /invite/<token>` → consume + `addToCloudflareAccess(
 - **Effort:** M. **Security priority: high.**
 
 ### I. Dead-code / security-hole sweep
+
 - §1 cleans artifacts. Add: secret scan (no keys in repo — `credentials.json` is
   pod-local/uncommitted, keep it that way), the CSO skill run (`/cso`), and remove
   the dead chip/menu helpers left no-op'd this week once confirmed unused.
 - **Effort:** S–M.
 
 ### J. Keep-in-sync automations (the end state)
+
 - Upstream-sync cron (E), a nightly **drift check** (deployed loader/relay vs
   source — this week we hit source↔deploy divergence twice), a **skills-watch**
   (already exists: `chad-skill-watch`), and a **backup verifier** (confirm the
@@ -277,6 +290,7 @@ KV `invite:<token>`; `GET /invite/<token>` → consume + `addToCloudflareAccess(
 7. **§F broad functionality audit** — continuous, checklist-driven.
 
 ## 5. Clean-commit plan
+
 - Branch: `chad-dev` (current). Commit in logical chunks, not one mega-commit.
 - Before commit: apply §1b `.gitignore` + remove `.db.bak`s; review this week's
   terminal fixes (loader, relay.py, wrappers, skill docs) as one "terminal +
@@ -318,7 +332,9 @@ image rebuild), or (b) switch to a local ≤2000-dim embed model (e.g. LM Studio
 follow-up. See [[project_gbrain_embed_stack]].
 
 ### Follow-up: should gbrain move to local nomic-embed @768? (deferred)
+
 Assessed 2026-10-01 — **defer; do it on a trigger, not now.**
+
 - **Quality:** NOT an upgrade. `nemotron-3-embed-1b` (1B retrieval model, 2048d)
   is *higher* retrieval quality than `nomic-embed-text-v1.5` (~137M, 768d). The
   swap is a small quality trade-down.
@@ -339,8 +355,10 @@ Assessed 2026-10-01 — **defer; do it on a trigger, not now.**
 Concrete anchors so each workstream is build-ready, not just named.
 
 ### Shim = the tier/rate-limit backbone — `scripts/openwebui/chad-shim.py`
+
 A stdlib `BaseHTTPRequestHandler` (519 lines). Request flow is clean and the
 whole monetization gate is **one place**:
+
 - `_load_operator_allowlist()` **:69** — loads a flat `set` from env →
   `credentials.json` → file. **Replace with `_load_tier_registry()`** returning
   `{email: {tier, quota_daily, status, agent_id?}}` (same 3-source precedence).
@@ -359,6 +377,7 @@ whole monetization gate is **one place**:
   set) so it persists across restarts; `chad-webui` gets `tier set/get` verbs.
 
 ### Upstream auto-sync (§E) — remotes already configured
+
 `git remote`: `origin=tantodefi/supachad`, **`upstream=NVIDIA/NemoClaw`**. So the
 cron only needs: fetch upstream → sync branch → merge → **conflict ⇒ open a PR**
 (never auto-merge to `chad-dev`/`main`; honor [[project_chad_autonomy_git_boundary]])
@@ -368,6 +387,7 @@ this doc). The `nemoclaw-maintainer-day/*` skills already encode merge prioritie
 — wrap them in a routine.
 
 ### Invite links + CF Access automation (§C) — token scope is the blocker
+
 `CF_API_TOKEN` in `scripts/openwebui/.env` is **valid/active** but its scope is
 **insufficient**: cache-purge is confirmed-denied (hit this during the terminal
 work), and Access:Edit is unverified/likely absent. **Prereq:** mint/expand a
@@ -378,12 +398,14 @@ building the invite Worker. Host the Worker + intake on **`supachad-landing`**
 flips the shim tier registry.
 
 ### Paywall/onboarding (§B) — host + flow
+
 Intake + Stripe on `supachad-landing`. MVP ladder: Stripe **Payment Link**
 (zero backend) → webhook Worker that, on `customer.subscription.active`, adds the
 email to CF Access + sets `tier=premium` in the registry. Rate-limit lives in the
 shim (above); OpenWebUI has no native quota.
 
 ### Runs → Smithers upgrade (§D) — version gap
+
 `chad-smithers` pins `smithers-orchestrator@^0.26.1`; **latest is 0.32.0** (6
 minor versions — expect API drift; `createSmithers()` primitives vs top-level
 composites per [[reference_smithers_composites_import]]). Bump + reconcile first,
@@ -391,6 +413,7 @@ then execute `GATEWAY-UI-MIGRATION-PLAN.md` Upgrade A (live sync) behind
 `CHAD_RUNS_GATEWAY=1`, then Upgrade B (components + Bun build).
 
 ### Security/policy audit (§H) — concrete targets
+
 - 5 un-gated agent launch sites ([[project_chad_operator_allowlist_gate]]) — the
   shim gate only covers one path; the other launch sites can reach the agent
   without the allowlist. **Close these before monetizing.**
@@ -403,6 +426,6 @@ then execute `GATEWAY-UI-MIGRATION-PLAN.md` Upgrade A (live sync) behind
   `credentials.json` stays uncommitted — `.gitignore` already covers `secrets.*`).
 
 ---
-_Linked memory: [[project_browservm_terminal_loader]], [[project_chad_autonomy_roadmap]],
+*Linked memory: [[project_browservm_terminal_loader]], [[project_chad_autonomy_roadmap]],
 [[project_chad_operator_allowlist_gate]], [[project_chad_pending]],
-[[project_gbrain_embed_stack]], [[project_chad_autonomy_git_boundary]]._
+[[project_gbrain_embed_stack]], [[project_chad_autonomy_git_boundary]].*

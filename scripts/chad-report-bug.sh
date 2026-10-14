@@ -63,25 +63,52 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --title)     title="$2";     shift 2 ;;
-    --body)      body="$2";      shift 2 ;;
-    --body-file) body_file="$2"; shift 2 ;;
-    --repo)      REPO="$2";      shift 2 ;;
-    --label)     labels+=("$2"); shift 2 ;;
-    --dry-run)   dry_run=1;      shift ;;
-    -h|--help)   usage ;;
-    *) echo "chad-report-bug: unknown arg: $1" >&2; exit 2 ;;
+    --title)
+      title="$2"
+      shift 2
+      ;;
+    --body)
+      body="$2"
+      shift 2
+      ;;
+    --body-file)
+      body_file="$2"
+      shift 2
+      ;;
+    --repo)
+      REPO="$2"
+      shift 2
+      ;;
+    --label)
+      labels+=("$2")
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h | --help) usage ;;
+    *)
+      echo "chad-report-bug: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
-[ -n "$title" ] || { echo "chad-report-bug: --title is required" >&2; exit 2; }
+[ -n "$title" ] || {
+  echo "chad-report-bug: --title is required" >&2
+  exit 2
+}
 if [ -z "$body" ] && [ -z "$body_file" ]; then
   echo "chad-report-bug: --body or --body-file is required" >&2
   exit 2
 fi
 
 if [ -n "$body_file" ]; then
-  [ -f "$body_file" ] || { echo "chad-report-bug: body file not found: $body_file" >&2; exit 2; }
+  [ -f "$body_file" ] || {
+    echo "chad-report-bug: body file not found: $body_file" >&2
+    exit 2
+  }
 fi
 
 command -v gh >/dev/null 2>&1 || {
@@ -96,7 +123,7 @@ trap 'rm -rf "$workdir"' EXIT
 dump_file="${workdir}/state-dump.md"
 if ! chad-dump-state --out "$dump_file" >/dev/null 2>&1; then
   # If the dump fails we still want to file the bug — but note it.
-  echo "_(chad-dump-state failed; filing without state)_" > "$dump_file"
+  echo "_(chad-dump-state failed; filing without state)_" >"$dump_file"
 fi
 
 # 2. Assemble combined body
@@ -111,11 +138,11 @@ combined="${workdir}/body.md"
   printf '<details><summary>Chad state snapshot</summary>\n\n'
   cat "$dump_file"
   printf '\n</details>\n'
-} > "$combined"
+} >"$combined"
 
 # Guard against GitHub's 65K issue body limit. If combined body is
 # over 60K chars, truncate the state dump tail and note the cutoff.
-body_bytes="$(wc -c < "$combined" | tr -d ' ')"
+body_bytes="$(wc -c <"$combined" | tr -d ' ')"
 if [ "$body_bytes" -gt 60000 ]; then
   python3 - "$combined" <<'PY'
 import sys, pathlib
@@ -130,8 +157,9 @@ fi
 # 3. Dedupe check — is there already an open issue with the same title?
 dedupe_url=""
 if dedupe_json="$(gh issue list --repo "$REPO" --state open --search "$title in:title" \
-                    --json number,title,url,updatedAt 2>/dev/null)"; then
-  dedupe_url="$(python3 - "$dedupe_json" "$title" "$DEDUPE_WINDOW_DAYS" <<'PY'
+  --json number,title,url,updatedAt 2>/dev/null)"; then
+  dedupe_url="$(
+    python3 - "$dedupe_json" "$title" "$DEDUPE_WINDOW_DAYS" <<'PY'
 import sys, json, datetime
 _UTC = getattr(datetime, "UTC", datetime.timezone.utc)
 try:
@@ -150,7 +178,7 @@ for it in items:
         except Exception:
             pass
 PY
-)"
+  )"
 fi
 
 # 4. File or comment
@@ -158,7 +186,7 @@ if [ "$dry_run" -eq 1 ]; then
   echo "[dry-run] target repo: $REPO"
   echo "[dry-run] title: $title"
   echo "[dry-run] labels: ${labels[*]}"
-  echo "[dry-run] body bytes: $(wc -c < "$combined" | tr -d ' ')"
+  echo "[dry-run] body bytes: $(wc -c <"$combined" | tr -d ' ')"
   if [ -n "$dedupe_url" ]; then
     echo "[dry-run] would comment on: $dedupe_url"
   else
@@ -182,7 +210,7 @@ else
     label_args+=(--label "$l")
   done
   if ! url="$(gh issue create --repo "$REPO" --title "$title" \
-                --body-file "$combined" "${label_args[@]}" 2>&1)"; then
+    --body-file "$combined" "${label_args[@]}" 2>&1)"; then
     echo "chad-report-bug: gh issue create failed: $url" >&2
     exit 3
   fi
@@ -196,9 +224,9 @@ if [ -d "$(dirname "$memory_file")" ]; then
   {
     printf '\n## Bug %s — %s\n\n' "$action" "$(date -u +%H:%M:%SZ)"
     printf '- **Title:** %s\n' "$title"
-    printf '- **Repo:** %s\n'  "$REPO"
-    printf '- **URL:** %s\n'   "$url"
-  } >> "$memory_file"
+    printf '- **Repo:** %s\n' "$REPO"
+    printf '- **URL:** %s\n' "$url"
+  } >>"$memory_file"
 fi
 
 echo "$url"

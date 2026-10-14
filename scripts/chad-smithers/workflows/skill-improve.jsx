@@ -28,30 +28,62 @@ const MAX = Number(process.env.CHAD_SKILLIMPROVE_MAX || 3);
 const schemas = {
   inventory: z.object({ workflows: z.string(), signal: z.string() }),
   proposals: z.object({
-    proposals: z.array(z.object({
-      target: z.string(), kind: z.enum(["robustness", "performance", "cost", "feature", "docs"]),
-      change: z.string(), rationale: z.string(),
-    })),
+    proposals: z.array(
+      z.object({
+        target: z.string(),
+        kind: z.enum(["robustness", "performance", "cost", "feature", "docs"]),
+        change: z.string(),
+        rationale: z.string(),
+      }),
+    ),
     summary: z.string(),
   }),
-  filed: z.object({ status: z.enum(["filed", "shadow-logged", "quiet", "blocked"]), count: z.number(), detail: z.string() }),
+  filed: z.object({
+    status: z.enum(["filed", "shadow-logged", "quiet", "blocked"]),
+    count: z.number(),
+    detail: z.string(),
+  }),
 };
 
 const api = createSmithers(schemas, { dbPath: DB });
 const { smithers, Workflow, Task, Sequence, outputs } = api;
 function exec(cmd, args, opts = {}) {
-  return new Promise((r) => execFile(cmd, args, { maxBuffer: 8 * 1024 * 1024, ...opts }, (e, o) => r(e ? "" : o.toString())));
+  return new Promise((r) =>
+    execFile(cmd, args, { maxBuffer: 8 * 1024 * 1024, ...opts }, (e, o) =>
+      r(e ? "" : o.toString()),
+    ),
+  );
 }
 
 function gatherInventory() {
-  const here = new URL("./", import.meta.url).pathname;     // workflows/
-  const parent = new URL("../", import.meta.url).pathname;  // chad-smithers/
+  const here = new URL("./", import.meta.url).pathname; // workflows/
+  const parent = new URL("../", import.meta.url).pathname; // chad-smithers/
   let wf = [];
-  try { wf = wf.concat(readdirSync(here).filter((f) => f.endsWith(".jsx")).map((f) => `workflows/${f}`)); } catch { /* */ }
-  try { wf = wf.concat(readdirSync(parent).filter((f) => f.endsWith(".jsx"))); } catch { /* */ }
+  try {
+    wf = wf.concat(
+      readdirSync(here)
+        .filter((f) => f.endsWith(".jsx"))
+        .map((f) => `workflows/${f}`),
+    );
+  } catch {
+    /* */
+  }
+  try {
+    wf = wf.concat(readdirSync(parent).filter((f) => f.endsWith(".jsx")));
+  } catch {
+    /* */
+  }
   let signal = "";
-  try { const rp = new URL("../state/last-report.md", import.meta.url).pathname; if (existsSync(rp)) signal = readFileSync(rp, "utf8").slice(0, 3000); } catch { /* */ }
-  return { workflows: [...new Set(wf)].sort().join(", "), signal: signal || "(no experiment report yet)" };
+  try {
+    const rp = new URL("../state/last-report.md", import.meta.url).pathname;
+    if (existsSync(rp)) signal = readFileSync(rp, "utf8").slice(0, 3000);
+  } catch {
+    /* */
+  }
+  return {
+    workflows: [...new Set(wf)].sort().join(", "),
+    signal: signal || "(no experiment report yet)",
+  };
 }
 
 export default smithers((ctx) => {
@@ -66,7 +98,13 @@ export default smithers((ctx) => {
           {() => gatherInventory()}
         </Task>
 
-        <Task id="propose" output={outputs.proposals} agent={pickAgent("judge")} fallbackAgent={pickFallback("judge")} {...taskOpts("judge")}>
+        <Task
+          id="propose"
+          output={outputs.proposals}
+          agent={pickAgent("judge")}
+          fallbackAgent={pickFallback("judge")}
+          {...taskOpts("judge")}
+        >
           {[
             `You are improving Chad's OWN durable Smithers workflows/skills. Propose at most ${MAX} NARROW, concrete, high-leverage improvements.`,
             "For each: target (a workflow/skill file or area), kind (robustness/performance/cost/feature/docs), the concrete change, and why it helps. Favor low-risk, high-value changes.",
@@ -79,18 +117,47 @@ export default smithers((ctx) => {
         {/* File approved enhancements as GitHub issues. needsApproval gates on
             having proposals (human sign-off); shadow unless CHAD_SKILLIMPROVE_POST=1.
             Never edits source — proposals become tracked issues for review. */}
-        <Task id="file" output={outputs.filed} needsApproval={props.length > 0} sideEffect idempotencyKey={`skillimprove-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="file"
+          output={outputs.filed}
+          needsApproval={props.length > 0}
+          sideEffect
+          idempotencyKey={`skillimprove-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
             if (!props.length) return { status: "quiet", count: 0, detail: "no proposals" };
-            if (!POST) return { status: "shadow-logged", count: 0, detail: `SHADOW: would file ${props.length} enhancement(s): ${props.map((p) => `${p.kind}:${p.target}`).join("; ").slice(0, 300)}` };
+            if (!POST)
+              return {
+                status: "shadow-logged",
+                count: 0,
+                detail: `SHADOW: would file ${props.length} enhancement(s): ${props
+                  .map((p) => `${p.kind}:${p.target}`)
+                  .join("; ")
+                  .slice(0, 300)}`,
+              };
             let n = 0;
             for (const p of props) {
               const title = `[${p.kind}] ${p.target}: ${p.change}`.slice(0, 110);
               const body = `**Target:** ${p.target}\n**Kind:** ${p.kind}\n\n${p.change}\n\n_Rationale:_ ${p.rationale}\n\n---\n_Proposed by Chad's skill-improve workflow. Review before implementing._`;
-              const out = await exec("gh", ["issue", "create", "--repo", REPO, "--title", title, "--body", body, "--label", LABEL]);
+              const out = await exec("gh", [
+                "issue",
+                "create",
+                "--repo",
+                REPO,
+                "--title",
+                title,
+                "--body",
+                body,
+                "--label",
+                LABEL,
+              ]);
               if (out) n++;
             }
-            return { status: n ? "filed" : "blocked", count: n, detail: `filed ${n} of ${props.length} on ${REPO}` };
+            return {
+              status: n ? "filed" : "blocked",
+              count: n,
+              detail: `filed ${n} of ${props.length} on ${REPO}`,
+            };
           }}
         </Task>
       </Sequence>

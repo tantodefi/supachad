@@ -30,14 +30,27 @@ memory_file=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --today)       shift ;;
-    --since)       since_seconds="$2"; shift 2 ;;
-    --print-only)  print_only=1; shift ;;
-    --memory-file) memory_file="$2"; shift 2 ;;
-    -h|--help)
+    --today) shift ;;
+    --since)
+      since_seconds="$2"
+      shift 2
+      ;;
+    --print-only)
+      print_only=1
+      shift
+      ;;
+    --memory-file)
+      memory_file="$2"
+      shift 2
+      ;;
+    -h | --help)
       sed -n '2,22p' "$0" | sed -e 's/^# \{0,1\}//' -e '1,3d'
-      exit 0 ;;
-    *) echo "chad-collect: unknown argument: $1" >&2; exit 2 ;;
+      exit 0
+      ;;
+    *)
+      echo "chad-collect: unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -47,11 +60,11 @@ memory_file="${memory_file:-$default_memory_file}"
 mkdir -p "$(dirname "$memory_file")"
 
 CHAD_COLLECT_SUBAGENTS="$SUBAGENTS_DIR" \
-CHAD_COLLECT_QUEUE="$QUEUE_FILE" \
-CHAD_COLLECT_SINCE="${since_seconds:-}" \
-CHAD_COLLECT_PRINT="$print_only" \
-CHAD_COLLECT_OUT="$memory_file" \
-python3 <<'PY'
+  CHAD_COLLECT_QUEUE="$QUEUE_FILE" \
+  CHAD_COLLECT_SINCE="${since_seconds:-}" \
+  CHAD_COLLECT_PRINT="$print_only" \
+  CHAD_COLLECT_OUT="$memory_file" \
+  python3 <<'PY'
 import os, sys, json, time, datetime, glob
 _UTC = getattr(datetime, "UTC", datetime.timezone.utc)
 

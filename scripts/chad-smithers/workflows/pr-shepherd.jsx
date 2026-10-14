@@ -30,10 +30,14 @@ const POST = process.env.CHAD_PRSHEP_POST === "1";
 const schemas = {
   triage: z.object({
     open: z.number(),
-    decisions: z.array(z.object({
-      number: z.number(), title: z.string(),
-      action: z.enum(PR_ACTIONS), reason: z.string(),
-    })),
+    decisions: z.array(
+      z.object({
+        number: z.number(),
+        title: z.string(),
+        action: z.enum(PR_ACTIONS),
+        reason: z.string(),
+      }),
+    ),
     counts: z.record(z.string(), z.number()),
   }),
   digest: z.object({ headline: z.string(), body: z.string() }),
@@ -45,7 +49,9 @@ const { smithers, Workflow, Task, Sequence, outputs } = api;
 
 function gh(args) {
   return new Promise((resolve) => {
-    execFile("gh", args, { maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => resolve(err ? "" : stdout.toString()));
+    execFile("gh", args, { maxBuffer: 8 * 1024 * 1024 }, (err, stdout) =>
+      resolve(err ? "" : stdout.toString()),
+    );
   });
 }
 
@@ -59,11 +65,31 @@ export const workflow = smithers((ctx) => {
       <Sequence>
         {/* 1) Fetch + triage. Read-only gh; the per-PR action is DETERMINISTIC
             (lib/pr.js), so no model is spent deciding — only summarizing later. */}
-        <Task id="triage" output={outputs.triage} sideEffect idempotencyKey={`prshep-${REPO}-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="triage"
+          output={outputs.triage}
+          sideEffect
+          idempotencyKey={`prshep-${REPO}-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
-            const raw = await gh(["pr", "list", "--repo", REPO, "--state", "open", "--limit", "50",
-              "--json", "number,title,isDraft,mergeable,reviewDecision,statusCheckRollup,updatedAt"]);
-            let prs = []; try { prs = raw ? JSON.parse(raw) : []; } catch { prs = []; }
+            const raw = await gh([
+              "pr",
+              "list",
+              "--repo",
+              REPO,
+              "--state",
+              "open",
+              "--limit",
+              "50",
+              "--json",
+              "number,title,isDraft,mergeable,reviewDecision,statusCheckRollup,updatedAt",
+            ]);
+            let prs = [];
+            try {
+              prs = raw ? JSON.parse(raw) : [];
+            } catch {
+              prs = [];
+            }
             const decisions = prs.map((p) => prAction(p, { staleDays: STALE_DAYS }));
             return { open: prs.length, decisions, counts: shepherdSummary(decisions) };
           }}
@@ -71,8 +97,14 @@ export const workflow = smithers((ctx) => {
 
         {/* 2) Digest — one cheap-tier call turns the deterministic decisions into a
             readable "what's blocked on whom". Skipped when there are no open PRs. */}
-        <Task id="digest" skipIf={!hasOpen} output={outputs.digest}
-          agent={pickAgent("summarize")} fallbackAgent={pickFallback("summarize")} {...taskOpts("summarize")}>
+        <Task
+          id="digest"
+          skipIf={!hasOpen}
+          output={outputs.digest}
+          agent={pickAgent("summarize")}
+          fallbackAgent={pickFallback("summarize")}
+          {...taskOpts("summarize")}
+        >
           {[
             `Summarize the state of ${REPO}'s ${triage?.open ?? 0} open PRs for the operator.`,
             "Lead with what's merge-ready and what's blocked on the operator (changes-requested, stale-nudge).",
@@ -85,14 +117,23 @@ export const workflow = smithers((ctx) => {
 
         {/* 3) Report — advisory. Shadow by default; reversible note when POST=1.
             Never touches the PRs themselves. */}
-        <Task id="report" output={outputs.report} sideEffect idempotencyKey={`prshep-report-${REPO}-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="report"
+          output={outputs.report}
+          sideEffect
+          idempotencyKey={`prshep-report-${REPO}-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
             const mergeReady = triage?.counts?.["merge-ready"] || 0;
             if (!hasOpen) return { note: `no open PRs in ${REPO}`, open: 0, mergeReady: 0 };
             const title = `PR shepherd — ${REPO} — ${triage.open} open, ${mergeReady} merge-ready`;
             const body = `# ${title}\n\n**${digest?.headline || ""}**\n\n${digest?.body || ""}`;
             if (POST) await postNote({ title, content: body, tags: "chad-pr-shepherd" });
-            return { note: POST ? `${title} (posted)` : `SHADOW: ${title}`, open: triage.open, mergeReady };
+            return {
+              note: POST ? `${title} (posted)` : `SHADOW: ${title}`,
+              open: triage.open,
+              mergeReady,
+            };
           }}
         </Task>
       </Sequence>

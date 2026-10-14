@@ -40,13 +40,20 @@ const schemas = {
     urgency: z.enum(["low", "medium", "high"]),
     summary: z.string(),
   }),
-  draft: z.object({ subject: z.string(), body: z.string(), confidence: z.number().min(0).max(100) }),
+  draft: z.object({
+    subject: z.string(),
+    body: z.string(),
+    confidence: z.number().min(0).max(100),
+  }),
   moderation: z.object({ safe: z.boolean(), issues: z.array(z.string()) }),
-  send: z.object({ status: z.enum(["sent", "shadow-logged", "blocked", "queued-for-human"]), detail: z.string() }),
+  send: z.object({
+    status: z.enum(["sent", "shadow-logged", "blocked", "queued-for-human"]),
+    detail: z.string(),
+  }),
 };
 
 const api = createSmithers(schemas, { dbPath: DB });
-const { smithers, Workflow, Task, Sequence, Branch, Approval, outputs } = api;
+const { smithers, Workflow, Task, Sequence, outputs } = api;
 
 export const workflow = smithers((ctx) => {
   const inbound = ctx.input ?? {};
@@ -59,33 +66,75 @@ export const workflow = smithers((ctx) => {
   return (
     <Workflow name="chad-email-ladder">
       <Sequence>
-        <Task id="triage" output={outputs.triage} agent={pickAgent("classify")} fallbackAgent={pickFallback("classify")} {...taskOpts("classify")}>
+        <Task
+          id="triage"
+          output={outputs.triage}
+          agent={pickAgent("classify")}
+          fallbackAgent={pickFallback("classify")}
+          {...taskOpts("classify")}
+        >
           {`Triage this inbound message. Return JSON {operator, category, urgency, summary}.\n\n${JSON.stringify(inbound).slice(0, 4000)}`}
         </Task>
 
         {/* category gating is per-task skipIf — a `<Branch if={upstreamOutput}>`
             does not reopen once triage completes (verified). Draft only for replies. */}
-        <Task id="draft" skipIf={triage?.category !== "reply"} output={outputs.draft} agent={pickAgent("draft", DRAFT_MODEL ? { model: DRAFT_MODEL, timeoutMs: DRAFT_TIMEOUT_MS } : {})} fallbackAgent={pickFallback("draft")} {...taskOpts("draft", DRAFT_MODEL ? { timeoutMs: DRAFT_TIMEOUT_MS } : {})}>
-            {`Draft a reply in the operator's voice. Return JSON {subject, body, confidence}.\n\nContext: ${triage?.summary ?? ""}\nOriginal: ${JSON.stringify(inbound).slice(0, 4000)}`}
-          </Task>
+        <Task
+          id="draft"
+          skipIf={triage?.category !== "reply"}
+          output={outputs.draft}
+          agent={pickAgent(
+            "draft",
+            DRAFT_MODEL ? { model: DRAFT_MODEL, timeoutMs: DRAFT_TIMEOUT_MS } : {},
+          )}
+          fallbackAgent={pickFallback("draft")}
+          {...taskOpts("draft", DRAFT_MODEL ? { timeoutMs: DRAFT_TIMEOUT_MS } : {})}
+        >
+          {`Draft a reply in the operator's voice. Return JSON {subject, body, confidence}.\n\nContext: ${triage?.summary ?? ""}\nOriginal: ${JSON.stringify(inbound).slice(0, 4000)}`}
+        </Task>
 
-          {/* Trust & safety gate on outbound (the layer the ladder lacked). */}
-          <Task id="moderation" skipIf={triage?.category !== "reply"} output={outputs.moderation} agent={pickAgent("judge")} fallbackAgent={pickFallback("judge")} {...taskOpts("judge")}>
-            {`Screen this draft for anything that should NOT be auto-sent (PII leak, commitments, tone, hallucinated facts). Return JSON {safe, issues}.\n\n${draft?.body ?? ""}`}
-          </Task>
+        {/* Trust & safety gate on outbound (the layer the ladder lacked). */}
+        <Task
+          id="moderation"
+          skipIf={triage?.category !== "reply"}
+          output={outputs.moderation}
+          agent={pickAgent("judge")}
+          fallbackAgent={pickFallback("judge")}
+          {...taskOpts("judge")}
+        >
+          {`Screen this draft for anything that should NOT be auto-sent (PII leak, commitments, tone, hallucinated facts). Return JSON {safe, issues}.\n\n${draft?.body ?? ""}`}
+        </Task>
 
-          {/* Send — gated by needsApproval unless an allowlisted operator with a
+        {/* Send — gated by needsApproval unless an allowlisted operator with a
               clean moderation pass (human-in-the-loop; pauses as waiting-approval).
               Surfaces on the phone via Moshi when constructed with approvalRouting. */}
-          <Task id="send" skipIf={triage?.category !== "reply"} needsApproval={!(autoApprovable && moderation?.safe)} output={outputs.send} sideEffect idempotencyKey={`send-${inbound.messageId ?? "unknown"}`}>
-            {() => {
-              if (!moderation?.safe) return { status: "queued-for-human", detail: `moderation flagged: ${(moderation?.issues || []).join("; ")}` };
-              if (!SEND) return { status: "shadow-logged", detail: `SHADOW: would send "${draft?.subject}" to ${operator}` };
-              // Real send goes through the existing gated chad-mail-send (pod).
-              // Intentionally not invoked here until the shadow period proves out.
-              return { status: "blocked", detail: "CHAD_EMAIL_SEND=1 set but live send wiring intentionally deferred to chad-mail-send" };
-            }}
-          </Task>
+        <Task
+          id="send"
+          skipIf={triage?.category !== "reply"}
+          needsApproval={!(autoApprovable && moderation?.safe)}
+          output={outputs.send}
+          sideEffect
+          idempotencyKey={`send-${inbound.messageId ?? "unknown"}`}
+        >
+          {() => {
+            if (!moderation?.safe)
+              return {
+                status: "queued-for-human",
+                detail: `moderation flagged: ${(moderation?.issues || []).join("; ")}`,
+              };
+            if (!SEND)
+              return {
+                status: "shadow-logged",
+                detail: `SHADOW: would send "${draft?.subject}" to ${operator}`,
+              };
+            // Real send goes through the existing gated chad-mail-send (pod).
+            // Intentionally not invoked here until the shadow period proves out.
+            return {
+              status: "blocked",
+              detail:
+                "CHAD_EMAIL_SEND=1 set but live send wiring intentionally deferred to chad-mail-send",
+            };
+          }}
+        </Task>
       </Sequence>
     </Workflow>
   );

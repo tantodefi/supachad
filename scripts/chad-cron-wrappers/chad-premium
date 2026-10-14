@@ -59,7 +59,7 @@ while [ $# -gt 0 ]; do
       USE_STDIN=1
       shift
       ;;
-    -h|--help)
+    -h | --help)
       sed -n '4,/^$/p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
@@ -131,7 +131,7 @@ if [ "$APPEND_MEMORY" -eq 1 ] && [ "$status" -eq 0 ] && [ -s "$TMP_OUT" ]; then
       echo '```'
       cat "$TMP_OUT"
       echo '```'
-    } >> "$MEMORY_FILE"
+    } >>"$MEMORY_FILE"
   fi
 fi
 

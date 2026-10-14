@@ -71,7 +71,8 @@ cmd="${1:-}"
 case "$cmd" in
   detect)
     shift
-    flag="${1:-}"; val="${2:-}"
+    flag="${1:-}"
+    val="${2:-}"
     case "$flag" in
       --email-from)
         # Strip angle brackets / display name if present
@@ -145,7 +146,7 @@ case "$cmd" in
   clear)
     rm -f "$CTX_PATH"
     ;;
-  ""|-h|--help|help)
+  "" | -h | --help | help)
     usage 0
     ;;
   *)

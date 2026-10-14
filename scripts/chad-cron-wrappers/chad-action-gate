@@ -51,7 +51,8 @@ usage() {
 }
 
 [ "$#" -ge 1 ] || usage
-sub="$1"; shift
+sub="$1"
+shift
 
 case "$sub" in
   check) ;;
@@ -59,8 +60,11 @@ case "$sub" in
   budget) ;;
   reset) ;;
   dump) ;;
-  -h|--help) usage ;;
-  *) echo "chad-action-gate: unknown subcommand: $sub" >&2; usage ;;
+  -h | --help) usage ;;
+  *)
+    echo "chad-action-gate: unknown subcommand: $sub" >&2
+    usage
+    ;;
 esac
 
 if [ "$sub" = "reset" ]; then
@@ -95,7 +99,10 @@ PY
 fi
 
 if [ "$sub" = "budget" ]; then
-  [ "$#" -ge 1 ] || { echo "chad-action-gate budget <action_type>" >&2; exit 64; }
+  [ "$#" -ge 1 ] || {
+    echo "chad-action-gate budget <action_type>" >&2
+    exit 64
+  }
   ACTION="$1"
   python3 - "$POLICY_FILE" "$COUNTERS_FILE" "$ACTION" <<'PY'
 import json, sys, os, datetime
@@ -124,8 +131,12 @@ PY
 fi
 
 if [ "$sub" = "check" ]; then
-  [ "$#" -ge 2 ] || { echo "chad-action-gate check <action_type> <target>" >&2; exit 64; }
-  ACTION="$1"; TARGET="$2"
+  [ "$#" -ge 2 ] || {
+    echo "chad-action-gate check <action_type> <target>" >&2
+    exit 64
+  }
+  ACTION="$1"
+  TARGET="$2"
 
   if [ -e "$KILL_SWITCH" ]; then
     echo "killed"
@@ -178,19 +189,35 @@ PY
 fi
 
 if [ "$sub" = "log" ]; then
-  [ "$#" -ge 2 ] || { echo "chad-action-gate log <action_type> <target> [opts]" >&2; exit 64; }
-  ACTION="$1"; TARGET="$2"; shift 2
-  RESULT="ok"; MSGID=""; DETAIL=""
+  [ "$#" -ge 2 ] || {
+    echo "chad-action-gate log <action_type> <target> [opts]" >&2
+    exit 64
+  }
+  ACTION="$1"
+  TARGET="$2"
+  shift 2
+  RESULT="ok"
+  MSGID=""
+  DETAIL=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --result)     RESULT="$2";  shift 2 ;;
-      --message-id) MSGID="$2";   shift 2 ;;
-      --detail)     DETAIL="$2";  shift 2 ;;
+      --result)
+        RESULT="$2"
+        shift 2
+        ;;
+      --message-id)
+        MSGID="$2"
+        shift 2
+        ;;
+      --detail)
+        DETAIL="$2"
+        shift 2
+        ;;
       *) shift ;;
     esac
   done
   python3 - "$AUDIT_LOG" "$COUNTERS_FILE" "$ACTION" "$TARGET" \
-            "$RESULT" "$MSGID" "$DETAIL" <<'PY'
+    "$RESULT" "$MSGID" "$DETAIL" <<'PY'
 import json, sys, os, datetime
 log, counters, action, target, result, msgid, detail = sys.argv[1:8]
 ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -38,7 +38,6 @@
 set -euo pipefail
 
 REPO="${CHAD_BUG_REPO:-tantodefi/chad-state}"
-OPENCLAW_DATA="${CHAD_OPENCLAW_DATA:-/sandbox/.openclaw-data}"
 WORKSPACE="${CHAD_WORKSPACE:-/sandbox/.openclaw/workspace}"
 
 top_n=2
@@ -55,12 +54,27 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --top)     top_n="$2";         shift 2 ;;
-    --repo)    REPO="$2";          shift 2 ;;
-    --label)   require_label="$2"; shift 2 ;;
-    --dry-run) dry_run=1;          shift ;;
-    -h|--help) usage ;;
-    *) echo "chad-issue-triage: unknown arg: $1" >&2; exit 2 ;;
+    --top)
+      top_n="$2"
+      shift 2
+      ;;
+    --repo)
+      REPO="$2"
+      shift 2
+      ;;
+    --label)
+      require_label="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h | --help) usage ;;
+    *)
+      echo "chad-issue-triage: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -73,7 +87,7 @@ command -v gh >/dev/null 2>&1 || {
 if [ "$dry_run" -eq 0 ] && command -v chad-budget >/dev/null 2>&1; then
   remaining="$(chad-budget show --field remaining_tokens 2>/dev/null || echo 0)"
   # Reserve for N × (researcher 20K + coder 50K) with a 30% safety margin.
-  needed=$(( top_n * 70000 * 130 / 100 ))
+  needed=$((top_n * 70000 * 130 / 100))
   if [ "${remaining:-0}" -lt "$needed" ]; then
     echo "chad-issue-triage: remaining=${remaining} < ${needed} — skipping daily run" >&2
     exit 0
@@ -82,7 +96,7 @@ fi
 
 # ── Fetch open issues ──────────────────────────────────────────────
 list_args=(issue list --repo "$REPO" --state open --limit 50
-           --json number,title,body,labels,reactionGroups,updatedAt,url)
+  --json "number,title,body,labels,reactionGroups,updatedAt,url")
 if [ -n "$require_label" ]; then
   list_args+=(--label "$require_label")
 fi
@@ -97,9 +111,9 @@ fi
 #         stale_penalty. Simple, predictable, tunable via env.
 selected_file="$(mktemp /tmp/triage-selected.XXXXXX.json)"
 CHAD_TR_RAW="$raw_issues" \
-CHAD_TR_TOP="$top_n" \
-CHAD_TR_OUT="$selected_file" \
-python3 <<'PY'
+  CHAD_TR_TOP="$top_n" \
+  CHAD_TR_OUT="$selected_file" \
+  python3 <<'PY'
 import os, json, datetime
 
 _UTC = getattr(datetime, "UTC", datetime.timezone.utc)
@@ -194,9 +208,9 @@ while IFS= read -r issue_json; do
   [ -z "$issue_json" ] && continue
   task_file="$(mktemp /tmp/triage-issue.XXXXXX.md)"
   CHAD_TR_ISSUE="$issue_json" \
-  CHAD_TR_TASK="$task_file" \
-  CHAD_TR_REPO="$REPO" \
-  python3 <<'PY'
+    CHAD_TR_TASK="$task_file" \
+    CHAD_TR_REPO="$REPO" \
+    python3 <<'PY'
 import os, json
 it = json.loads(os.environ["CHAD_TR_ISSUE"])
 path = os.environ["CHAD_TR_TASK"]
@@ -233,7 +247,7 @@ open(path, "w").write("\n".join(lines))
 print(path)
 PY
   task_id="$(chad-spawn --kind researcher --task-file "$task_file" \
-               --budget-tokens 15000 --timeout 300 2>&1)" || {
+    --budget-tokens 15000 --timeout 300 2>&1)" || {
     echo "chad-issue-triage: spawn failed for issue: $task_id" >&2
     continue
   }
@@ -256,9 +270,10 @@ if [ -d "$(dirname "$memory_file")" ]; then
     printf '- **Repo:** %s\n' "$REPO"
     printf '- **Spawned:** %d researcher(s)\n' "${#spawned[@]}"
     for tid in "${spawned[@]}"; do
+      # shellcheck disable=SC2016 # literal backticks are markdown
       printf '  - `%s`\n' "$tid"
     done
-  } >> "$memory_file"
+  } >>"$memory_file"
 fi
 
 printf '%s\n' "${spawned[@]}"

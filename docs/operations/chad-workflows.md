@@ -112,7 +112,7 @@ The rubric is fed to a separate scoring model pass (Tier 2.5 below).
 
 `scripts/chad-cron-wrappers/chad-workflow-batch` (in-sandbox) is a **matrix runner**, not a sequence:
 
-```
+```text
 matrix = fixtures × variants × models × samples
 ```
 
@@ -131,6 +131,7 @@ chad-workflow-batch \
 **Samples** absorb model nondeterminism (Nemotron 3 Super 120B with reasoning ON has nontrivial variance, as did Kimi K2.5 before it was deprecated 2026-04-29). The aggregator averages within `(fixture, variant, model)` cells across samples.
 
 **Output layout** per run:
+
 ```text
 regressions/<UTC-ts>/
   jobs.jsonl                                       # manifest, status updated as run progresses

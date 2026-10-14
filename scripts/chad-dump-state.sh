@@ -62,30 +62,48 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --out)          out_file="$2";      shift 2 ;;
-    --tar)          tar_file="$2";      shift 2 ;;
-    --ledger)       ledger_n="$2";      shift 2 ;;
-    --subagents)    subagents_n="$2";   shift 2 ;;
-    --memory-lines) memory_lines="$2";  shift 2 ;;
-    -h|--help)      usage ;;
-    *) echo "chad-dump-state: unknown arg: $1" >&2; exit 2 ;;
+    --out)
+      out_file="$2"
+      shift 2
+      ;;
+    --tar)
+      tar_file="$2"
+      shift 2
+      ;;
+    --ledger)
+      ledger_n="$2"
+      shift 2
+      ;;
+    --subagents)
+      subagents_n="$2"
+      shift 2
+      ;;
+    --memory-lines)
+      memory_lines="$2"
+      shift 2
+      ;;
+    -h | --help) usage ;;
+    *)
+      echo "chad-dump-state: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
 # All string handling goes through Python so we never have to worry
 # about shell quoting of multi-line memory files or JSON blobs.
 CHAD_DS_OUT="$out_file" \
-CHAD_DS_TAR="$tar_file" \
-CHAD_DS_LEDGER_N="$ledger_n" \
-CHAD_DS_SUBAGENTS_N="$subagents_n" \
-CHAD_DS_MEMORY_LINES="$memory_lines" \
-CHAD_DS_OPENCLAW_DATA="$OPENCLAW_DATA" \
-CHAD_DS_WORKSPACE="$WORKSPACE" \
-CHAD_DS_QUEUE_FILE="$QUEUE_FILE" \
-CHAD_DS_BUDGET_FILE="$BUDGET_FILE" \
-CHAD_DS_SUBAGENTS_DIR="$SUBAGENTS_DIR" \
-CHAD_DS_CONFIG_HASH="$CONFIG_HASH" \
-python3 <<'PY'
+  CHAD_DS_TAR="$tar_file" \
+  CHAD_DS_LEDGER_N="$ledger_n" \
+  CHAD_DS_SUBAGENTS_N="$subagents_n" \
+  CHAD_DS_MEMORY_LINES="$memory_lines" \
+  CHAD_DS_OPENCLAW_DATA="$OPENCLAW_DATA" \
+  CHAD_DS_WORKSPACE="$WORKSPACE" \
+  CHAD_DS_QUEUE_FILE="$QUEUE_FILE" \
+  CHAD_DS_BUDGET_FILE="$BUDGET_FILE" \
+  CHAD_DS_SUBAGENTS_DIR="$SUBAGENTS_DIR" \
+  CHAD_DS_CONFIG_HASH="$CONFIG_HASH" \
+  python3 <<'PY'
 import os, sys, json, datetime, pathlib, tarfile, io, subprocess, re
 
 _UTC = getattr(datetime, "UTC", datetime.timezone.utc)

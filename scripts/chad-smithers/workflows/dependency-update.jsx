@@ -36,12 +36,14 @@ const schemas = {
   deps: z.object({ outdated: z.number(), sample: z.string() }),
   // ScanFixVerify scanOutput — MUST expose `issues: Array`.
   scan: z.object({
-    issues: z.array(z.object({
-      name: z.string(),
-      from: z.string(),
-      to: z.string(),
-      risk: z.enum(["safe", "review", "risky"]),
-    })),
+    issues: z.array(
+      z.object({
+        name: z.string(),
+        from: z.string(),
+        to: z.string(),
+        risk: z.enum(["safe", "review", "risky"]),
+      }),
+    ),
     summary: z.string(),
   }),
   fix: z.object({ name: z.string(), bump: z.string(), rationale: z.string() }),
@@ -55,7 +57,9 @@ const { smithers, Workflow, Task, Sequence, outputs } = api;
 
 function sh(cmd, args) {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd: join(HERE, ".."), maxBuffer: 8 * 1024 * 1024 }, (_e, out) => resolve(out ? out.toString() : ""));
+    execFile(cmd, args, { cwd: join(HERE, ".."), maxBuffer: 8 * 1024 * 1024 }, (_e, out) =>
+      resolve(out ? out.toString() : ""),
+    );
   });
 }
 
@@ -69,14 +73,30 @@ export const workflow = smithers((ctx) => {
     <Workflow name="chad-dependency-update">
       <Sequence>
         {/* 1) Collect outdated deps + current pins. Read-only, deterministic. */}
-        <Task id="collect" output={outputs.deps} sideEffect idempotencyKey={`depupdate-collect-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="collect"
+          output={outputs.deps}
+          sideEffect
+          idempotencyKey={`depupdate-collect-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
             // `npm outdated` exits non-zero when anything is outdated — sh() ignores exit code.
             const raw = await sh("npm", ["outdated", "--json"]);
-            let obj = {}; try { obj = raw ? JSON.parse(raw) : {}; } catch { obj = {}; }
-            let pins = {}; try { pins = JSON.parse(readFileSync(PKG, "utf8")).dependencies || {}; } catch { /* */ }
-            const rows = Object.entries(obj).map(([name, v]) =>
-              `${name}: ${v.current} → ${v.latest} (pinned ${pins[name] || "?"})`);
+            let obj = {};
+            try {
+              obj = raw ? JSON.parse(raw) : {};
+            } catch {
+              obj = {};
+            }
+            let pins = {};
+            try {
+              pins = JSON.parse(readFileSync(PKG, "utf8")).dependencies || {};
+            } catch {
+              /* */
+            }
+            const rows = Object.entries(obj).map(
+              ([name, v]) => `${name}: ${v.current} → ${v.latest} (pinned ${pins[name] || "?"})`,
+            );
             return { outdated: rows.length, sample: rows.join("\n").slice(0, 6000) };
           }}
         </Task>
@@ -114,19 +134,33 @@ export const workflow = smithers((ctx) => {
         {/* 3) Apply — Approval-gated (a human signs off on the bump set), shadow
             unless CHAD_DEPUPDATE_APPLY=1. Even applied, it stops at writing the
             pins + a note; the actual `bun install` + test run is the operator's. */}
-        <Task id="apply" output={outputs.apply} needsApproval sideEffect idempotencyKey={`depupdate-apply-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="apply"
+          output={outputs.apply}
+          needsApproval
+          sideEffect
+          idempotencyKey={`depupdate-apply-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
             const safe = (scan?.issues || []).filter((i) => i.risk === "safe");
             const risky = (scan?.issues || []).filter((i) => i.risk !== "safe");
             const title = `Dependency update — ${new Date().toISOString().slice(0, 10)} — ${safe.length} safe, ${risky.length} flagged`;
-            const body = `# ${title}\n\n${report?.plan || scan?.summary || ""}\n\n` +
+            const body =
+              `# ${title}\n\n${report?.plan || scan?.summary || ""}\n\n` +
               `**Safe:**\n${safe.map((i) => `- ${i.name} ${i.from} → ${i.to}`).join("\n") || "_none_"}\n\n` +
               `**Needs review:**\n${risky.map((i) => `- [${i.risk}] ${i.name} ${i.from} → ${i.to}`).join("\n") || "_none_"}`;
             if (POST) await postNote({ title, content: body, tags: "chad-deps" });
-            if (!APPLY) return { status: "shadow-logged", detail: `SHADOW: would bump ${safe.length} safe deps` };
+            if (!APPLY)
+              return {
+                status: "shadow-logged",
+                detail: `SHADOW: would bump ${safe.length} safe deps`,
+              };
             // Live wiring (edit package.json pins + trigger bun install) is
             // intentionally deferred — proposal + note only until the loop proves out.
-            return { status: "blocked", detail: "CHAD_DEPUPDATE_APPLY=1 set but live pin-write intentionally deferred" };
+            return {
+              status: "blocked",
+              detail: "CHAD_DEPUPDATE_APPLY=1 set but live pin-write intentionally deferred",
+            };
           }}
         </Task>
       </Sequence>

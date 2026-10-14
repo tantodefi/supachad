@@ -60,7 +60,10 @@ EOF
 }
 
 require_dir() {
-  mkdir -p "$1" || { echo "chad-memory-snapshot: cannot mkdir $1" >&2; exit 3; }
+  mkdir -p "$1" || {
+    echo "chad-memory-snapshot: cannot mkdir $1" >&2
+    exit 3
+  }
 }
 
 new_id() {
@@ -71,17 +74,24 @@ cmd_create() {
   local label="auto"
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --label) label="$2"; shift 2 ;;
-      *) echo "create: unknown arg $1" >&2; exit 2 ;;
+      --label)
+        label="$2"
+        shift 2
+        ;;
+      *)
+        echo "create: unknown arg $1" >&2
+        exit 2
+        ;;
     esac
   done
 
-  local id; id="$(new_id)"
+  local id
+  id="$(new_id)"
   local dest="${SNAPSHOT_ROOT}/${id}"
   require_dir "$dest"
 
   printf '{"id":"%s","label":"%s","created_utc":"%s","sources":[' \
-    "$id" "$label" "$(date -u +%FT%TZ)" > "${dest}/manifest.json"
+    "$id" "$label" "$(date -u +%FT%TZ)" >"${dest}/manifest.json"
   local first=1
   local entry sublabel src
   for entry in "${SOURCES[@]}"; do
@@ -90,20 +100,21 @@ cmd_create() {
     if [ ! -e "$src" ]; then
       continue
     fi
-    [ "$first" -eq 1 ] || printf ',' >> "${dest}/manifest.json"
+    [ "$first" -eq 1 ] || printf ',' >>"${dest}/manifest.json"
     first=0
     local archive="${dest}/${sublabel}.tar.gz"
     # tar -C parent + relative path so extraction restores to original location
     if tar -C "$(dirname "$src")" -czf "$archive" "$(basename "$src")" 2>/dev/null; then
-      local sz; sz="$(stat -c %s "$archive" 2>/dev/null || stat -f %z "$archive" 2>/dev/null || echo 0)"
+      local sz
+      sz="$(stat -c %s "$archive" 2>/dev/null || stat -f %z "$archive" 2>/dev/null || echo 0)"
       printf '{"label":"%s","src":"%s","archive":"%s","bytes":%s}' \
-        "$sublabel" "$src" "${sublabel}.tar.gz" "$sz" >> "${dest}/manifest.json"
+        "$sublabel" "$src" "${sublabel}.tar.gz" "$sz" >>"${dest}/manifest.json"
     else
       printf '{"label":"%s","src":"%s","archive":null,"error":"tar failed"}' \
-        "$sublabel" "$src" >> "${dest}/manifest.json"
+        "$sublabel" "$src" >>"${dest}/manifest.json"
     fi
   done
-  printf ']}\n' >> "${dest}/manifest.json"
+  printf ']}\n' >>"${dest}/manifest.json"
 
   echo "snapshot: ${id} (${label})"
   cmd_prune --keep "$KEEP_DEFAULT" >/dev/null 2>&1 || true
@@ -121,7 +132,8 @@ cmd_list() {
     if [ -f "$m" ]; then
       local label
       label="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("label","?"))' "$m" 2>/dev/null || echo "?")"
-      local sz; sz="$(du -sh "${SNAPSHOT_ROOT}/${d}" 2>/dev/null | awk '{print $1}')"
+      local sz
+      sz="$(du -sh "${SNAPSHOT_ROOT}/${d}" 2>/dev/null | awk '{print $1}')"
       printf '%s  %-20s  %s\n' "$d" "$label" "$sz"
     fi
   done
@@ -129,9 +141,15 @@ cmd_list() {
 
 cmd_rollback() {
   local id="${1:-}"
-  [ -n "$id" ] || { echo "rollback: snapshot id required" >&2; exit 2; }
+  [ -n "$id" ] || {
+    echo "rollback: snapshot id required" >&2
+    exit 2
+  }
   local dir="${SNAPSHOT_ROOT}/${id}"
-  [ -d "$dir" ] || { echo "rollback: snapshot ${id} not found" >&2; exit 4; }
+  [ -d "$dir" ] || {
+    echo "rollback: snapshot ${id} not found" >&2
+    exit 4
+  }
 
   # Snapshot current state first (rollback is itself reversible)
   echo "rollback: snapshotting current state first..."
@@ -159,19 +177,24 @@ cmd_prune() {
   local keep="$KEEP_DEFAULT"
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --keep) keep="$2"; shift 2 ;;
+      --keep)
+        keep="$2"
+        shift 2
+        ;;
       *) shift ;;
     esac
   done
   [ -d "$SNAPSHOT_ROOT" ] || return 0
   # shellcheck disable=SC2012
-  local snaps; snaps="$(ls -1 "$SNAPSHOT_ROOT" 2>/dev/null | sort -r)"
+  local snaps
+  # shellcheck disable=SC2012 # names are timestamps/ids we generate (no odd chars)
+  snaps="$(ls -1 "$SNAPSHOT_ROOT" 2>/dev/null | sort -r)"
   local i=0
   echo "$snaps" | while IFS= read -r s; do
     [ -n "$s" ] || continue
     i=$((i + 1))
     if [ "$i" -gt "$keep" ]; then
-      rm -rf "${SNAPSHOT_ROOT}/${s}"
+      rm -rf "${SNAPSHOT_ROOT:?}/${s:?}"
       echo "pruned: $s"
     fi
   done
@@ -179,12 +202,16 @@ cmd_prune() {
 
 [ "$#" -gt 0 ] || usage
 
-cmd="$1"; shift
+cmd="$1"
+shift
 case "$cmd" in
-  create)   cmd_create "$@" ;;
-  list)     cmd_list "$@" ;;
+  create) cmd_create "$@" ;;
+  list) cmd_list "$@" ;;
   rollback) cmd_rollback "$@" ;;
-  prune)    cmd_prune "$@" ;;
-  -h|--help) usage ;;
-  *) echo "chad-memory-snapshot: unknown command: $cmd" >&2; usage ;;
+  prune) cmd_prune "$@" ;;
+  -h | --help) usage ;;
+  *)
+    echo "chad-memory-snapshot: unknown command: $cmd" >&2
+    usage
+    ;;
 esac

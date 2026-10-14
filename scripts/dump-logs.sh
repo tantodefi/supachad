@@ -20,10 +20,10 @@
 #   dump-logs.sh [<sandbox>] [--tail N] [--category list] [--no-sandbox] [--no-host]
 #
 # Default sandbox is "chad". Output: ~/.nemoclaw/log-dumps/<TS>/
+# shellcheck disable=SC2029 # remote commands are built client-side on purpose
 
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SANDBOX="chad"
 TAIL_N=200
 CATEGORIES="gateway,cron,subagent,memory,tui,system,premium"
@@ -33,12 +33,27 @@ NO_REDACT=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --tail) TAIL_N="$2"; shift 2 ;;
-    --category) CATEGORIES="$2"; shift 2 ;;
-    --no-host) SKIP_HOST=1; shift ;;
-    --no-sandbox) SKIP_SANDBOX=1; shift ;;
-    --no-redact) NO_REDACT=1; shift ;;
-    -h|--help)
+    --tail)
+      TAIL_N="$2"
+      shift 2
+      ;;
+    --category)
+      CATEGORIES="$2"
+      shift 2
+      ;;
+    --no-host)
+      SKIP_HOST=1
+      shift
+      ;;
+    --no-sandbox)
+      SKIP_SANDBOX=1
+      shift
+      ;;
+    --no-redact)
+      NO_REDACT=1
+      shift
+      ;;
+    -h | --help)
       sed -n '4,/^$/p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
@@ -47,7 +62,9 @@ while [ $# -gt 0 ]; do
       exit 2
       ;;
     *)
-      SANDBOX="$1"; shift ;;
+      SANDBOX="$1"
+      shift
+      ;;
   esac
 done
 
@@ -63,7 +80,7 @@ redact_inplace() {
   local target="$1"
   # macOS sed needs -i ''
   find "$target" -type f \( -name "*.json" -o -name "*.jsonl" -o -name "*.log" -o -name "*.md" -o -name "*.txt" \) -print0 \
-  | xargs -0 -I{} sed -i.bak -E \
+    | xargs -0 -I{} sed -i.bak -E \
       -e 's/(sk-ant-[A-Za-z0-9_-]{8,})[A-Za-z0-9_-]{4,}/\1__REDACTED/g' \
       -e 's/(nvapi-[A-Za-z0-9_-]{8,})[A-Za-z0-9_-]{4,}/\1__REDACTED/g' \
       -e 's/(github_pat_[A-Za-z0-9_]{8,})[A-Za-z0-9_]{4,}/\1__REDACTED/g' \
@@ -78,12 +95,13 @@ if [ "$SKIP_HOST" -eq 0 ]; then
     mkdir -p "$OUT_BASE/host/claude-logs"
     for f in "${HOME}/Library/Logs/Claude"/*.log; do
       [ -r "$f" ] || continue
-      tail -n "$TAIL_N" "$f" > "$OUT_BASE/host/claude-logs/$(basename "$f")" 2>/dev/null || true
+      tail -n "$TAIL_N" "$f" >"$OUT_BASE/host/claude-logs/$(basename "$f")" 2>/dev/null || true
     done
   fi
   if [ -d "${HOME}/.claude/sessions" ]; then
     mkdir -p "$OUT_BASE/host/claude-sessions"
     # Most recent 3 sessions only — sessions can be huge
+    # shellcheck disable=SC2012 # names are timestamps/ids we generate (no odd chars)
     ls -t "${HOME}/.claude/sessions" 2>/dev/null | head -n 3 | while read -r d; do
       cp -R "${HOME}/.claude/sessions/$d" "$OUT_BASE/host/claude-sessions/" 2>/dev/null || true
     done
@@ -93,7 +111,7 @@ if [ "$SKIP_HOST" -eq 0 ]; then
     cp "$f" "$OUT_BASE/host/$(basename "$f")"
   done
   if [ -r "${HOME}/.nemoclaw/state/shields-audit.jsonl" ]; then
-    tail -n "$TAIL_N" "${HOME}/.nemoclaw/state/shields-audit.jsonl" > "$OUT_BASE/host/shields-audit.jsonl"
+    tail -n "$TAIL_N" "${HOME}/.nemoclaw/state/shields-audit.jsonl" >"$OUT_BASE/host/shields-audit.jsonl"
   fi
   redact_inplace "$OUT_BASE/host"
 fi
@@ -101,8 +119,8 @@ fi
 if [ "$SKIP_SANDBOX" -eq 0 ]; then
   step "Collecting sandbox logs from openshell-${SANDBOX}"
   REMOTE_HOST="openshell-${SANDBOX}"
-  CHAD_DUMP_FLAGS=( "--tail" "$TAIL_N" "--category" "$CATEGORIES" )
-  [ "$NO_REDACT" -eq 1 ] && CHAD_DUMP_FLAGS+=( "--no-redact" )
+  CHAD_DUMP_FLAGS=("--tail" "$TAIL_N" "--category" "$CATEGORIES")
+  [ "$NO_REDACT" -eq 1 ] && CHAD_DUMP_FLAGS+=("--no-redact")
 
   if ssh -o BatchMode=yes -o ConnectTimeout=5 "$REMOTE_HOST" 'true' 2>/dev/null; then
     REMOTE_TAR="$(ssh "$REMOTE_HOST" "/usr/local/bin/chad-dump-logs ${CHAD_DUMP_FLAGS[*]}" 2>&1 | tail -n 1)"
@@ -112,7 +130,7 @@ if [ "$SKIP_SANDBOX" -eq 0 ]; then
       # callers run in shells where scp is on PATH but blocked. `ssh cat`
       # always works because it's just stdin/stdout.
       local_tar="$OUT_BASE/sandbox/$(basename "$REMOTE_TAR")"
-      if ssh "$REMOTE_HOST" "cat '$REMOTE_TAR'" > "$local_tar" 2>/dev/null && [ -s "$local_tar" ]; then
+      if ssh "$REMOTE_HOST" "cat '$REMOTE_TAR'" >"$local_tar" 2>/dev/null && [ -s "$local_tar" ]; then
         ssh "$REMOTE_HOST" "rm -f '$REMOTE_TAR'" 2>/dev/null || true
         tar -C "$OUT_BASE/sandbox" -xzf "$local_tar" 2>/dev/null || warn "tar -x failed"
         rm -f "$local_tar"
@@ -135,7 +153,7 @@ fi
   echo "sandbox: $SANDBOX"
   echo "tail_n: $TAIL_N"
   echo "categories: $CATEGORIES"
-  echo "redact: $((1-NO_REDACT))"
+  echo "redact: $((1 - NO_REDACT))"
   echo ""
   echo "tree:"
   if command -v tree >/dev/null 2>&1; then
@@ -143,7 +161,7 @@ fi
   else
     find "$OUT_BASE" -maxdepth 4 -type f -printf '  %p\n' 2>/dev/null | sed "s|$OUT_BASE/||" | sort
   fi
-} > "$OUT_BASE/MANIFEST.txt"
+} >"$OUT_BASE/MANIFEST.txt"
 
 step "Dump complete: $OUT_BASE"
 ls -la "$OUT_BASE"

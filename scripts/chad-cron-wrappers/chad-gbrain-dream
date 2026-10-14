@@ -143,8 +143,8 @@ HEALTH_FILE="${WORKSPACE}/memory/feedback_brain_health_${today}.md"
   echo "## Yesterday → today"
   echo ""
   yesterday="$(date -u -d 'yesterday' +%Y-%m-%d 2>/dev/null \
-               || date -u -v-1d +%Y-%m-%d 2>/dev/null \
-               || echo '')"
+    || date -u -v-1d +%Y-%m-%d 2>/dev/null \
+    || echo '')"
   if [ -n "$yesterday" ]; then
     echo "Pages added/updated since ${yesterday}:"
     # gbrain doesn't expose `--since`; list newest and post-filter for
@@ -184,7 +184,7 @@ HEALTH_FILE="${WORKSPACE}/memory/feedback_brain_health_${today}.md"
   STATS_EMBEDDED="$(printf '%s\n' "$STATS_RAW" | awk '/^Embedded:/ {print $2; exit}')"
   if [ -n "$STATS_CHUNKS" ] && [ -n "$STATS_EMBEDDED" ] && [ "$STATS_CHUNKS" -gt 0 ] 2>/dev/null; then
     PCT="$(awk -v e="$STATS_EMBEDDED" -v c="$STATS_CHUNKS" 'BEGIN {printf "%.1f", (e/c)*100}')"
-    STALE="$(( STATS_CHUNKS - STATS_EMBEDDED ))"
+    STALE="$((STATS_CHUNKS - STATS_EMBEDDED))"
     if awk -v p="$PCT" 'BEGIN {exit !(p < 95.0)}'; then
       echo "- ⚠ Embedded ${STATS_EMBEDDED}/${STATS_CHUNKS} chunks (${PCT}%). ${STALE} stale — \`gbrain embed --stale\` may be falling behind."
       EMBED_STALE="true"

@@ -172,12 +172,14 @@ bash scripts/backup-workspace.sh backup <sandbox-name>
 The `source/` directory is a git repo. Ensure:
 
 1. **Commit policy presets immediately** after creating/modifying them:
+
    ```bash
    git add nemoclaw-blueprint/policies/presets/
    git commit -m "chore(policies): update network presets"
    ```
 
 2. **Never leave WIP skills only in `tmp/`** — promote to source:
+
    ```bash
    # Once stable, move skill into the source tree
    cp -r ~/.nemoclaw/tmp/proton-calendar-skill/ \
@@ -197,10 +199,12 @@ The `source/` directory is a git repo. Ensure:
 external APIs.
 
 **Recovery:**
+
 1. Check host backups: `ls ~/.nemoclaw/backups/host/*/credentials.json`
 2. Restore the most recent: `cp ~/.nemoclaw/backups/host/<latest>/credentials.json ~/.nemoclaw/`
 3. Fix permissions: `chmod 600 ~/.nemoclaw/credentials.json`
 4. If no backup exists, re-enter credentials manually:
+
    ```bash
    nemoclaw credentials set NVIDIA_API_KEY <key>
    nemoclaw credentials set GITHUB_TOKEN <token>
@@ -214,6 +218,7 @@ external APIs.
 preferences.
 
 **Recovery:**
+
 1. Check sandbox backups: `ls ~/.nemoclaw/backups/`
 2. Restore: `bash scripts/backup-workspace.sh restore <sandbox-name> [timestamp]`
 3. If no backup exists, reconstruct from:
@@ -230,6 +235,7 @@ preferences.
 **Symptoms:** `nemoclaw onboard` can't resume; asks to start fresh.
 
 **Recovery:**
+
 1. Restore from host backup: `cp ~/.nemoclaw/backups/host/<latest>/onboard-session.json ~/.nemoclaw/`
 2. Or re-run onboard: `nemoclaw onboard` (safe but takes time)
 
@@ -239,9 +245,11 @@ preferences.
 APIs.
 
 **Recovery:**
+
 1. If in git: `git checkout -- nemoclaw-blueprint/policies/`
 2. If custom presets were in `tmp/`: restore from host backup
 3. Reapply policies:
+
    ```bash
    nemoclaw policies apply <sandbox-name>
    ```
@@ -251,6 +259,7 @@ APIs.
 **Symptoms:** Proton calendar skill, draft policies, test scripts gone.
 
 **Recovery:**
+
 1. Check host backups: `ls ~/.nemoclaw/backups/host/*/tmp/`
 2. Restore: `cp -r ~/.nemoclaw/backups/host/<latest>/tmp/ ~/.nemoclaw/tmp/`
 
@@ -309,6 +318,7 @@ old skills are gone.
 
 **Rule:** Keep a host backup of `reference-skills/` as a timestamp snapshot.
 Regeneration command:
+
 ```bash
 python3 scripts/docs-to-skills.py docs/ .agents/skills/ --prefix nemoclaw
 ```
@@ -359,6 +369,7 @@ operation.
 ```
 
 Save to `~/Library/LaunchAgents/com.nemoclaw.backup-host.plist` and load:
+
 ```bash
 launchctl load ~/Library/LaunchAgents/com.nemoclaw.backup-host.plist
 ```
@@ -420,6 +431,7 @@ git push origin chad-dev --force-with-lease
 ```
 
 **Revert** if the rebase introduces problems:
+
 ```bash
 git reset --hard pre-rebase-YYYYMMDD
 git push origin chad-dev --force-with-lease

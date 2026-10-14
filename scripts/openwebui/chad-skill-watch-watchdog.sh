@@ -30,11 +30,11 @@ LOG="${CHAD_SKILL_WATCH_WATCHDOG_LOG:-${HOME}/.nemoclaw/openwebui/chad-skill-wat
 
 mkdir -p "$(dirname "$LOG")"
 ts() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
-log() { printf '[%s] %s\n' "$(ts)" "$*" >> "$LOG"; }
+log() { printf '[%s] %s\n' "$(ts)" "$*" >>"$LOG"; }
 
 trim_log() {
-  if [ -f "$LOG" ] && [ "$(wc -l < "$LOG" 2>/dev/null || echo 0)" -gt 1000 ]; then
-    tail -800 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+  if [ -f "$LOG" ] && [ "$(wc -l <"$LOG" 2>/dev/null || echo 0)" -gt 1000 ]; then
+    tail -800 "$LOG" >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
   fi
 }
 
@@ -79,7 +79,7 @@ INBOX_LINE=$(printf '{"ts":"%s","source":"chad-skill-watch-watchdog","kind":"%s"
 ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" "
   mkdir -p \$(dirname '$INBOX')
   echo '$INBOX_LINE' >> '$INBOX'
-" >> "$LOG" 2>&1 || true
+" >>"$LOG" 2>&1 || true
 
 log "kind=$event_kind severity=$severity rc=$RC summary=$(printf '%s' "$SUMMARY" | head -c 160)"
 trim_log

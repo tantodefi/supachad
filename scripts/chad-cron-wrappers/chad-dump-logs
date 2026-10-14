@@ -33,11 +33,23 @@ OUTDIR_PREFIX="/tmp/chad-dump"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --tail) TAIL_N="$2"; shift 2 ;;
-    --since) SINCE="$2"; shift 2 ;;
-    --category) CATEGORIES="$2"; shift 2 ;;
-    --no-redact) REDACT=0; shift ;;
-    -h|--help)
+    --tail)
+      TAIL_N="$2"
+      shift 2
+      ;;
+    --since)
+      SINCE="$2"
+      shift 2
+      ;;
+    --category)
+      CATEGORIES="$2"
+      shift 2
+      ;;
+    --no-redact)
+      REDACT=0
+      shift
+      ;;
+    -h | --help)
       sed -n '4,/^$/p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
@@ -62,26 +74,27 @@ snapshot() {
   shift 2
   local dest="${DUMPDIR}/${cat}/${name}"
   mkdir -p "$(dirname "$dest")"
-  ( "$@" ) > "$dest" 2>&1 || true
+  ("$@") >"$dest" 2>&1 || true
 }
 
 copy_tail() {
   # copy_tail <category> <src> [dest-name]
-  local cat="$1" src="$2" name="${3:-$(basename "$src")}"
+  local cat="$1" src="$2"
+  local name="${3:-$(basename "$src")}"
   local dest="${DUMPDIR}/${cat}/${name}"
   mkdir -p "$(dirname "$dest")"
   if [ -r "$src" ]; then
-    tail -n "$TAIL_N" "$src" > "$dest" 2>/dev/null || true
+    tail -n "$TAIL_N" "$src" >"$dest" 2>/dev/null || true
   else
-    echo "(missing: $src)" > "$dest"
+    echo "(missing: $src)" >"$dest"
   fi
 }
 
 redact() {
   # redact common secret shapes in-place across the dumped tree.
   [ "$REDACT" -eq 1 ] || return 0
-  find "$DUMPDIR" -type f \( -name "*.json" -o -name "*.jsonl" -o -name "*.log" -o -name "*.md" -o -name "*.txt" \) -print0 |
-    xargs -0 -I{} sed -i.bak -E \
+  find "$DUMPDIR" -type f \( -name "*.json" -o -name "*.jsonl" -o -name "*.log" -o -name "*.md" -o -name "*.txt" \) -print0 \
+    | xargs -0 -I{} sed -i.bak -E \
       -e 's/(sk-ant-[A-Za-z0-9_-]{8,})[A-Za-z0-9_-]{4,}/\1__REDACTED/g' \
       -e 's/(nvapi-[A-Za-z0-9_-]{8,})[A-Za-z0-9_-]{4,}/\1__REDACTED/g' \
       -e 's/(github_pat_[A-Za-z0-9_]{8,})[A-Za-z0-9_]{4,}/\1__REDACTED/g' \
@@ -107,8 +120,9 @@ if want cron; then
   snapshot cron budget.json cat /sandbox/.openclaw-data/budget.json
   # Most recent N detached cron output files
   mkdir -p "${DUMPDIR}/cron/detached"
+  # shellcheck disable=SC2012 # names are timestamps/ids we generate (no odd chars)
   ls -t /tmp/chad-*-*.log 2>/dev/null | head -n 10 | while read -r f; do
-    tail -n "$TAIL_N" "$f" > "${DUMPDIR}/cron/detached/$(basename "$f")" 2>/dev/null || true
+    tail -n "$TAIL_N" "$f" >"${DUMPDIR}/cron/detached/$(basename "$f")" 2>/dev/null || true
   done
 fi
 
@@ -116,18 +130,19 @@ fi
 if want subagent; then
   if [ -d /sandbox/.openclaw-data/subagents ]; then
     mkdir -p "${DUMPDIR}/subagent"
+    # shellcheck disable=SC2012 # names are timestamps/ids we generate (no odd chars)
     ls -t /sandbox/.openclaw-data/subagents 2>/dev/null | head -n 10 | while read -r d; do
       sa_src="/sandbox/.openclaw-data/subagents/$d"
       sa_dst="${DUMPDIR}/subagent/$d"
       mkdir -p "$sa_dst"
       for f in result.json stderr.log stdout.log prompt.txt; do
         if [ -r "$sa_src/$f" ]; then
-          tail -n "$TAIL_N" "$sa_src/$f" > "$sa_dst/$f" 2>/dev/null || true
+          tail -n "$TAIL_N" "$sa_src/$f" >"$sa_dst/$f" 2>/dev/null || true
         fi
       done
     done
   else
-    echo "(no /sandbox/.openclaw-data/subagents dir)" > "${DUMPDIR}/subagent/_missing"
+    echo "(no /sandbox/.openclaw-data/subagents dir)" >"${DUMPDIR}/subagent/_missing"
   fi
 fi
 
@@ -181,7 +196,7 @@ fi
   echo ""
   echo "files:"
   find "$DUMPDIR" -type f -printf '  %p  (%s bytes)\n' 2>/dev/null | sed "s|$DUMPDIR/||"
-} > "${DUMPDIR}/MANIFEST.txt"
+} >"${DUMPDIR}/MANIFEST.txt"
 
 redact
 

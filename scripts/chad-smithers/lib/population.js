@@ -29,13 +29,13 @@ import { dirname } from "node:path";
 
 // ── Tunable selection policy ─────────────────────────────────────────────────
 export const POLICY = {
-  windowSize: 7,        // rolling window: average over the last N trials
-  minTrials: 3,         // don't retire a candidate before this many trials
-  retireBelow: 0.45,    // rolling mean below this (after minTrials) → retired
-  championTopK: 3,      // top-K active candidates promoted to champion (feed fusion panel)
-  targetActive: 10,     // keep at least this many active candidates (wider arena)
-  maxActive: 16,        // ceiling on simultaneous active candidates (budget)
-  expandPerRun: 4,      // spawn up to N new candidates per run to fill the arena fast
+  windowSize: 7, // rolling window: average over the last N trials
+  minTrials: 3, // don't retire a candidate before this many trials
+  retireBelow: 0.45, // rolling mean below this (after minTrials) → retired
+  championTopK: 3, // top-K active candidates promoted to champion (feed fusion panel)
+  targetActive: 10, // keep at least this many active candidates (wider arena)
+  maxActive: 16, // ceiling on simultaneous active candidates (budget)
+  expandPerRun: 4, // spawn up to N new candidates per run to fill the arena fast
 };
 
 export function loadPopulation(path) {
@@ -89,10 +89,9 @@ export function recordScore(pop, id, score, ts = new Date().toISOString(), cost 
 export function paretoFront(cands) {
   const withCost = cands.filter((c) => typeof c.rollingCost === "number");
   if (withCost.length < 2) return [];
-  const q = (c) => c.rollingMean ?? 0;        // higher is better
-  const k = (c) => c.rollingCost;             // lower is better
-  const dominates = (a, b) =>
-    q(a) >= q(b) && k(a) <= k(b) && (q(a) > q(b) || k(a) < k(b));
+  const q = (c) => c.rollingMean ?? 0; // higher is better
+  const k = (c) => c.rollingCost; // lower is better
+  const dominates = (a, b) => q(a) >= q(b) && k(a) <= k(b) && (q(a) > q(b) || k(a) < k(b));
   return withCost.filter((c) => !withCost.some((o) => o !== c && dominates(o, c)));
 }
 
@@ -105,16 +104,18 @@ export function paretoFront(cands) {
  */
 export function select(pop, policy = POLICY) {
   const active = activeCandidates(pop);
-  const ranked = active.sort(
-    (a, b) => (b.rollingMean ?? 0) - (a.rollingMean ?? 0),
-  );
+  const ranked = active.sort((a, b) => (b.rollingMean ?? 0) - (a.rollingMean ?? 0));
   // The Pareto front (quality↑ vs cost↓) is protected from retirement: a lean
   // variant that's cost-efficient survives even below the quality bar, so the
   // arena keeps the whole trade-off frontier, not just the single best.
   const frontIds = new Set(paretoFront(active).map((c) => c.id));
   const retired = [];
   for (const c of ranked) {
-    if ((c.trials ?? 0) >= policy.minTrials && (c.rollingMean ?? 0) < policy.retireBelow && !frontIds.has(c.id)) {
+    if (
+      (c.trials ?? 0) >= policy.minTrials &&
+      (c.rollingMean ?? 0) < policy.retireBelow &&
+      !frontIds.has(c.id)
+    ) {
       c.status = "retired";
       c.note = `retired: rollingMean ${c.rollingMean.toFixed(3)} < ${policy.retireBelow} after ${c.trials} trials`;
       retired.push(c.id);
@@ -145,9 +146,16 @@ export function needsExpansion(pop, policy = POLICY) {
 export function addCandidate(pop, { kind, spec, note }, ts = new Date().toISOString()) {
   const id = `${kind}-${ts.replace(/[^0-9]/g, "").slice(0, 14)}-${pop.candidates.length}`;
   pop.candidates.push({
-    id, kind, spec, status: "active",
-    trials: 0, scores: [], rollingMean: 0,
-    created: ts, lastEvaluated: null, note: note ?? "seeded",
+    id,
+    kind,
+    spec,
+    status: "active",
+    trials: 0,
+    scores: [],
+    rollingMean: 0,
+    created: ts,
+    lastEvaluated: null,
+    note: note ?? "seeded",
   });
   return id;
 }
@@ -161,8 +169,9 @@ export function champions(pop) {
 export function leaderboard(pop) {
   const rows = [...pop.candidates]
     .sort((a, b) => (b.rollingMean ?? 0) - (a.rollingMean ?? 0))
-    .map((c) =>
-      `| ${c.status === "champion" ? "🏆" : c.status === "retired" ? "🪦" : "  "} | ${c.id} | ${c.kind} | ${(c.rollingMean ?? 0).toFixed(3)} | ${c.trials ?? 0} | ${c.status} |`,
+    .map(
+      (c) =>
+        `| ${c.status === "champion" ? "🏆" : c.status === "retired" ? "🪦" : "  "} | ${c.id} | ${c.kind} | ${(c.rollingMean ?? 0).toFixed(3)} | ${c.trials ?? 0} | ${c.status} |`,
     );
   return [
     "| | candidate | kind | rolling | trials | status |",

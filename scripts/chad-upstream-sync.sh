@@ -37,11 +37,14 @@ DRY_RUN="${DRY_RUN:-}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SYNC_BRANCH="chad/upstream-sync-${STAMP}"
 
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # repo root (scripts/..)
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # repo root (scripts/..)
 cd "$here"
 
 log() { printf '[upstream-sync %s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
-die() { log "ERROR: $*"; exit 1; }
+die() {
+  log "ERROR: $*"
+  exit 1
+}
 
 command -v git >/dev/null || die "git not found"
 git remote get-url upstream >/dev/null 2>&1 || die "no 'upstream' remote (expected NVIDIA/NemoClaw)"
@@ -76,20 +79,25 @@ fi
 
 if [ "${conflict}" = "1" ]; then
   conflicts="$(git diff --name-only --diff-filter=U || true)"
-  log "conflicted paths:"; printf '%s\n' "${conflicts}" >&2
+  log "conflicted paths:"
+  printf '%s\n' "${conflicts}" >&2
   if [ -n "${DRY_RUN}" ]; then
-    log "DRY_RUN: would push ${SYNC_BRANCH} + open a conflict PR"; git merge --abort; git checkout --quiet "${BASE_BRANCH}"; exit 0
+    log "DRY_RUN: would push ${SYNC_BRANCH} + open a conflict PR"
+    git merge --abort
+    git checkout --quiet "${BASE_BRANCH}"
+    exit 0
   fi
   # Commit the conflicted state as-is so the PR shows the markers.
   git add -A
   git commit --no-verify -m "merge: upstream/main into ${BASE_BRANCH} (CONFLICTS — manual resolution needed) [${STAMP}]" >/dev/null
   git push --quiet -u origin "${SYNC_BRANCH}"
+  # shellcheck disable=SC2016 # literal backticks are markdown
   body=$(printf 'Automated upstream sync hit merge conflicts.\n\n**Do not merge as-is** — resolve the conflicts first.\n\nConflicted paths:\n```\n%s\n```\n\nChad-local paths that must be preserved: `scripts/openwebui/`, `scripts/chad-*`, `scripts/chad-cron-wrappers/`, `scripts/chad-smithers/`, `docs/design/multi-user-chad.md`.\n' "${conflicts}")
   gh pr create --base "${BASE_BRANCH}" --head "${SYNC_BRANCH}" \
     --title "chore: upstream sync ${STAMP} — ⚠ CONFLICTS need resolution" \
     --body "${body}" --label "upstream-sync" 2>/dev/null \
     || gh pr create --base "${BASE_BRANCH}" --head "${SYNC_BRANCH}" \
-         --title "chore: upstream sync ${STAMP} — CONFLICTS" --body "${body}"
+      --title "chore: upstream sync ${STAMP} — CONFLICTS" --body "${body}"
   log "opened conflict PR; exiting non-zero so the cron surfaces it"
   exit 2
 fi
@@ -97,22 +105,26 @@ fi
 # Clean merge: run the gate before proposing it.
 gate_ok=1
 if [ -f Makefile ] && grep -qE '^check:' Makefile; then
-  log "running 'make check'"; make check >/tmp/chad-upstream-check.log 2>&1 || gate_ok=0
+  log "running 'make check'"
+  make check >/tmp/chad-upstream-check.log 2>&1 || gate_ok=0
 fi
 if [ "${gate_ok}" = "0" ]; then
   log "gate FAILED (see /tmp/chad-upstream-check.log) — opening PR as draft for review"
 fi
 
 if [ -n "${DRY_RUN}" ]; then
-  log "DRY_RUN: clean merge, gate_ok=${gate_ok}; would push + open PR"; git checkout --quiet "${BASE_BRANCH}"; exit 0
+  log "DRY_RUN: clean merge, gate_ok=${gate_ok}; would push + open PR"
+  git checkout --quiet "${BASE_BRANCH}"
+  exit 0
 fi
 
 git push --quiet -u origin "${SYNC_BRANCH}"
-draft=""; [ "${gate_ok}" = "0" ] && draft="--draft"
+draft=""
+[ "${gate_ok}" = "0" ] && draft="--draft"
 gh pr create --base "${BASE_BRANCH}" --head "${SYNC_BRANCH}" ${draft} \
   --title "chore: upstream sync ${STAMP} (${behind} commits)" \
   --body "Automated clean merge of \`${UPSTREAM_REF}\` into \`${BASE_BRANCH}\`. Gate: $([ "${gate_ok}" = 1 ] && echo 'make check passed ✅' || echo 'make check FAILED ❌ — draft, review before merge'). Review + merge; never force." \
   --label "upstream-sync" 2>/dev/null \
   || gh pr create --base "${BASE_BRANCH}" --head "${SYNC_BRANCH}" ${draft} \
-       --title "chore: upstream sync ${STAMP}" --body "Clean merge of ${UPSTREAM_REF}."
+    --title "chore: upstream sync ${STAMP}" --body "Clean merge of ${UPSTREAM_REF}."
 log "opened PR for review"

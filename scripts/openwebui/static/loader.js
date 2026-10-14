@@ -45,17 +45,21 @@
       if (redirect && (redirect === "//" || /^\/{2,}/.test(redirect))) {
         params.set("redirect", "/");
         history.replaceState(null, "", location.pathname + "?" + params.toString() + location.hash);
-        console.log("[chad-loader] normalized broken auth redirect param: '" + redirect + "' → '/'");
+        console.log(
+          "[chad-loader] normalized broken auth redirect param: '" + redirect + "' → '/'",
+        );
       }
     }
     try {
       const stale = localStorage.getItem("redirectPath");
       if (stale && (stale === "//" || /^\/{2,}/.test(stale))) {
         localStorage.setItem("redirectPath", "/");
-        console.log("[chad-loader] normalized stale localStorage redirectPath: '" + stale + "' → '/'");
+        console.log(
+          "[chad-loader] normalized stale localStorage redirectPath: '" + stale + "' → '/'",
+        );
       }
-    } catch (_) {}
-  } catch (_) {}
+    } catch {}
+  } catch {}
 
   // ── Shared helpers ───────────────────────────────────────────────────────
   const CSS_ID = "chad-mc";
@@ -70,10 +74,6 @@
   const STYLE_TRIGGER_ID = "chad-mc-trigger-style";
   const STYLE_PANEL_ID = "chad-mc-style";
 
-  function sleep(ms) {
-    return new Promise((res) => setTimeout(res, ms));
-  }
-
   function cssEscape(s) {
     if (window.CSS && CSS.escape) return CSS.escape(s);
     return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -87,7 +87,7 @@
         let v = null;
         try {
           v = pred();
-        } catch (_) {}
+        } catch {}
         if (v) {
           clearInterval(timer);
           resolve(v);
@@ -101,8 +101,7 @@
 
   // ── 2. Model metadata (baked fallback + live /api/models) ────────────────
   const BAKED = {
-    "chad":
-      "Local OpenClaw agent on the chad sandbox. Use when you want access to private data/context, long-term memory (gbrain), custom skills, agent orchestration, or anything that needs tools (read/edit/exec, web, browser, cron). Slower (~20s/turn) but full agent harness with workspace files baked in.",
+    chad: "Local OpenClaw agent on the chad sandbox. Use when you want access to private data/context, long-term memory (gbrain), custom skills, agent orchestration, or anything that needs tools (read/edit/exec, web, browser, cron). Slower (~20s/turn) but full agent harness with workspace files baked in.",
     "nvidia/nemotron-3-super-120b-a12b":
       "Frontier general-purpose. 120B MoE / 12B active, NVIDIA's flagship for chat, reasoning, code, summarization. Same model Chad uses internally — pick this when you want raw inference without the agent wrapper.",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning":
@@ -129,24 +128,6 @@
       "ChatGLM frontier. Best for Chinese-language tasks, English-Chinese bilingual chat, translation. Strong reasoning in both languages.",
     "minimaxai/minimax-m2.5":
       "MiniMax frontier. Strong at long-context document processing, creative writing, narrative generation. Pick when you have a lot of context to thread through.",
-  };
-
-  // Display-name prefixes for matching trigger labels back to descriptions.
-  const NAME_PREFIXES = {
-    "Chad": BAKED["chad"],
-    "Nemotron 3 Super": BAKED["nvidia/nemotron-3-super-120b-a12b"],
-    "Nemotron 3 Nano": BAKED["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"],
-    "Llama 3.3 70B": BAKED["meta/llama-3.3-70b-instruct"],
-    "Llama 3.1 405B": BAKED["meta/llama-3.1-405b-instruct"],
-    "Llama 3.1 70B": BAKED["meta/llama-3.1-70b-instruct"],
-    "Mixtral": BAKED["mistralai/mixtral-8x22b-instruct-v0.1"],
-    "Gemma": BAKED["google/gemma-3-27b-it"],
-    "GPT-OSS 20B": BAKED["openai/gpt-oss-20b"],
-    "GPT-OSS 120B": BAKED["openai/gpt-oss-120b"],
-    "Phi-4": BAKED["microsoft/phi-4-multimodal-instruct"],
-    "Qwen3 Coder": BAKED["qwen/qwen3-coder-480b-a35b-instruct"],
-    "GLM-5.1": BAKED["z-ai/glm-5.1"],
-    "MiniMax": BAKED["minimaxai/minimax-m2.5"],
   };
 
   const MODEL_STATE = { models: [], byId: {}, tags: {}, fetchedAt: 0, fetched: false };
@@ -200,18 +181,6 @@
     return null;
   }
 
-  function descriptionForLabel(label) {
-    if (!label) return null;
-    const trimmed = label.trim();
-    for (const prefix of Object.keys(NAME_PREFIXES)) {
-      if (trimmed.startsWith(prefix)) return NAME_PREFIXES[prefix];
-    }
-    const rec = MODEL_STATE.models.find(
-      (m) => m.name === trimmed || trimmed.startsWith(m.name.split(" — ")[0])
-    );
-    return rec && rec.description ? rec.description : null;
-  }
-
   // ── 2a. Dropdown tooltip annotation ──────────────────────────────────────
   // open-webui's listbox is windowed: the same DOM nodes get recycled for
   // different models during scroll. Re-patch keyed on the CURRENT data-value.
@@ -222,7 +191,7 @@
     if (el.dataset.chadTippy === key) return false;
     try {
       inst.setContent(newContent);
-    } catch (_) {
+    } catch {
       return false;
     }
     el.dataset.chadTippy = key;
@@ -346,16 +315,26 @@
       const st = document.createElement("style");
       st.id = STYLE_TRIGGER_ID;
       st.textContent =
-        "#" + TRIGGER_ID + " {" +
+        "#" +
+        TRIGGER_ID +
+        " {" +
         "  display: inline-flex; align-items: center; gap: 0.35rem; height: 1.75rem;" +
         "  padding: 0 0.65rem; margin: 0 0.25rem; border-radius: 0.6rem;" +
         "  font-size: 0.75rem; font-weight: 500; cursor: pointer; white-space: nowrap;" +
         "  color: #4f46e5; background: rgba(79,70,229,0.08); border: 1px solid rgba(79,70,229,0.35);" +
         "}" +
-        "#" + TRIGGER_ID + ":hover { background: rgba(79,70,229,0.15); }" +
-        "#" + TRIGGER_ID + " .chad-mc-label { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }" +
-        "html.dark #" + TRIGGER_ID + " { color: #818cf8; background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.4); }" +
-        "html.dark #" + TRIGGER_ID + ":hover { background: rgba(99,102,241,0.2); }";
+        "#" +
+        TRIGGER_ID +
+        ":hover { background: rgba(79,70,229,0.15); }" +
+        "#" +
+        TRIGGER_ID +
+        " .chad-mc-label { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }" +
+        "html.dark #" +
+        TRIGGER_ID +
+        " { color: #818cf8; background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.4); }" +
+        "html.dark #" +
+        TRIGGER_ID +
+        ":hover { background: rgba(99,102,241,0.2); }";
       (document.head || document.documentElement).appendChild(st);
     }
   }
@@ -385,7 +364,7 @@
     const label = currentModelName();
     if (!label) return null;
     const rec = MODEL_STATE.models.find(
-      (m) => m.name === label || label.startsWith(m.name.split(" — ")[0])
+      (m) => m.name === label || label.startsWith(m.name.split(" — ")[0]),
     );
     return rec ? rec.id : null;
   }
@@ -405,13 +384,23 @@
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
     panel.innerHTML =
-      '<input id="' + SEARCH_ID + '" type="text" placeholder="Search models…" autocomplete="off">' +
+      '<input id="' +
+      SEARCH_ID +
+      '" type="text" placeholder="Search models…" autocomplete="off">' +
       '<div style="display:flex;align-items:center;gap:0.5rem;">' +
-      '<span id="' + COUNT_ID + '"></span>' +
-      '<button id="' + CLEAR_ID + '" type="button">Clear</button>' +
+      '<span id="' +
+      COUNT_ID +
+      '"></span>' +
+      '<button id="' +
+      CLEAR_ID +
+      '" type="button">Clear</button>' +
       "</div>" +
-      '<div id="' + CLOUD_ID + '"></div>' +
-      '<div id="' + LIST_ID + '"></div>';
+      '<div id="' +
+      CLOUD_ID +
+      '"></div>' +
+      '<div id="' +
+      LIST_ID +
+      '"></div>';
     return panel;
   }
 
@@ -465,8 +454,12 @@
     listEl.innerHTML = "";
     if (countEl) {
       countEl.textContent =
-        filtered.length + " model" + (filtered.length === 1 ? "" : "s") +
-        (selected.size > 0 ? " · " + selected.size + " categor" + (selected.size === 1 ? "y" : "ies") : "");
+        filtered.length +
+        " model" +
+        (filtered.length === 1 ? "" : "s") +
+        (selected.size > 0
+          ? " · " + selected.size + " categor" + (selected.size === 1 ? "y" : "ies")
+          : "");
     }
 
     if (filtered.length === 0) {
@@ -539,9 +532,7 @@
       input.dispatchEvent(new Event("input", { bubbles: true }));
 
       const opt = await waitFor(() => {
-        return document.querySelector(
-          '[role="option"][data-value="' + cssEscape(modelId) + '"]'
-        );
+        return document.querySelector('[role="option"][data-value="' + cssEscape(modelId) + '"]');
       }, 1200);
       if (opt) {
         opt.click();
@@ -757,7 +748,7 @@
   };
   console.log(
     "[chad-loader] v3 loaded — tooltips + top-nav 'Switch Model' search. " +
-    "Try the Switch Model button in the top bar, or chadModelCloud.refresh()."
+      "Try the Switch Model button in the top bar, or chadModelCloud.refresh().",
   );
 })();
 
@@ -862,7 +853,7 @@
       // window.__BROWSER_VM = { autoOpen: false }) to go back to lazy.
       autoOpen: true,
     },
-    window.__BROWSER_VM || {}
+    window.__BROWSER_VM || {},
   );
 
   const STATE = {
@@ -1030,7 +1021,10 @@
       // makeCheerpxAdapter() reads STATE.cxLib, so the library must be loaded
       // first. resolveAdapter() does this on the boot path; switchTerminal()
       // uses createAdapter() directly, so load it here too.
-      createAdapter: async () => { await loadCheerpX(); return makeCheerpxAdapter(); },
+      createAdapter: async () => {
+        await loadCheerpX();
+        return makeCheerpxAdapter();
+      },
     },
     docker: {
       id: "docker",
@@ -1042,7 +1036,6 @@
   };
 
   let currentTerminalType = "webvm"; // default
-  let dockerAdapter = null;
 
   function ensureBar() {
     if (barEl && document.body.contains(barEl)) return barEl;
@@ -1054,7 +1047,12 @@
     // Make the bar draggable. A pointer-down that never moves past a small
     // threshold is treated as a click (used to expand the collapsed pill), so
     // dragging and tapping the thumbnail do not fight each other.
-    let dragOffsetX = 0, dragOffsetY = 0, isDragging = false, moved = false, downX = 0, downY = 0;
+    let dragOffsetX = 0,
+      dragOffsetY = 0,
+      isDragging = false,
+      moved = false,
+      downX = 0,
+      downY = 0;
     const DRAG_THRESHOLD = 4;
 
     const beginDrag = (cx, cy, e) => {
@@ -1103,15 +1101,23 @@
     });
     document.addEventListener("mousemove", (e) => moveDrag(e.clientX, e.clientY));
     document.addEventListener("mouseup", endDrag);
-    barEl.addEventListener("touchstart", (e) => {
-      const t = e.touches[0];
-      beginDrag(t.clientX, t.clientY, e);
-    }, { passive: false });
-    document.addEventListener("touchmove", (e) => {
-      if (!isDragging) return;
-      const t = e.touches[0];
-      moveDrag(t.clientX, t.clientY);
-    }, { passive: false });
+    barEl.addEventListener(
+      "touchstart",
+      (e) => {
+        const t = e.touches[0];
+        beginDrag(t.clientX, t.clientY, e);
+      },
+      { passive: false },
+    );
+    document.addEventListener(
+      "touchmove",
+      (e) => {
+        if (!isDragging) return;
+        const t = e.touches[0];
+        moveDrag(t.clientX, t.clientY);
+      },
+      { passive: false },
+    );
     document.addEventListener("touchend", endDrag);
 
     const dot = document.createElement("span");
@@ -1229,7 +1235,11 @@
   function setBarCollapsed(on, skipSnap) {
     const bar = ensureBar();
     bar.classList.toggle("bv-collapsed", !!on);
-    try { localStorage.setItem(BAR_COLLAPSE_KEY, on ? "1" : "0"); } catch (_) { /* private mode */ }
+    try {
+      localStorage.setItem(BAR_COLLAPSE_KEY, on ? "1" : "0");
+    } catch {
+      /* private mode */
+    }
     if (on && !skipSnap) {
       // Collapsing docks the pill to whichever horizontal edge it is nearest.
       snapBarToEdge();
@@ -1238,7 +1248,11 @@
   }
 
   function loadCollapsed() {
-    try { return localStorage.getItem(BAR_COLLAPSE_KEY) === "1"; } catch (_) { return false; }
+    try {
+      return localStorage.getItem(BAR_COLLAPSE_KEY) === "1";
+    } catch {
+      return false;
+    }
   }
 
   // Snap the bar's left edge to whichever side of the viewport it is closest to,
@@ -1261,14 +1275,23 @@
   function saveBarPos() {
     if (!barEl) return;
     try {
-      localStorage.setItem(BAR_POS_KEY, JSON.stringify({ left: barEl.style.left, top: barEl.style.top }));
-    } catch (_) { /* private mode */ }
+      localStorage.setItem(
+        BAR_POS_KEY,
+        JSON.stringify({ left: barEl.style.left, top: barEl.style.top }),
+      );
+    } catch {
+      /* private mode */
+    }
   }
 
   function restoreBarPos() {
     if (!barEl) return;
     let pos = null;
-    try { pos = JSON.parse(localStorage.getItem(BAR_POS_KEY) || "null"); } catch (_) { pos = null; }
+    try {
+      pos = JSON.parse(localStorage.getItem(BAR_POS_KEY) || "null");
+    } catch {
+      pos = null;
+    }
     if (pos && pos.left && pos.top) {
       barEl.style.left = pos.left;
       barEl.style.right = "auto";
@@ -1293,7 +1316,6 @@
       setBar("error", "No chat ID available");
       return;
     }
-    const prevType = currentTerminalType;
     setBar("booting", "Switching to " + info.name + "…");
 
     try {
@@ -1301,7 +1323,11 @@
       //    which disposes the console) leaves one terminal + one scrollback for
       //    the incoming adapter — the fix for "WebVM dead after switching back".
       if (STATE.pubAdapter && typeof STATE.pubAdapter.detach === "function") {
-        try { await STATE.pubAdapter.detach(); } catch (_) { /* keep going */ }
+        try {
+          await STATE.pubAdapter.detach();
+        } catch {
+          /* keep going */
+        }
       }
       // Keep the agent relay connected across the switch (it routes agent exec to
       // whichever terminal is now active). Dropping it here is what produced the
@@ -1312,7 +1338,11 @@
       STATE.cx = null;
       // Visually reset the shared terminal so the new backend starts clean.
       if (STATE.console && STATE.console.term) {
-        try { STATE.console.term.clear(); } catch (_) { /* fresh console */ }
+        try {
+          STATE.console.term.clear();
+        } catch {
+          /* fresh console */
+        }
       }
 
       // 2. Activate the new adapter, then init it. pubAdapter is set FIRST so
@@ -1358,7 +1388,7 @@
   // exec() calls type into that same tty, so both sides share one machine and
   // one scrollback.
   let dockEl = null;
-  let chipEl = null;  // only used by ensureChip() to sweep a stale cached-loader chip
+  let chipEl = null; // only used by ensureChip() to sweep a stale cached-loader chip
 
   function ensureDock() {
     if (dockEl && document.body.contains(dockEl)) return dockEl;
@@ -1426,7 +1456,7 @@
     if (!c || !c.fit || !c.term) return;
     try {
       c.fit.fit();
-    } catch (_) {
+    } catch {
       /* the dock can be display:none, so there is nothing to measure yet */
     }
   }
@@ -1436,7 +1466,7 @@
     if (!t) return;
     try {
       if (typeof t.focus === "function") t.focus();
-    } catch (_) {
+    } catch {
       /* no-op */
     }
   }
@@ -1565,7 +1595,7 @@
     try {
       // Ensure proper line endings
       t.write(text.replace(/\n/g, "\r\n"));
-    } catch (_) {
+    } catch {
       /* no-op */
     }
   }
@@ -1586,7 +1616,11 @@
   // Kept for API/back-compat (window.__owuiVm.setShare); the "off" direction is
   // a no-op now that sharing is always on. Clear any stale persisted "off".
   function setShare(_on) {
-    try { localStorage.removeItem(SHARE_KEY); } catch (_) { /* private mode */ }
+    try {
+      localStorage.removeItem(SHARE_KEY);
+    } catch {
+      /* private mode */
+    }
     connectRelay();
   }
 
@@ -1599,7 +1633,11 @@
   // ensureMenu, toggleMenu, closeMenu, chipHost, isEditorSurface) were deleted.
   function ensureChip() {
     if (chipEl && typeof chipEl.remove === "function") {
-      try { chipEl.remove(); } catch (_) { /* already detached */ }
+      try {
+        chipEl.remove();
+      } catch {
+        /* already detached */
+      }
     }
     chipEl = null;
     return null;
@@ -1612,7 +1650,7 @@
     try {
       const stored = JSON.parse(localStorage.getItem("chat") || "null");
       if (stored && stored.id) return String(stored.id);
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     return null;
@@ -1710,11 +1748,11 @@
 
   async function resolveAdapter() {
     if (window.__BROWSER_VM_FORCE_MOCK) return makeMockAdapter();
-    
+
     if (currentTerminalType === "docker") {
       return await makeDockerAdapter();
     }
-    
+
     try {
       await loadCheerpX();
       return await makeCheerpxAdapter();
@@ -1770,7 +1808,7 @@
         STATE.ready = true;
         setBar("ready", "VM(mock): " + chatId.slice(0, 8) + " ready");
       },
-      async exec(cmd, opts) {
+      async exec(cmd, _opts) {
         const t0 = Date.now();
         await sleep(50);
         return {
@@ -1909,7 +1947,7 @@
       if (t) {
         try {
           t.write(chunk);
-        } catch (_) {
+        } catch {
           /* a torn-down terminal must not stall the VM's output path */
         }
       }
@@ -1969,8 +2007,8 @@
     const host = dock.querySelector("#bv-term-xterm");
     if (!host) throw new Error("terminal host missing from dock");
     const term = new lib.Terminal({
-      convertEol: true,  // Properly handle \r\n -> \n conversion
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      convertEol: true, // Properly handle \r\n -> \n conversion
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fontSize: 12,
       cursorBlink: true,
       theme: { background: "#000000" },
@@ -2144,7 +2182,11 @@
         const cx = STATE.cx;
         STATE.cx = null;
         if (cx && typeof cx.delete === "function") {
-          try { cx.delete(); } catch (_) { /* best effort */ }
+          try {
+            cx.delete();
+          } catch {
+            /* best effort */
+          }
         }
       },
 
@@ -2156,7 +2198,7 @@
         if (enc === "b64") {
           try {
             text = b64ToBinary(data);
-          } catch (_) {
+          } catch {
             return; // malformed frame: drop it rather than kill the handler
           }
         }
@@ -2173,7 +2215,7 @@
         for (const kc of parsed.codes) {
           try {
             con.send(kc);
-          } catch (_) {
+          } catch {
             /* pod died mid-keystroke; the relay will report the session as gone */
           }
         }
@@ -2185,7 +2227,7 @@
         if (con.term) {
           try {
             con.term.resize(cols, rows);
-          } catch (_) {
+          } catch {
             /* best effort; the guest redraws on the next prompt */
           }
         }
@@ -2195,7 +2237,7 @@
         if (STATE.cx && con.send) {
           try {
             con.send = STATE.cx.setCustomConsole(con.sink.write, cols, rows);
-          } catch (_) {
+          } catch {
             /* keep the previous handler rather than lose input entirely */
           }
         }
@@ -2228,7 +2270,13 @@
       // newline here: the caller owns the line terminator, and `extra` (the
       // exit code argument) has to land on the same line as the format.
       const marker = (tag, extra) =>
-        "printf '\\033]999;bv%s%s" + tag + "\\007' " + shQuote(half) + " " + shQuote(rest) + (extra || "");
+        "printf '\\033]999;bv%s%s" +
+        tag +
+        "\\007' " +
+        shQuote(half) +
+        " " +
+        shQuote(rest) +
+        (extra || "");
 
       // Order matters. `stty -echo` stops the tty reflecting what we type, and
       // blanking PS1 keeps the shell's own prompts out of the captured text.
@@ -2328,7 +2376,7 @@
         const kc = parsed.codes[i];
         try {
           con.send(kc);
-        } catch (_) {
+        } catch {
           /* keep going: a dropped key is better than a hung exec */
         }
         if (kc === 13) await sleep(0);
@@ -2348,7 +2396,7 @@
       for (const kc of parsed.codes) {
         try {
           con.send(kc);
-        } catch (_) {
+        } catch {
           /* nothing left to do */
         }
       }
@@ -2363,7 +2411,10 @@
     let dockerExecQueue = Promise.resolve();
     const dockerEnqueue = (job) => {
       const run = dockerExecQueue.then(job, job);
-      dockerExecQueue = run.then(() => undefined, () => undefined);
+      dockerExecQueue = run.then(
+        () => undefined,
+        () => undefined,
+      );
       return run;
     };
 
@@ -2377,7 +2428,9 @@
     async function teardownDocker() {
       if (dockerKeepalive) clearInterval(dockerKeepalive);
       if (dockerWs) {
-        try { dockerWs.close(); } catch (_) {}
+        try {
+          dockerWs.close();
+        } catch {}
         dockerWs = null;
       }
       dockerSessionId = null;
@@ -2397,7 +2450,7 @@
         const res = await fetch(`${base}/api/v1/terminals/docker-term/api/cmd`, {
           method: "POST",
           headers: {
-            "Authorization": "Bearer " + token,
+            Authorization: "Bearer " + token,
             "Content-Type": "application/json",
             "X-Session-Id": cid,
           },
@@ -2410,7 +2463,11 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          return { exit: -1, stdout: "", stderr: data.message || ("docker exec failed: " + res.status) };
+          return {
+            exit: -1,
+            stdout: "",
+            stderr: data.message || "docker exec failed: " + res.status,
+          };
         }
         return {
           exit: typeof data.exit === "number" ? data.exit : 0,
@@ -2443,11 +2500,11 @@
           // Create session
           const createRes = await fetch(`${baseUrl}/api/v1/terminals/docker-term/api/terminals`, {
             method: "POST",
-            headers: { 
-              "Authorization": "Bearer " + token,
+            headers: {
+              Authorization: "Bearer " + token,
               "Content-Type": "application/json",
-              "X-Session-Id": chatId
-            }
+              "X-Session-Id": chatId,
+            },
           });
           if (!createRes.ok) throw new Error("Failed to create session: " + createRes.status);
           const session = await createRes.json();
@@ -2506,11 +2563,13 @@
 
           // Send initial resize
           if (STATE.console && dockerWs) {
-            dockerWs.send(JSON.stringify({ 
-              type: "resize", 
-              cols: STATE.console.term.cols, 
-              rows: STATE.console.term.rows 
-            }));
+            dockerWs.send(
+              JSON.stringify({
+                type: "resize",
+                cols: STATE.console.term.cols,
+                rows: STATE.console.term.rows,
+              }),
+            );
           }
 
           // Setup keepalive
@@ -2553,7 +2612,9 @@
         if (enc === "b64") {
           try {
             text = b64ToBinary(data);
-          } catch (_) { return; }
+          } catch {
+            return;
+          }
         }
         if (dockerWs && dockerWs.readyState === WebSocket.OPEN) {
           dockerWs.send(text);
@@ -2603,7 +2664,7 @@
       if (con.el) {
         try {
           while (con.el.firstChild) con.el.removeChild(con.el.firstChild);
-        } catch (_) {
+        } catch {
           /* already detached */
         }
       }
@@ -2611,13 +2672,13 @@
       // mirroring: a dead pod must not keep writing to a live terminal.
       try {
         con.sink.flush();
-      } catch (_) {
+      } catch {
         /* best effort */
       }
       if (con.term && typeof con.term.dispose === "function") {
         try {
           con.term.dispose();
-        } catch (_) {
+        } catch {
           /* xterm may already be gone with its element */
         }
       }
@@ -2630,7 +2691,7 @@
         // worker and the whole disk image on every reset.
         if (typeof cx.delete === "function") cx.delete();
         else if (cx.close) await cx.close();
-      } catch (_) {
+      } catch {
         /* best-effort shutdown */
       }
     }
@@ -2679,13 +2740,16 @@
     // Chip is off: stay unregistered so the agent gets an explicit
     // no_browser instead of silently sharing a VM the user disabled.
     if (!shareEnabled()) return;
-    if (STATE.ws && (STATE.ws.readyState === WebSocket.OPEN || STATE.ws.readyState === WebSocket.CONNECTING)) {
+    if (
+      STATE.ws &&
+      (STATE.ws.readyState === WebSocket.OPEN || STATE.ws.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
     let ws;
     try {
       ws = new WebSocket(relayUrl());
-    } catch (e) {
+    } catch {
       setBar("error", "WS failed");
       return;
     }
@@ -2704,7 +2768,7 @@
     ws.addEventListener("error", () => {
       try {
         ws.close();
-      } catch (_) {
+      } catch {
         /* ignore */
       }
     });
@@ -2735,7 +2799,7 @@
       try {
         ws.onclose = null;
         ws.close();
-      } catch (_) {
+      } catch {
         /* already closing/closed */
       }
     }
@@ -2747,7 +2811,7 @@
     if (text && (text.startsWith("{") || text.startsWith("["))) {
       try {
         msg = JSON.parse(text);
-      } catch (_) {
+      } catch {
         msg = null;
       }
     }
@@ -2801,7 +2865,7 @@
     if (STATE.ws && STATE.ws.readyState === WebSocket.OPEN) {
       try {
         STATE.ws.send(typeof data === "string" ? data : String(data));
-      } catch (_) {
+      } catch {
         /* drop on failure; keepalive/reconnect covers it */
       }
     }
@@ -2818,7 +2882,7 @@
       if (STATE.console && STATE.console.term) {
         STATE.console.term.resize(cols, rows);
       }
-    } catch (_) {
+    } catch {
       /* best-effort */
     }
   }
@@ -2839,12 +2903,14 @@
     await ensureBooted();
     // Collaboration: show the agent's command and its result in the same
     // terminal the user is typing into, so both sides watch one machine.
-    const oneLine = String(msg.cmd || "").replace(/\s+/g, " ").trim();
+    const oneLine = String(msg.cmd || "")
+      .replace(/\s+/g, " ")
+      .trim();
     setAgentState("agent: " + oneLine.slice(0, 60), true);
     agentWrite("\r\n\x1b[2m[agent]\x1b[0m " + msg.cmd + "\r\n");
     try {
       const timedOut = new Promise((_, rej) =>
-        setTimeout(() => rej(new Error("exec timed out in browser")), timeout)
+        setTimeout(() => rej(new Error("exec timed out in browser")), timeout),
       );
       result = await Promise.race([
         Promise.resolve(STATE.pubAdapter.exec(msg.cmd, { cwd: msg.cwd, timeout_ms: timeout })),
@@ -2861,7 +2927,7 @@
           exit: Number.isInteger(result.exit) ? result.exit : -1,
           stdout: clip(String(result.stdout || "")),
           stderr: clip(String(result.stderr || "")),
-        })
+        }),
       );
     }
     // exec() types the command into the shared tty and recovers its output from

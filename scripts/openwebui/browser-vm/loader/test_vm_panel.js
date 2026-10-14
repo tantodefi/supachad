@@ -431,8 +431,12 @@ global.fetch = async (url, opts) => {
   return {
     ok: true,
     status: 200,
-    async json() { return body; },
-    async text() { return ""; },
+    async json() {
+      return body;
+    },
+    async text() {
+      return "";
+    },
   };
 };
 
@@ -496,7 +500,6 @@ const drain = (ms) => new Promise((r) => realSetTimeout(r, ms));
 const ttyLog = [];
 let lastConsole = null;
 const enc = new TextEncoder();
-const dec = new TextDecoder("utf-8");
 
 function emitBytes() {
   const con = lastConsole;
@@ -792,7 +795,11 @@ async function noCheerpXMode() {
   const res = await vm.exec("uname -a");
   check("exec on a dead VM reports a non-zero exit", res && res.exit !== 0, JSON.stringify(res));
   check("exec on a dead VM never returns exit 0", res.exit !== 0, JSON.stringify(res));
-  check("exec on a dead VM explains itself", /unavailable/i.test(res.stderr || ""), JSON.stringify(res));
+  check(
+    "exec on a dead VM explains itself",
+    /unavailable/i.test(res.stderr || ""),
+    JSON.stringify(res),
+  );
   check(
     "exec on a dead VM fabricates no stdout",
     !/\[mock\]/.test(res.stdout || ""),
@@ -813,11 +820,23 @@ async function noCheerpXMode() {
   // written by a socket that has since closed.
   const allSent = () => sockets.flatMap((s) => s.sent.map((x) => String(x)));
   const frames = allSent().filter((s) => s.includes("nc1"));
-  check("the dead VM still answers the relay's exec", frames.length > 0, allSent().join(" | ").slice(-300));
+  check(
+    "the dead VM still answers the relay's exec",
+    frames.length > 0,
+    allSent().join(" | ").slice(-300),
+  );
   const frame = frames.map((s) => JSON.parse(s)).pop();
   check("the relayed result is a failure", frame.exit !== 0, JSON.stringify(frame));
-  check("the relayed result carries no mock output", !/\[mock\]/.test(JSON.stringify(frame)), JSON.stringify(frame));
-  check("the relayed result explains itself", /unavailable/i.test(frame.stderr || ""), JSON.stringify(frame));
+  check(
+    "the relayed result carries no mock output",
+    !/\[mock\]/.test(JSON.stringify(frame)),
+    JSON.stringify(frame),
+  );
+  check(
+    "the relayed result explains itself",
+    /unavailable/i.test(frame.stderr || ""),
+    JSON.stringify(frame),
+  );
 }
 
 async function main() {
@@ -846,7 +865,6 @@ async function main() {
 
   const vm = global.window.__owuiVm;
   const open = (sel) => body.querySelector(sel);
-  const live = () => sockets.filter((s) => s.readyState === 1);
   const lastSock = () => sockets[sockets.length - 1];
   const allSent = () => sockets.flatMap((s) => s.sent.map((x) => String(x)));
 
@@ -881,11 +899,7 @@ async function main() {
     vm.getState().terminalOpen === true,
     JSON.stringify(vm.getState()),
   );
-  check(
-    "auto-open is the default",
-    vm.getState().autoOpen === true,
-    JSON.stringify(vm.getState()),
-  );
+  check("auto-open is the default", vm.getState().autoOpen === true, JSON.stringify(vm.getState()));
   check(
     "a chat, sharing and auto-open together mean open",
     vm.shouldAutoOpen() === true,
@@ -900,7 +914,13 @@ async function main() {
   check("setBarCollapsed(true) collapses the bar", vm.getState().barCollapsed === true);
   check(
     "collapsed state is persisted",
-    (() => { try { return localStorage.getItem("bv.barCollapsed") === "1"; } catch (_) { return false; } })(),
+    (() => {
+      try {
+        return localStorage.getItem("bv.barCollapsed") === "1";
+      } catch {
+        return false;
+      }
+    })(),
   );
   check(
     "collapsing does not close a running terminal",
@@ -991,7 +1011,11 @@ async function main() {
     // stayed "idle" while the dock reported "no console", so a total CheerpX
     // failure looked identical to a VM that was merely not open yet.
     const barLabel = open("#bv-vmbar").querySelector("#bv-vmbar-label").textContent;
-    check("the bar never reports a boot failure", !/boot failed|unavailable/i.test(barLabel), barLabel);
+    check(
+      "the bar never reports a boot failure",
+      !/boot failed|unavailable/i.test(barLabel),
+      barLabel,
+    );
     const dock = open("#bv-term");
     const stateLine = dock.querySelector("#bv-term-state").textContent;
     check("dock state line is not the idle placeholder", stateLine !== "idle", stateLine);
@@ -1132,7 +1156,7 @@ async function main() {
         sock.sent.map((x) => {
           try {
             return JSON.parse(String(x));
-          } catch (_) {
+          } catch {
             return null;
           }
         });
@@ -1285,7 +1309,8 @@ async function main() {
       await drain(20);
       check(
         "native dock keystrokes reach the guest as keycodes",
-        ttyLog.some(([k, d]) => k === "send" && d === 108) && ttyLog.some(([k, d]) => k === "send" && d === 13),
+        ttyLog.some(([k, d]) => k === "send" && d === 108) &&
+          ttyLog.some(([k, d]) => k === "send" && d === 13),
         JSON.stringify(ttyLog),
       );
       check(
@@ -1357,11 +1382,7 @@ async function main() {
         fakeTty.pwd === "/var/tmp",
         "pwd=" + fakeTty.pwd,
       );
-      check(
-        "a timeout still restores the tty echo",
-        fakeTty.echo === true,
-        "echo=" + fakeTty.echo,
-      );
+      check("a timeout still restores the tty echo", fakeTty.echo === true, "echo=" + fakeTty.echo);
 
       // Output past the clip limit must be truncated on the way upstream.
       sock._recv({ type: "exec", id: "e3", cmd: "flood:big", timeout_ms: 5000 });
@@ -1404,8 +1425,12 @@ async function main() {
       );
       check(
         "back-to-back execs do not capture each other",
-        q1 && q2 && /first/.test(q1.stdout) && !/second/.test(q1.stdout) &&
-          /second/.test(q2.stdout) && !/first/.test(q2.stdout),
+        q1 &&
+          q2 &&
+          /first/.test(q1.stdout) &&
+          !/second/.test(q1.stdout) &&
+          /second/.test(q2.stdout) &&
+          !/first/.test(q2.stdout),
         JSON.stringify([q1 && q1.stdout, q2 && q2.stdout]),
       );
 
@@ -1413,7 +1438,11 @@ async function main() {
       sock._recv({ type: "exec", id: "e4", cmd: "fail:7", timeout_ms: 5000 });
       await drain(300);
       const failed = parseSent().find((m) => m && m.type === "exec_result" && m.id === "e4");
-      check("a non-zero exit code is reported", failed && failed.exit === 7, JSON.stringify(failed));
+      check(
+        "a non-zero exit code is reported",
+        failed && failed.exit === 7,
+        JSON.stringify(failed),
+      );
       check(
         "stderr is merged into stdout, as a tty actually behaves",
         failed && failed.stderr === "" && failed.stdout.indexOf("err") >= 0,
@@ -1463,7 +1492,10 @@ async function main() {
       check("term:require acks with term:ready", acked, JSON.stringify(sock.sent.slice(-3)));
     } else {
       check("mock adapter has no console to drive", lastConsole === null);
-      check("mock adapter reports no console in the dock", /no console/i.test(open("#bv-term").querySelector("#bv-term-state").textContent));
+      check(
+        "mock adapter reports no console in the dock",
+        /no console/i.test(open("#bv-term").querySelector("#bv-term-state").textContent),
+      );
     }
   } catch (e) {
     failures.push("collaboration threw: " + e.message);
@@ -1481,12 +1513,13 @@ async function main() {
         (global.__cxDeleted || 0) > deletedBefore,
         deletedBefore + " -> " + global.__cxDeleted,
       );
-      check("reset leaves a ready pod", vm.getState().ready === true, JSON.stringify(vm.getState()));
-      check("reset builds a fresh terminal", fakeTerminals.length > termsBefore);
       check(
-        "the old terminal was disposed",
-        fakeTerminals[termsBefore - 1].disposed === true,
+        "reset leaves a ready pod",
+        vm.getState().ready === true,
+        JSON.stringify(vm.getState()),
       );
+      check("reset builds a fresh terminal", fakeTerminals.length > termsBefore);
+      check("the old terminal was disposed", fakeTerminals[termsBefore - 1].disposed === true);
       check(
         "the fresh console is wired to the fresh pod",
         lastConsole && lastConsole.pod !== fakeTerminals[termsBefore - 1],
@@ -1618,13 +1651,19 @@ async function main() {
   if (MODE === "cheerpx") {
     try {
       const toggle = (t) =>
-        open("#bv-vmbar").querySelectorAll(".bv-terminal-toggle").find((b) => b.dataset.type === t);
+        open("#bv-vmbar")
+          .querySelectorAll(".bv-terminal-toggle")
+          .find((b) => b.dataset.type === t);
       const termsBefore = fakeTerminals.length;
       const consoleTerm = fakeTerminals[fakeTerminals.length - 1];
 
       await vm.switchTerminal("docker");
       await drain(30);
-      check("switch to docker reports ready", vm.getState().ready === true, JSON.stringify(vm.getState()));
+      check(
+        "switch to docker reports ready",
+        vm.getState().ready === true,
+        JSON.stringify(vm.getState()),
+      );
       check(
         "docker session created via the OpenWebUI proxy",
         global.fetchCalls.some((c) => c.url.includes("/terminals/docker-term/")),
@@ -1642,10 +1681,23 @@ async function main() {
       dockerSock._open();
       await drain(10);
       const dockerAuth = dockerSock.sent
-        .map((s) => { try { return JSON.parse(s); } catch (_) { return null; } })
+        .map((s) => {
+          try {
+            return JSON.parse(s);
+          } catch {
+            return null;
+          }
+        })
         .find((m) => m && m.type === "auth");
-      check("docker auth frame carries the chat_id", !!dockerAuth && !!dockerAuth.chat_id, JSON.stringify(dockerAuth));
-      check("docker toggle is marked active", !!toggle("docker") && toggle("docker").classList.contains("active"));
+      check(
+        "docker auth frame carries the chat_id",
+        !!dockerAuth && !!dockerAuth.chat_id,
+        JSON.stringify(dockerAuth),
+      );
+      check(
+        "docker toggle is marked active",
+        !!toggle("docker") && toggle("docker").classList.contains("active"),
+      );
       check(
         "switching to docker reuses the same console (no new terminal)",
         fakeTerminals.length === termsBefore,
@@ -1680,8 +1732,15 @@ async function main() {
 
       await vm.switchTerminal("webvm");
       await drain(30);
-      check("switch back to webvm reports ready", vm.getState().ready === true, JSON.stringify(vm.getState()));
-      check("webvm toggle is marked active", !!toggle("webvm") && toggle("webvm").classList.contains("active"));
+      check(
+        "switch back to webvm reports ready",
+        vm.getState().ready === true,
+        JSON.stringify(vm.getState()),
+      );
+      check(
+        "webvm toggle is marked active",
+        !!toggle("webvm") && toggle("webvm").classList.contains("active"),
+      );
       check(
         "the round-trip kept exactly one console alive",
         fakeTerminals.length === termsBefore && consoleTerm.disposed === false,

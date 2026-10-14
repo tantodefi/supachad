@@ -53,21 +53,40 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --max-age)  max_age_min="$2"; shift 2 ;;
-    --timeout)  timeout_extra="$2"; shift 2 ;;
-    --dry-run)  dry_run=1; shift ;;
-    --once)     single_id="$2"; shift 2 ;;
-    -h|--help)  usage ;;
-    *) echo "chad-spawn-poll: unknown arg: $1" >&2; exit 2 ;;
+    --max-age)
+      max_age_min="$2"
+      shift 2
+      ;;
+    --timeout)
+      timeout_extra="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    --once)
+      single_id="$2"
+      shift 2
+      ;;
+    -h | --help) usage ;;
+    *)
+      echo "chad-spawn-poll: unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
-[ -f "$QUEUE_FILE" ] || { echo "no ledger at $QUEUE_FILE — nothing to poll"; exit 0; }
+[ -f "$QUEUE_FILE" ] || {
+  echo "no ledger at $QUEUE_FILE — nothing to poll"
+  exit 0
+}
 
 # Find unique task_ids whose LATEST ledger entry has status=running and
 # substrate=gha. We treat older entries as superseded — running may
 # actually be stale (already terminal-ized in a later append).
-running_ids="$(QUEUE_FILE="$QUEUE_FILE" SINGLE="$single_id" python3 <<'PY'
+running_ids="$(
+  QUEUE_FILE="$QUEUE_FILE" SINGLE="$single_id" python3 <<'PY'
 import json, os, sys
 single = os.environ.get("SINGLE", "")
 latest = {}  # task_id -> last record
@@ -103,8 +122,14 @@ fi
 # case on a 5-min cadence) the poll is a pure-local no-op and must not
 # fail on a missing/expired GitHub token. Only pending reconciliations
 # make gh a hard requirement.
-command -v gh >/dev/null 2>&1 || { echo "gh CLI required" >&2; exit 3; }
-gh auth status --hostname github.com >/dev/null 2>&1 || { echo "gh not authenticated" >&2; exit 3; }
+command -v gh >/dev/null 2>&1 || {
+  echo "gh CLI required" >&2
+  exit 3
+}
+gh auth status --hostname github.com >/dev/null 2>&1 || {
+  echo "gh not authenticated" >&2
+  exit 3
+}
 
 # Single shared chad-state checkout for all reconciliations
 state_dir="$(mktemp -d -t "chad-spawn-poll-XXXXXX")"
@@ -114,7 +139,7 @@ gh repo clone "$REPO" "$state_dir" -- --depth 1 --quiet >/dev/null 2>&1 || {
   exit 3
 }
 
-cd "$state_dir"
+cd "$state_dir" || exit 1
 
 reconciled=0
 timed_out=0
@@ -174,11 +199,11 @@ except Exception:
     # Append terminal ledger entry. Use the same substrate/async fields
     # so the entry is parseable by chad-spawn-status.
     CHAD_LEDGER_ID="$task_id" \
-    CHAD_LEDGER_KIND="$kind" \
-    CHAD_LEDGER_STATUS="$final_status" \
-    CHAD_LEDGER_WORKDIR="$workdir" \
-    CHAD_LEDGER_FILE="$QUEUE_FILE" \
-    python3 <<'PY'
+      CHAD_LEDGER_KIND="$kind" \
+      CHAD_LEDGER_STATUS="$final_status" \
+      CHAD_LEDGER_WORKDIR="$workdir" \
+      CHAD_LEDGER_FILE="$QUEUE_FILE" \
+      python3 <<'PY'
 import os, json, datetime
 _UTC = getattr(datetime, "UTC", datetime.timezone.utc)
 rec = {
@@ -220,7 +245,7 @@ print(int((datetime.datetime.now(datetime.timezone.utc) - dt).total_seconds()))
     mkdir -p "$workdir"
     # Synthesize a timeout result
     CHAD_TID="$task_id" CHAD_KIND="$kind" CHAD_AGE="$age_sec" CHAD_OUT="$workdir/result.json" \
-    python3 <<'PY'
+      python3 <<'PY'
 import os, json
 json.dump({
     "status": "failed",
@@ -233,8 +258,8 @@ json.dump({
 PY
 
     CHAD_LEDGER_ID="$task_id" CHAD_LEDGER_KIND="$kind" CHAD_LEDGER_FILE="$QUEUE_FILE" \
-    CHAD_LEDGER_WORKDIR="$workdir" \
-    python3 <<'PY'
+      CHAD_LEDGER_WORKDIR="$workdir" \
+      python3 <<'PY'
 import os, json, datetime
 _UTC = getattr(datetime, "UTC", datetime.timezone.utc)
 rec = {

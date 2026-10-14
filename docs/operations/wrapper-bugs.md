@@ -186,7 +186,7 @@ Setting `PATH=/sandbox/.openclaw-data/bin:/usr/local/bin:/usr/bin:/bin`
 in the watchdog's relaunch SSH command results in the agent shell
 seeing:
 
-```
+```text
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/sandbox/.openclaw-data/bin
 ```
 

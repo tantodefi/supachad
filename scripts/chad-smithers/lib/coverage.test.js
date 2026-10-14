@@ -38,7 +38,7 @@ test("uncoveredLines keeps only source-file rows with a %", () => {
     "lib/a.js   |  40% | 12-18",
     "some prose line without a file",
     "src/b.ts   |  55% | 3,9",
-    "All files  |  72%",   // no source-file extension → excluded
+    "All files  |  72%", // no source-file extension → excluded
   ].join("\n");
   const out = uncoveredLines(report);
   assert.ok(out.includes("lib/a.js"));

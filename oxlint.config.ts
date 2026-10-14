@@ -87,6 +87,16 @@ export default defineConfig({
       env: { browser: true },
     },
     {
+      // OpenWebUI in-browser terminal (vm-panel loader) + the COI service worker.
+      files: ["scripts/openwebui/browser-vm/loader/**/*.js", "scripts/openwebui/coi-worker.js"],
+      env: { browser: true, serviceworker: true },
+    },
+    {
+      // Runs under Bun (#!/usr/bin/env bun), not Node.
+      files: ["scripts/openwebui/nvidia-proxy.js"],
+      globals: { Bun: "readonly" },
+    },
+    {
       // This file is a qualified Pi image input; preserve its bytes until both
       // architecture receipts can be republished from the same workflow run.
       files: ["nemoclaw-blueprint/scripts/sandbox-safety-net.js"],

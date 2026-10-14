@@ -28,10 +28,11 @@ SOCKET="${CHAD_TMUX_SOCKET:-$HOME/.chad-tmux.sock}"
 PREFIX="chad-"
 TM() { tmux -S "$SOCKET" "$@"; }
 
-cmd="${1:-}"; shift || true
+cmd="${1:-}"
+shift || true
 
 case "$cmd" in
-  ""|-h|--help)
+  "" | -h | --help)
     sed -n '3,28p' "$0" | sed 's/^# \{0,1\}//'
     ;;
   ls)

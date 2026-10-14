@@ -18,9 +18,18 @@ const POD_WEBUI = process.env.CHAD_WEBUI_POD_BIN || "/sandbox/.openclaw-data/bin
 
 function ssh(args, opts = {}) {
   return new Promise((resolve) => {
-    execFile("ssh", ["-o", "ConnectTimeout=15", ...args], { maxBuffer: 8 * 1024 * 1024, ...opts }, (err, stdout, stderr) => {
-      resolve({ code: err?.code ?? 0, stdout: stdout?.toString() ?? "", stderr: stderr?.toString() ?? "" });
-    });
+    execFile(
+      "ssh",
+      ["-o", "ConnectTimeout=15", ...args],
+      { maxBuffer: 8 * 1024 * 1024, ...opts },
+      (err, stdout, stderr) => {
+        resolve({
+          code: err?.code ?? 0,
+          stdout: stdout?.toString() ?? "",
+          stderr: stderr?.toString() ?? "",
+        });
+      },
+    );
   });
 }
 

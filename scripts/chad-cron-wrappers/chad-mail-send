@@ -45,23 +45,58 @@ EOF
 }
 
 [ "$#" -ge 1 ] || usage
-mode="$1"; shift
+mode="$1"
+shift
 [ "$mode" = "reply" ] || [ "$mode" = "new" ] || usage
 
-msg_id=""; to=""; cc=""; subject=""; body=""; html=0; reply_all=0; force=0
+msg_id=""
+to=""
+cc=""
+subject=""
+body=""
+html=0
+reply_all=0
+force=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --id)      msg_id="$2";   shift 2 ;;
-    --to)      to="$2";       shift 2 ;;
-    --cc)      cc="$2";       shift 2 ;;
-    --subject) subject="$2";  shift 2 ;;
-    --body)    body="$2";     shift 2 ;;
-    --all)     reply_all=1;   shift ;;
-    --html)    html=1;        shift ;;
-    --force)   force=1;       shift ;;
-    -h|--help) usage ;;
-    *) echo "chad-mail-send: unknown arg: $1" >&2; usage ;;
+    --id)
+      msg_id="$2"
+      shift 2
+      ;;
+    --to)
+      to="$2"
+      shift 2
+      ;;
+    --cc)
+      cc="$2"
+      shift 2
+      ;;
+    --subject)
+      subject="$2"
+      shift 2
+      ;;
+    --body)
+      body="$2"
+      shift 2
+      ;;
+    --all)
+      reply_all=1
+      shift
+      ;;
+    --html)
+      html=1
+      shift
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
+    -h | --help) usage ;;
+    *)
+      echo "chad-mail-send: unknown arg: $1" >&2
+      usage
+      ;;
   esac
 done
 
@@ -74,10 +109,12 @@ if [ -z "$body" ]; then
 fi
 
 if [ "$mode" = "reply" ] && [ -z "$msg_id" ]; then
-  echo "chad-mail-send: reply requires --id MSGID" >&2; exit 2
+  echo "chad-mail-send: reply requires --id MSGID" >&2
+  exit 2
 fi
 if [ "$mode" = "new" ] && { [ -z "$to" ] || [ -z "$subject" ]; }; then
-  echo "chad-mail-send: new requires --to and --subject" >&2; exit 2
+  echo "chad-mail-send: new requires --to and --subject" >&2
+  exit 2
 fi
 
 body_hash="$(printf %s "$body" | sha256sum | awk '{print $1}')"
@@ -86,12 +123,12 @@ TS="$(date -u +%FT%TZ)"
 # ── Dedup checks (skipped when --force) ────────────────────────────
 if [ "$force" -eq 0 ]; then
   CHECK_LOG="$LOG_FILE" \
-  CHECK_MODE="$mode" \
-  CHECK_MSG_ID="$msg_id" \
-  CHECK_TO="$to" \
-  CHECK_HASH="$body_hash" \
-  CHECK_HOURS="$DEDUP_HOURS" \
-  python3 <<'PY' || exit 3
+    CHECK_MODE="$mode" \
+    CHECK_MSG_ID="$msg_id" \
+    CHECK_TO="$to" \
+    CHECK_HASH="$body_hash" \
+    CHECK_HOURS="$DEDUP_HOURS" \
+    python3 <<'PY' || exit 3
 import json, os, sys, datetime
 log_path = os.environ["CHECK_LOG"]
 mode     = os.environ["CHECK_MODE"]
@@ -149,8 +186,8 @@ case "$mode" in
     ;;
   new)
     proton_args=(send-mail --to="$to" --subject="$subject" --body="$body")
-    [ -n "$cc" ]         && proton_args+=(--cc="$cc")
-    [ "$html" -eq 1 ]    && proton_args+=(--html)
+    [ -n "$cc" ] && proton_args+=(--cc="$cc")
+    [ "$html" -eq 1 ] && proton_args+=(--html)
     ;;
 esac
 
@@ -176,17 +213,17 @@ fi
 # ── Append to handled log ─────────────────────────────────────────
 action="$mode"
 [ "$action" = "reply" ] && action="replied"
-[ "$action" = "new" ]   && action="sent"
-[ "$force" -eq 1 ]      && action="${action}-forced"
+[ "$action" = "new" ] && action="sent"
+[ "$force" -eq 1 ] && action="${action}-forced"
 
 LOG_TS="$TS" \
-LOG_ACTION="$action" \
-LOG_MSGID="${sent_id:-}" \
-LOG_INREPLY="$msg_id" \
-LOG_TO="$to" \
-LOG_SUBJECT="$subject" \
-LOG_BODYHASH="$body_hash" \
-python3 <<'PY' >> "$LOG_FILE"
+  LOG_ACTION="$action" \
+  LOG_MSGID="${sent_id:-}" \
+  LOG_INREPLY="$msg_id" \
+  LOG_TO="$to" \
+  LOG_SUBJECT="$subject" \
+  LOG_BODYHASH="$body_hash" \
+  python3 <<'PY' >>"$LOG_FILE"
 import json, os
 print(json.dumps({
     "ts": os.environ["LOG_TS"],

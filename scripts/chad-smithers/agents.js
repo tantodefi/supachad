@@ -69,17 +69,38 @@
 //               Mamba-Transformer MoE, built for long-running agentic/tool-loop
 //               work — capable-tier default). Adopted 2026-06-13.
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { clampOutput } from "./lib/model-limits.js";
 import { resolveDirectives, directiveSystemFor } from "./lib/directives.js";
 
 // ── Optional imports (don't hard-fail if a package/CLI isn't present) ────────
-let ToolLoopAgent, createOpenAICompatible, createAnthropic, ClaudeCodeAgent, CodexAgent, OpenCodeAgent;
-try { ({ ToolLoopAgent } = await import("ai")); } catch { /* offline / not installed */ }
-try { ({ createOpenAICompatible } = await import("@ai-sdk/openai-compatible")); } catch { /* */ }
-try { ({ createAnthropic } = await import("@ai-sdk/anthropic")); } catch { /* */ }
-try { ({ ClaudeCodeAgent, CodexAgent, OpenCodeAgent } = await import("@smithers-orchestrator/agents")); } catch { /* */ }
+let ToolLoopAgent,
+  createOpenAICompatible,
+  createAnthropic,
+  ClaudeCodeAgent,
+  CodexAgent,
+  OpenCodeAgent;
+try {
+  ({ ToolLoopAgent } = await import("ai"));
+} catch {
+  /* offline / not installed */
+}
+try {
+  ({ createOpenAICompatible } = await import("@ai-sdk/openai-compatible"));
+} catch {
+  /* */
+}
+try {
+  ({ createAnthropic } = await import("@ai-sdk/anthropic"));
+} catch {
+  /* */
+}
+try {
+  ({ ClaudeCodeAgent, CodexAgent, OpenCodeAgent } = await import("@smithers-orchestrator/agents"));
+} catch {
+  /* */
+}
 
 const env = process.env;
 
@@ -90,7 +111,9 @@ const env = process.env;
 // call so the HTTP connection is released instead of orphaned. Cheap single-turn
 // work gets a short deadline; capable tool-loop work gets the 10-min cap that
 // matches upstream smithers-fusions. Override via env.
-const CHEAP_TIMEOUT_MS = Number(env.CHAD_TASK_TIMEOUT_MS_CHEAP || env.CHAD_TASK_TIMEOUT_MS || 120_000);
+const CHEAP_TIMEOUT_MS = Number(
+  env.CHAD_TASK_TIMEOUT_MS_CHEAP || env.CHAD_TASK_TIMEOUT_MS || 120_000,
+);
 const CAPABLE_TIMEOUT_MS = Number(env.CHAD_TASK_TIMEOUT_MS || 600_000);
 // Heartbeat timeout is opt-in (0 = unset): the cli-text capture path emits no
 // streaming deltas, so an aggressive heartbeat could false-kill a long, healthy
@@ -100,8 +123,12 @@ const HEARTBEAT_MS = env.CHAD_TASK_HEARTBEAT_MS ? Number(env.CHAD_TASK_HEARTBEAT
 
 // ── Capability probe (cached) ────────────────────────────────────────────────
 function binOnPath(bin) {
-  try { execSync(`command -v ${bin}`, { stdio: "ignore" }); return true; }
-  catch { return false; }
+  try {
+    execSync(`command -v ${bin}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 let _probe;
@@ -154,7 +181,9 @@ function reasoningOffFetch(baseFetch = fetch) {
           b.chat_template_kwargs = { ...(b.chat_template_kwargs || {}), thinking: false };
           init = { ...init, body: JSON.stringify(b) };
         }
-      } catch { /* non-JSON body — leave as-is */ }
+      } catch {
+        /* non-JSON body — leave as-is */
+      }
     }
     return baseFetch(url, init);
   };
@@ -166,7 +195,9 @@ function openaiCompatModel(baseURL, modelId, apiKey, name, reasoningOff = false)
     throw new Error("agents.js: @ai-sdk/openai-compatible not installed — run `bun install`");
   }
   const provider = createOpenAICompatible({
-    name, baseURL, apiKey: apiKey || "not-needed",
+    name,
+    baseURL,
+    apiKey: apiKey || "not-needed",
     ...(reasoningOff ? { fetch: reasoningOffFetch() } : {}),
   });
   return provider(modelId);
@@ -186,7 +217,14 @@ function maxOut(cheap, capDefault, cheapDefault) {
 // promoted. Closes the value loop: draft-tier agents adopt it automatically.
 // Returns undefined if none has been exported yet.
 function championSystem() {
-  try { const s = JSON.parse(readFileSync(new URL("./state/champion-prompt.json", import.meta.url), "utf8")).system; return s || undefined; } catch { return undefined; }
+  try {
+    const s = JSON.parse(
+      readFileSync(new URL("./state/champion-prompt.json", import.meta.url), "utf8"),
+    ).system;
+    return s || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // directiveSystem — operator-configured system-prompt additions injected into
@@ -194,8 +232,11 @@ function championSystem() {
 // override / global-off env (CHAD_DIRECTIVES_JSON / CHAD_DIRECTIVES_OFF) is honored
 // exactly like the global Directives tab file. Empty strings inject nothing (opt-in).
 function directiveSystem(role) {
-  try { return directiveSystemFor(resolveDirectives(process.env), role); }
-  catch { return undefined; }
+  try {
+    return directiveSystemFor(resolveDirectives(process.env), role);
+  } catch {
+    return undefined;
+  }
 }
 
 // ── Backend constructors ─────────────────────────────────────────────────────
@@ -219,19 +260,23 @@ const backends = {
     // judge → Ultra 550B (best reasoning, ~7 tok/s is fine there). Ultra was the
     // WRONG cheap default — it generates ~1085 tok in 145-166s, blowing the 120s
     // cheap cap. Override per tier with CHAD_NEMOTRON_MODEL / _CAPABLE_MODEL.
-    const modelId = opts.model
-      || (opts.cheap
-        ? (env.CHAD_NEMOTRON_MODEL || "nvidia/nemotron-3-super-120b-a12b")
-        : (env.CHAD_NEMOTRON_CAPABLE_MODEL || "nvidia/nemotron-3-ultra-550b-a55b"));
+    const modelId =
+      opts.model ||
+      (opts.cheap
+        ? env.CHAD_NEMOTRON_MODEL || "nvidia/nemotron-3-super-120b-a12b"
+        : env.CHAD_NEMOTRON_CAPABLE_MODEL || "nvidia/nemotron-3-ultra-550b-a55b");
     // Tier-aware reasoning. CHEAP → OFF (fast; leaves the whole token budget for
     // the answer — reasoning-on previously ate the 2048 cap → EMPTY answers).
     // CAPABLE → ON. Force with opts.reasoning or CHAD_REASONING=on|off. The control
     // is request-body injection (reasoningOffFetch), NOT a system directive (no-op).
-    const reasoning = opts.reasoning ?? (opts.cheap
-      ? (env.CHAD_REASONING === "on")
-      : (env.CHAD_REASONING !== "off"));
+    const reasoning =
+      opts.reasoning ?? (opts.cheap ? env.CHAD_REASONING === "on" : env.CHAD_REASONING !== "off");
     const model = openaiCompatModel(
-      p.shimUrl, modelId, env.NVIDIA_API_KEY || env.OPENAI_API_KEY, "chad-nemotron", !reasoning,
+      p.shimUrl,
+      modelId,
+      env.NVIDIA_API_KEY || env.OPENAI_API_KEY,
+      "chad-nemotron",
+      !reasoning,
     );
     return new ToolLoopAgent({
       model,
@@ -242,7 +287,10 @@ const backends = {
       // Frugal tier budget (env-overridable), CLAMPED to the model's registry
       // ceiling. With reasoning truly off, 2048 is ample for a direct answer;
       // reasoning-on tiers get headroom so chain-of-thought doesn't starve the answer.
-      maxOutputTokens: clampOutput(modelId, maxOut(opts.cheap, reasoning ? 32768 : 16384, reasoning ? 8192 : 2048)),
+      maxOutputTokens: clampOutput(
+        modelId,
+        maxOut(opts.cheap, reasoning ? 32768 : 16384, reasoning ? 8192 : 2048),
+      ),
       maxSteps: opts.cheap ? (reasoning ? 2 : 1) : (opts.maxSteps ?? 12),
       // Abort the AI-SDK call if the hosted model hangs (connection released).
       // opts.timeoutMs lets a task pin extra headroom — e.g. a cheap-tier task
@@ -261,7 +309,10 @@ const backends = {
     const provider = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
     return new ToolLoopAgent({
       model: provider(env.CHAD_ANTHROPIC_MODEL || "claude-sonnet-4-6"),
-      maxOutputTokens: clampOutput(env.CHAD_ANTHROPIC_MODEL || "claude-sonnet-4-6", maxOut(opts.cheap, 8192, 1024)),
+      maxOutputTokens: clampOutput(
+        env.CHAD_ANTHROPIC_MODEL || "claude-sonnet-4-6",
+        maxOut(opts.cheap, 8192, 1024),
+      ),
       maxSteps: opts.cheap ? 1 : (opts.maxSteps ?? 8),
       timeout: { totalMs: opts.cheap ? CHEAP_TIMEOUT_MS : CAPABLE_TIMEOUT_MS },
       ...opts.agent,
@@ -279,7 +330,10 @@ const backends = {
     );
     return new ToolLoopAgent({
       model,
-      maxOutputTokens: clampOutput(env.CHAD_LOCAL_MODEL || "google/gemma-3-4b", maxOut(opts.cheap, 4096, 1024)),
+      maxOutputTokens: clampOutput(
+        env.CHAD_LOCAL_MODEL || "google/gemma-3-4b",
+        maxOut(opts.cheap, 4096, 1024),
+      ),
       maxSteps: 1, // gemma-4b can't drive tool loops
       timeout: { totalMs: CAPABLE_TIMEOUT_MS }, // local can be slow; generous cap
       ...opts.agent,
@@ -307,7 +361,9 @@ const backends = {
       // stream-json the parser expects → AGENT_CLI_ERROR. Verified: dropping
       // "user" keeps OAuth/subscription auth (subtype:success). The approval
       // ladder WANTS the user hooks (Moshi phone), so it loads ALL sources.
-      ...(opts.approvalRouting ? {} : { settingSources: env.CHAD_CLAUDE_SETTING_SOURCES || "project,local" }),
+      ...(opts.approvalRouting
+        ? {}
+        : { settingSources: env.CHAD_CLAUDE_SETTING_SOURCES || "project,local" }),
       ...opts.agent,
     });
   },
@@ -331,7 +387,8 @@ const backends = {
   // mimo-v2.5-free, north-mini-code-free (`opencode models`). Override with
   // CHAD_OPENCODE_MODEL.
   opencode(opts = {}) {
-    if (!OpenCodeAgent) throw new Error("agents.js: OpenCodeAgent not available — run `bun install`");
+    if (!OpenCodeAgent)
+      throw new Error("agents.js: OpenCodeAgent not available — run `bun install`");
     return new OpenCodeAgent({
       model: env.CHAD_OPENCODE_MODEL || "opencode/big-pickle",
       timeoutMs: opts.timeoutMs ?? 900_000,
@@ -344,7 +401,7 @@ const backends = {
 function autoCapable() {
   if (env.CHAD_CAPABLE_BACKEND) return env.CHAD_CAPABLE_BACKEND;
   const p = probe();
-  if (p.claudeCli) return "claudecode";        // free (subscription) + strongest
+  if (p.claudeCli) return "claudecode"; // free (subscription) + strongest
   if (p.codexCli) return "codex";
   if (p.sdk && p.nvidiaKey) return "nemotron"; // Ultra 550B via AI-SDK loop
   if (p.opencodeCli) return "opencode";
@@ -363,11 +420,21 @@ function autoCheap() {
 // Role → tier map. Add roles here as workflows grow.
 const ROLE_TIER = {
   // cheap single-turn
-  classify: "cheap", draft: "cheap", observe: "cheap", report: "cheap",
-  summarize: "cheap", extract: "cheap", seed: "cheap",
+  classify: "cheap",
+  draft: "cheap",
+  observe: "cheap",
+  report: "cheap",
+  summarize: "cheap",
+  extract: "cheap",
+  seed: "cheap",
   // capable / tool-loop / judge
-  evaluate: "capable", judge: "capable", optimize: "capable",
-  implement: "capable", review: "capable", refine: "capable", plan: "capable",
+  evaluate: "capable",
+  judge: "capable",
+  optimize: "capable",
+  implement: "capable",
+  review: "capable",
+  refine: "capable",
+  plan: "capable",
 };
 
 /**
@@ -385,7 +452,9 @@ export function pickAgent(role, opts = {}) {
   // Compose the agent's system prompt: an explicit opts.system wins; otherwise the
   // arena's winning drafter prompt (draft role only) PLUS the operator's directive
   // system prompt (all roles, from the Directives tab). Either may be empty.
-  const auto = [role === "draft" ? championSystem() : undefined, directiveSystem(role)].filter(Boolean).join("\n\n");
+  const auto = [role === "draft" ? championSystem() : undefined, directiveSystem(role)]
+    .filter(Boolean)
+    .join("\n\n");
   const system = opts.system ?? (auto || undefined);
   return ctor({ cheap: tier === "cheap", ...opts, system });
 }
@@ -396,13 +465,20 @@ export function pickAgent(role, opts = {}) {
 function backendAvailable(b) {
   const p = probe();
   switch (b) {
-    case "nemotron": return p.sdk && p.nvidiaKey;
-    case "claudecode": return p.claudeCli;
-    case "codex": return p.codexCli;
-    case "opencode": return p.opencodeCli;
-    case "anthropic": return p.anthropicKey && !p.anthropicApi402;
-    case "local": return true; // offline last resort; assumed reachable
-    default: return false;
+    case "nemotron":
+      return p.sdk && p.nvidiaKey;
+    case "claudecode":
+      return p.claudeCli;
+    case "codex":
+      return p.codexCli;
+    case "opencode":
+      return p.opencodeCli;
+    case "anthropic":
+      return p.anthropicKey && !p.anthropicApi402;
+    case "local":
+      return true; // offline last resort; assumed reachable
+    default:
+      return false;
   }
 }
 
@@ -421,9 +497,10 @@ export function pickFallback(role, opts = {}) {
   if (probe().cliDisabled) return undefined;
   const tier = opts.tier || ROLE_TIER[role] || "cheap";
   const primary = opts.backend || (tier === "capable" ? autoCapable() : autoCheap());
-  const order = tier === "capable"
-    ? ["claudecode", "nemotron", "codex", "opencode", "local"]
-    : ["nemotron", "claudecode", "local"];
+  const order =
+    tier === "capable"
+      ? ["claudecode", "nemotron", "codex", "opencode", "local"]
+      : ["nemotron", "claudecode", "local"];
   const fb = order.find((b) => b !== primary && backendAvailable(b));
   return fb ? backends[fb]({ cheap: tier === "cheap", ...opts, backend: fb }) : undefined;
 }
@@ -456,7 +533,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       resolved: { cheapTier: autoCheap(), capableTier: autoCapable() },
       roles: Object.fromEntries(
         Object.entries(ROLE_TIER).map(([r, t]) => [
-          r, { tier: t, backend: t === "capable" ? autoCapable() : autoCheap() },
+          r,
+          { tier: t, backend: t === "capable" ? autoCapable() : autoCheap() },
         ]),
       ),
     };

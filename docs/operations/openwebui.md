@@ -32,7 +32,7 @@ from any browser, gated by an email allowlist.
 Two upstreams are wired in. The model picker in the chat UI lets the user
 choose between them per conversation:
 
-```
+```text
    browser
       │
       ▼  https://<sub>.<domain>                (TLS terminated at CF edge)
@@ -612,7 +612,7 @@ When `ENABLE_FORWARD_USER_INFO_HEADERS=True` is set on the open-webui
 container (now the default in `docker-compose.yml`), every outbound
 OpenAI-style request carries the authenticated user's identity:
 
-```
+```text
 X-OpenWebUI-User-Email:  tantodefi@proton.me
 X-OpenWebUI-User-Name:   tantodefi
 X-OpenWebUI-User-Id:     a8f3…

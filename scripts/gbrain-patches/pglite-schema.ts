@@ -20,8 +20,8 @@
  * will fail at INSERT time with a vector-length error.
  */
 
-const EMBED_DIM = parseInt(process.env.GBRAIN_EMBED_DIMENSIONS || '1536', 10);
-const EMBED_MODEL_DEFAULT = process.env.GBRAIN_EMBED_MODEL || 'text-embedding-3-large';
+const EMBED_DIM = parseInt(process.env.GBRAIN_EMBED_DIMENSIONS || "1536", 10);
+const EMBED_MODEL_DEFAULT = process.env.GBRAIN_EMBED_MODEL || "text-embedding-3-large";
 
 export const PGLITE_SCHEMA_SQL = `
 -- GBrain PGLite schema (local embedded Postgres)

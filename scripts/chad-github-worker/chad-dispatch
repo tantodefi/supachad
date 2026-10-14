@@ -56,7 +56,7 @@ collect_results() {
   {
     echo ""
     echo "## GitHub Worker Results ($(date -u +%H:%M UTC))"
-  } >> "$MEMORY_FILE"
+  } >>"$MEMORY_FILE"
 
   count=0
   for filename in $completed; do
@@ -73,7 +73,7 @@ print(d['result'])
 print()
 " 2>/dev/null)
 
-    echo "$result" >> "$MEMORY_FILE"
+    echo "$result" >>"$MEMORY_FILE"
 
     # Archive to jobs/archived to avoid re-collecting
     content=$(gh api "repos/${REPO}/contents/jobs/completed/${filename}" --jq '.content')
@@ -82,12 +82,12 @@ print()
       --method PUT \
       --field message="chore(jobs): archive ${job_id}" \
       --field "content=${content}" \
-      --field branch=main > /dev/null 2>&1
+      --field branch=main >/dev/null 2>&1
     gh api "repos/${REPO}/contents/jobs/completed/${filename}" \
       --method DELETE \
       --field message="chore(jobs): collect ${job_id}" \
       --field "sha=${sha}" \
-      --field branch=main > /dev/null 2>&1
+      --field branch=main >/dev/null 2>&1
 
     count=$((count + 1))
     echo "  collected: $job_id"
@@ -106,14 +106,38 @@ CONTEXT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --kind)       KIND="$2";    shift 2 ;;
-    --prompt)     PROMPT="$2";  shift 2 ;;
-    --context)    CONTEXT="$2"; shift 2 ;;
-    --model)      MODEL="$2";   shift 2 ;;
-    --max-tokens) MAX_TOKENS="$2"; shift 2 ;;
-    --list)       list_jobs; exit 0 ;;
-    --collect)    collect_results; exit 0 ;;
-    *) echo "Unknown option: $1"; usage ;;
+    --kind)
+      KIND="$2"
+      shift 2
+      ;;
+    --prompt)
+      PROMPT="$2"
+      shift 2
+      ;;
+    --context)
+      CONTEXT="$2"
+      shift 2
+      ;;
+    --model)
+      MODEL="$2"
+      shift 2
+      ;;
+    --max-tokens)
+      MAX_TOKENS="$2"
+      shift 2
+      ;;
+    --list)
+      list_jobs
+      exit 0
+      ;;
+    --collect)
+      collect_results
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      usage
+      ;;
   esac
 done
 
@@ -146,7 +170,7 @@ gh api "repos/${REPO}/contents/jobs/pending/${JOB_ID}.json" \
   --method PUT \
   --field message="job: submit ${KIND} ${JOB_ID}" \
   --field "content=${encoded}" \
-  --field branch=main > /dev/null
+  --field branch=main >/dev/null
 
 echo "Dispatched: $JOB_ID"
 echo "Kind:       $KIND"

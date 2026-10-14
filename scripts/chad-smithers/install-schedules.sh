@@ -12,11 +12,16 @@
 
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-LA="$HOME/Library/LaunchAgents"; mkdir -p "$LA"
+LA="$HOME/Library/LaunchAgents"
+mkdir -p "$LA"
 U="$(id -u)"
 for label in dev.nemoclaw.chad-experiments dev.nemoclaw.chad-logdigest dev.nemoclaw.chad-mcphealth dev.nemoclaw.chad-failreport; do
-  src="$HERE/$label.plist"; dst="$LA/$label.plist"
-  [ -f "$src" ] || { echo "skip $label (no source plist)"; continue; }
+  src="$HERE/$label.plist"
+  dst="$LA/$label.plist"
+  [ -f "$src" ] || {
+    echo "skip $label (no source plist)"
+    continue
+  }
   cp "$src" "$dst"
   launchctl bootout "gui/$U/$label" 2>/dev/null || true
   if launchctl bootstrap "gui/$U" "$dst" 2>/dev/null; then echo "loaded  $label"; else echo "FAILED  $label (try: launchctl load -w $dst)"; fi

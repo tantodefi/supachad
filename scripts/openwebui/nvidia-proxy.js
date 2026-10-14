@@ -19,8 +19,7 @@ const UPSTREAM = process.env.NVIDIA_UPSTREAM ?? "https://integrate.api.nvidia.co
 const UPSTREAM_HOST = new URL(UPSTREAM).host;
 const PORT = parseInt(process.env.NVIDIA_PROXY_PORT ?? "3002");
 const LIVENESS_PATH =
-  process.env.NVIDIA_LIVENESS_FILE ??
-  `${process.env.HOME}/.nemoclaw/openwebui/liveness.json`;
+  process.env.NVIDIA_LIVENESS_FILE ?? `${process.env.HOME}/.nemoclaw/openwebui/liveness.json`;
 
 let livenessCache = null;
 let livenessMtime = 0;
@@ -92,7 +91,7 @@ const server = Bun.serve({
       console.error(`[nvidia-proxy] upstream fetch failed: ${e.message}`);
       return Response.json(
         { error: { message: `upstream fetch failed: ${e.message}`, type: "proxy_error" } },
-        { status: 502 }
+        { status: 502 },
       );
     }
 

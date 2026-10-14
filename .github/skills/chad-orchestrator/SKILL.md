@@ -142,7 +142,7 @@ If a spawn batch is interrupted (timeout, crash, budget):
 - [ ] After all done: reply-mail --id=<MSGID> with all articles
 ```
 
-3. Do **not** ask the user what to do. The instruction is still valid —
+1. Do **not** ask the user what to do. The instruction is still valid —
    save the checkpoint and continue on the next heartbeat.
 
 ## When To Use This Skill

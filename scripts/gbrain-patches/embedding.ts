@@ -18,12 +18,12 @@
  *   OPENAI_BASE_URL / OPENAI_API_KEY — picked up by the OpenAI SDK directly
  */
 
-import OpenAI from 'openai';
+import OpenAI from "openai";
 
-const MODEL = process.env.GBRAIN_EMBED_MODEL || 'text-embedding-3-large';
-const DIMENSIONS = parseInt(process.env.GBRAIN_EMBED_DIMENSIONS || '1536', 10);
-const INPUT_TYPE = process.env.GBRAIN_EMBED_INPUT_TYPE || '';
-const PASS_DIMENSIONS = (process.env.GBRAIN_EMBED_PASS_DIMENSIONS || 'true') !== 'false';
+const MODEL = process.env.GBRAIN_EMBED_MODEL || "text-embedding-3-large";
+const DIMENSIONS = parseInt(process.env.GBRAIN_EMBED_DIMENSIONS || "1536", 10);
+const INPUT_TYPE = process.env.GBRAIN_EMBED_INPUT_TYPE || "";
+const PASS_DIMENSIONS = (process.env.GBRAIN_EMBED_PASS_DIMENSIONS || "true") !== "false";
 const MAX_CHARS = 8000;
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 4000;
@@ -46,7 +46,7 @@ export async function embed(text: string): Promise<Float32Array> {
 }
 
 export async function embedBatch(texts: string[]): Promise<Float32Array[]> {
-  const truncated = texts.map(t => t.slice(0, MAX_CHARS));
+  const truncated = texts.map((t) => t.slice(0, MAX_CHARS));
   const results: Float32Array[] = [];
 
   // Process in batches of BATCH_SIZE
@@ -69,12 +69,12 @@ async function embedBatchWithRetry(texts: string[]): Promise<Float32Array[]> {
       if (PASS_DIMENSIONS) params.dimensions = DIMENSIONS;
       if (INPUT_TYPE) params.input_type = INPUT_TYPE;
       const response = await getClient().embeddings.create(
-        params as Parameters<OpenAI['embeddings']['create']>[0]
+        params as Parameters<OpenAI["embeddings"]["create"]>[0],
       );
 
       // Sort by index to maintain order
       const sorted = response.data.sort((a, b) => a.index - b.index);
-      return sorted.map(d => new Float32Array(d.embedding));
+      return sorted.map((d) => new Float32Array(d.embedding));
     } catch (e: unknown) {
       if (attempt === MAX_RETRIES - 1) throw e;
 
@@ -82,7 +82,7 @@ async function embedBatchWithRetry(texts: string[]): Promise<Float32Array[]> {
       let delay = exponentialDelay(attempt);
 
       if (e instanceof OpenAI.APIError && e.status === 429) {
-        const retryAfter = e.headers?.['retry-after'];
+        const retryAfter = e.headers?.["retry-after"];
         if (retryAfter) {
           const parsed = parseInt(retryAfter, 10);
           if (!isNaN(parsed)) {
@@ -96,7 +96,7 @@ async function embedBatchWithRetry(texts: string[]): Promise<Float32Array[]> {
   }
 
   // Should not reach here
-  throw new Error('Embedding failed after all retries');
+  throw new Error("Embedding failed after all retries");
 }
 
 function exponentialDelay(attempt: number): number {
@@ -105,7 +105,7 @@ function exponentialDelay(attempt: number): number {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export { MODEL as EMBEDDING_MODEL, DIMENSIONS as EMBEDDING_DIMENSIONS };

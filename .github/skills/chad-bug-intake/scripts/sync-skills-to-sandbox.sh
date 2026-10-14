@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# shellcheck disable=SC2029 # remote paths are expanded client-side on purpose
 
 set -euo pipefail
 
@@ -36,7 +37,7 @@ while [ "$#" -gt 0 ]; do
       build_proton=1
       shift
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;

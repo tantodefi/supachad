@@ -45,32 +45,47 @@ import { join } from "node:path";
 // and free. Highest weight wins; ties fall back to the default. Mirror any tune
 // here back to chad-route.sh (and vice-versa) — they're meant to stay in sync.
 export const ROUTE_PATTERNS = [
-  ["brain", [
-    /\b(remember|recall|what do you know|brain query|knowledge graph|entity|extract entities|store in brain|gbrain|put.?page|what.?know.?about)\b/i,
-    /\b(summaris?e for memory|add to memory|memory entry|timeline|link entities)\b/i,
-  ]],
-  ["fitness", [
-    /\b(squat|deadlift|bench press|overhead press|barbell|powerlifting|novice linear progression)\b/i,
-    /\b(starting strength|supple leopard|rippetoe|starrett|hip hinge|brace|thoracic)\b/i,
-    /\b(mobility|stretch|warmup|warm.?up|tissue|fascia|foam roll|lacrosse ball)\b/i,
-    /\b(lift|lifting|form check|technique|cue|programming|sets?|reps?|load)\b/i,
-  ]],
-  ["coder", [
-    /\b(implement|refactor|patch|fix|bug|diff|write code|rewrite|unit test|pytest|vitest|compile|build fail)\b/i,
-    /\b(?:function|class|module|method)\s+\w+/i,
-  ]],
-  ["researcher", [
-    /\b(research|find out|look ?up|search|investigate|what is|who is|when did|compare)\b/i,
-    /\b(docs?|documentation|rfc|spec)\b/i,
-  ]],
-  ["writer", [
-    /\b(draft|compose|write (?:an? )?(?:email|reply|comment|post|message|doc))\b/i,
-    /\b(reply to|respond to)\b/i,
-  ]],
-  ["reviewer", [
-    /\b(review|audit|checklist|inspect|evaluate|security scan|lint)\b/i,
-    /\bPR\s*#?\d+/i,
-  ]],
+  [
+    "brain",
+    [
+      /\b(remember|recall|what do you know|brain query|knowledge graph|entity|extract entities|store in brain|gbrain|put.?page|what.?know.?about)\b/i,
+      /\b(summaris?e for memory|add to memory|memory entry|timeline|link entities)\b/i,
+    ],
+  ],
+  [
+    "fitness",
+    [
+      /\b(squat|deadlift|bench press|overhead press|barbell|powerlifting|novice linear progression)\b/i,
+      /\b(starting strength|supple leopard|rippetoe|starrett|hip hinge|brace|thoracic)\b/i,
+      /\b(mobility|stretch|warmup|warm.?up|tissue|fascia|foam roll|lacrosse ball)\b/i,
+      /\b(lift|lifting|form check|technique|cue|programming|sets?|reps?|load)\b/i,
+    ],
+  ],
+  [
+    "coder",
+    [
+      /\b(implement|refactor|patch|fix|bug|diff|write code|rewrite|unit test|pytest|vitest|compile|build fail)\b/i,
+      /\b(?:function|class|module|method)\s+\w+/i,
+    ],
+  ],
+  [
+    "researcher",
+    [
+      /\b(research|find out|look ?up|search|investigate|what is|who is|when did|compare)\b/i,
+      /\b(docs?|documentation|rfc|spec)\b/i,
+    ],
+  ],
+  [
+    "writer",
+    [
+      /\b(draft|compose|write (?:an? )?(?:email|reply|comment|post|message|doc))\b/i,
+      /\b(reply to|respond to)\b/i,
+    ],
+  ],
+  [
+    "reviewer",
+    [/\b(review|audit|checklist|inspect|evaluate|security scan|lint)\b/i, /\bPR\s*#?\d+/i],
+  ],
 ];
 
 export function route(body, { default: def = "researcher" } = {}) {
@@ -83,29 +98,39 @@ export function route(body, { default: def = "researcher" } = {}) {
       const m = text.match(new RegExp(rx.source, "gi"));
       if (m) score += m.length;
     }
-    if (score > bestScore) { bestScore = score; best = kind; }
+    if (score > bestScore) {
+      bestScore = score;
+      best = kind;
+    }
   }
   return bestScore === 0 ? def : best;
 }
 
 // ── result.json schema (chad-spawn's structured contract) ────────────────────
-export const spawnResultSchema = z.object({
-  status: z.enum(["done", "failed", "shadow-logged"]).catch("failed"),
-  task_id: z.string().optional(),
-  kind: z.string().optional(),
-  exit_code: z.number().optional(),
-  substrate: z.string().optional(),
-  summary: z.string().optional(),
-  files_touched: z.array(z.string()).optional(),
-  follow_ups: z.array(z.string()).optional(),
-}).passthrough();
+export const spawnResultSchema = z
+  .object({
+    status: z.enum(["done", "failed", "shadow-logged"]).catch("failed"),
+    task_id: z.string().optional(),
+    kind: z.string().optional(),
+    exit_code: z.number().optional(),
+    substrate: z.string().optional(),
+    summary: z.string().optional(),
+    files_touched: z.array(z.string()).optional(),
+    follow_ups: z.array(z.string()).optional(),
+  })
+  .passthrough();
 
 const SPAWN_BIN = process.env.CHAD_SPAWN_BIN || "chad-spawn";
 
 function execFileP(cmd, args, opts = {}) {
   return new Promise((resolve) => {
     execFile(cmd, args, { maxBuffer: 16 * 1024 * 1024, ...opts }, (err, stdout, stderr) => {
-      resolve({ code: err?.code ?? 0, err, stdout: stdout?.toString() ?? "", stderr: stderr?.toString() ?? "" });
+      resolve({
+        code: err?.code ?? 0,
+        err,
+        stdout: stdout?.toString() ?? "",
+        stderr: stderr?.toString() ?? "",
+      });
     });
   });
 }
@@ -114,7 +139,9 @@ function binOnPath(bin) {
   try {
     execFileSync("sh", ["-c", `command -v ${bin}`], { stdio: "ignore" });
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 function resolveTransport() {
@@ -124,7 +151,17 @@ function resolveTransport() {
   return "stub"; // safe host default: shadow, never a hard failure
 }
 
-function spawnArgs({ kind, substrate, id, timeout, budgetTokens, binaryOverride, taskFile, resultFile, async: asyncMode }) {
+function spawnArgs({
+  kind,
+  substrate,
+  id,
+  timeout,
+  budgetTokens,
+  binaryOverride,
+  taskFile,
+  resultFile,
+  async: asyncMode,
+}) {
   const a = ["--kind", kind, "--task-file", taskFile, "--result-file", resultFile];
   if (substrate) a.push("--substrate", substrate);
   if (id) a.push("--id", id);
@@ -150,14 +187,22 @@ function spawnArgs({ kind, substrate, id, timeout, budgetTokens, binaryOverride,
  */
 export async function runSpawn(opts = {}) {
   const { kind, task = "", substrate, id } = opts;
-  if (!kind) return spawnResultSchema.parse({ status: "failed", summary: "runSpawn: kind is required", exit_code: 2 });
+  if (!kind)
+    return spawnResultSchema.parse({
+      status: "failed",
+      summary: "runSpawn: kind is required",
+      exit_code: 2,
+    });
   const taskStr = typeof task === "string" ? task : JSON.stringify(task, null, 2);
   const transport = resolveTransport();
 
   if (transport === "stub") {
     return spawnResultSchema.parse({
       status: "shadow-logged",
-      kind, substrate: substrate || "local", task_id: id || `stub-${Date.now()}`, exit_code: 0,
+      kind,
+      substrate: substrate || "local",
+      task_id: id || `stub-${Date.now()}`,
+      exit_code: 0,
       summary: `STUB (no chad-spawn transport): would spawn ${kind} on ${substrate || "default"} substrate`,
       stub: true,
     });
@@ -172,8 +217,14 @@ export async function runSpawn(opts = {}) {
     if (transport === "local") {
       const args = spawnArgs({ ...opts, taskFile, resultFile });
       const r = await execFileP(SPAWN_BIN, args, { cwd: dir });
-      if (existsSync(resultFile)) return spawnResultSchema.parse(JSON.parse(readFileSync(resultFile, "utf8")));
-      return spawnResultSchema.parse({ status: "failed", kind, exit_code: r.code, summary: `chad-spawn wrote no result.json (rc=${r.code}): ${r.stderr.slice(0, 400)}` });
+      if (existsSync(resultFile))
+        return spawnResultSchema.parse(JSON.parse(readFileSync(resultFile, "utf8")));
+      return spawnResultSchema.parse({
+        status: "failed",
+        kind,
+        exit_code: r.code,
+        summary: `chad-spawn wrote no result.json (rc=${r.code}): ${r.stderr.slice(0, 400)}`,
+      });
     }
 
     // ssh transport: stream task up, run remote chad-spawn, stream result back.
@@ -194,25 +245,40 @@ export async function runSpawn(opts = {}) {
       const parsed = coerceJson(back.stdout, spawnResultSchema);
       if (parsed) return parsed;
     }
-    return spawnResultSchema.parse({ status: "failed", kind, exit_code: r.code, substrate: substrate || "gha", summary: `remote chad-spawn produced no parseable result (rc=${r.code}): ${r.stderr.slice(0, 400)}` });
+    return spawnResultSchema.parse({
+      status: "failed",
+      kind,
+      exit_code: r.code,
+      substrate: substrate || "gha",
+      summary: `remote chad-spawn produced no parseable result (rc=${r.code}): ${r.stderr.slice(0, 400)}`,
+    });
   } finally {
-    try { rmSync(dir, { recursive: true, force: true }); } catch { /* */ }
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* */
+    }
   }
 }
 
 // scoreIssue — chad-issue-triage's deterministic signal score, ported so the
 // pick is predictable from the source (label + reactions + age + linked PR).
 export function scoreIssue(issue = {}) {
-  const labels = (issue.labels || []).map((l) => (typeof l === "string" ? l : l.name || "")).map((s) => s.toLowerCase());
+  const labels = (issue.labels || [])
+    .map((l) => (typeof l === "string" ? l : l.name || ""))
+    .map((s) => s.toLowerCase());
   const reactions = issue.reactions?.total_count ?? issue.reactionsCount ?? 0;
-  const ageDays = issue.createdAt ? (Date.now() - new Date(issue.createdAt).getTime()) / 86400000 : 0;
+  const ageDays = issue.createdAt
+    ? (Date.now() - new Date(issue.createdAt).getTime()) / 86400000
+    : 0;
   let score = 0;
   if (labels.includes("needs-chad") || labels.includes("chad")) score += 5;
   if (labels.includes("bug")) score += 3;
   if (labels.includes("good first issue")) score += 2;
   if (labels.includes("wontfix") || labels.includes("invalid")) score -= 5;
   score += Math.min(reactions, 10);
-  if (ageDays < 7) score += 2; else if (ageDays > 90) score -= 2; // fresh signal > stale
+  if (ageDays < 7) score += 2;
+  else if (ageDays > 90) score -= 2; // fresh signal > stale
   if (issue.linkedPr || issue.pull_request) score -= 4; // already being worked
   return score;
 }

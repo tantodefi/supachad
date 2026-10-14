@@ -49,19 +49,18 @@ fi
 
 mkdir -p "$(dirname "$LOG")"
 ts() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
-log() { printf '[%s] %s\n' "$(ts)" "$*" >> "$LOG"; }
+log() { printf '[%s] %s\n' "$(ts)" "$*" >>"$LOG"; }
 
 SHIM_SRC="${CHAD_SHIM_SRC:-${HOME}/.nemoclaw/source/scripts/openwebui/chad-shim.py}"
 # Self-heal: the pod's container filesystem resets on pod recreate, so both the
 # sandbox-writable and image shim copies can vanish. Restore from the host copy
 # before the probe/restart logic decides the shim is dead.
-PROVISIONED=0
 if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" \
-    "test -x '$SHIM_PATCHED' -o -x '$SHIM_FALLBACK'" 2>/dev/null; then
+  "test -x '$SHIM_PATCHED' -o -x '$SHIM_FALLBACK'" 2>/dev/null; then
   if [ -f "$SHIM_SRC" ]; then
     log "self-heal: uploading chad-shim.py to pod"
     cat "$SHIM_SRC" | ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" \
-      "cat > '$SHIM_PATCHED' && chmod +x '$SHIM_PATCHED'" && PROVISIONED=1
+      "cat > '$SHIM_PATCHED' && chmod +x '$SHIM_PATCHED'" && log "self-heal: shim restored"
   else
     log "self-heal: host source missing at $SHIM_SRC"
   fi
@@ -69,8 +68,8 @@ fi
 
 # Trim local log to last ~1000 lines.
 trim_log() {
-  if [ -f "$LOG" ] && [ "$(wc -l < "$LOG" 2>/dev/null || echo 0)" -gt 1000 ]; then
-    tail -800 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+  if [ -f "$LOG" ] && [ "$(wc -l <"$LOG" 2>/dev/null || echo 0)" -gt 1000 ]; then
+    tail -800 "$LOG" >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
   fi
 }
 
@@ -96,7 +95,7 @@ if [ "$SHIM_ALIVE" -ge 1 ]; then
   # Kick the tunnel and re-probe. If reachable after the kick, no restart
   # needed; this is the tunnel-wedged path, not the shim-dead path.
   log "shim alive on pod (count=${SHIM_ALIVE}); tunnel probe failed — kicking tunnel"
-  launchctl kickstart -k "gui/$(id -u)/dev.nemoclaw.chad-tunnel" >> "$LOG" 2>&1 || true
+  launchctl kickstart -k "gui/$(id -u)/dev.nemoclaw.chad-tunnel" >>"$LOG" 2>&1 || true
   sleep 5
   if curl -fsS -m 5 "http://127.0.0.1:${SHIM_PORT}/v1/models" >/dev/null 2>&1; then
     log "shim reachable after tunnel kick — no restart needed"
@@ -104,7 +103,7 @@ if [ "$SHIM_ALIVE" -ge 1 ]; then
     # Emit a structured event so chad sees the recovery in the inbox.
     INBOX_LINE=$(printf '{"ts":"%s","source":"chad-shim-watchdog","kind":"tunnel-kicked","severity":"info","note":"shim alive, tunnel was wedged, kickstart restored reachability"}' "$(ts)")
     ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" \
-      "mkdir -p \$(dirname '${INBOX}'); echo '${INBOX_LINE}' >> '${INBOX}'" >> "$LOG" 2>&1 || true
+      "mkdir -p \$(dirname '${INBOX}'); echo '${INBOX_LINE}' >> '${INBOX}'" >>"$LOG" 2>&1 || true
 
     trim_log
     exit 0
@@ -145,7 +144,7 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" "
     echo no_binary
     exit 5
   fi
-" >> "$LOG" 2>&1
+" >>"$LOG" 2>&1
 RC=$?
 
 # Wait up to 30s for the port to start accepting.
@@ -174,7 +173,7 @@ INBOX_LINE=$(printf '{"ts":"%s","source":"chad-shim-watchdog","kind":"%s","sever
 ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" "
   mkdir -p \$(dirname '$INBOX')
   echo '$INBOX_LINE' >> '$INBOX'
-" >> "$LOG" 2>&1 || true
+" >>"$LOG" 2>&1 || true
 
 trim_log
 [ $RECOVERED -eq 1 ] && exit 0 || exit 1

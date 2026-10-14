@@ -23,14 +23,14 @@ LOG="${CHAD_INBOX_PRUNE_LOG:-${HOME}/.nemoclaw/openwebui/chad-inbox-prune.log}"
 
 mkdir -p "$(dirname "$LOG")"
 ts() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
-log() { printf '[%s] %s\n' "$(ts)" "$*" >> "$LOG"; }
+log() { printf '[%s] %s\n' "$(ts)" "$*" >>"$LOG"; }
 
 OUT=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" \
   "${INBOX_BIN} prune --keep ${KEEP}" 2>&1)
 log "${OUT}"
 
 # Bound the local log too.
-if [ "$(wc -l < "$LOG" 2>/dev/null || echo 0)" -gt 200 ]; then
-  tail -150 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+if [ "$(wc -l <"$LOG" 2>/dev/null || echo 0)" -gt 200 ]; then
+  tail -150 "$LOG" >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
 exit 0

@@ -35,7 +35,7 @@ overlay is a no-op — upstream behavior is preserved.
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────── chad sandbox ────────────────────────────┐
 │                                                                       │
 │   /usr/local/bin/gbrain        (wrapper — exports env from config)    │
@@ -58,7 +58,7 @@ Three pieces are NemoClaw-specific:
 
 1. **`scripts/gbrain-patches/`** — overlay applied in the Dockerfile after `bun add`. Makes the embedder model + dimensions + input_type configurable via env vars (upstream hardcodes `text-embedding-3-large` @ 1536 dims). See `scripts/gbrain-patches/README.md` for the full diff and sync-with-upstream procedure.
 2. **`scripts/sandbox-bin/gbrain-wrapper.sh`** — wrapper installed at `/usr/local/bin/gbrain`. Reads `/sandbox/.gbrain/config.json`, exports the relevant env vars (`OPENAI_BASE_URL`, `OPENAI_API_KEY`, `GBRAIN_EMBED_*`), then `exec`s the real `gbrain-bin`. The OpenAI SDK inside gbrain auto-picks-up `OPENAI_BASE_URL` / `OPENAI_API_KEY`.
-3. **`scripts/chad-cron-wrappers/chad-gbrain-dream`** + `chad-log-event` — daily maintenance + structured event log that the cron prompts call. See [Memory workflow](#memory-workflow) below.
+3. **`scripts/chad-cron-wrappers/chad-gbrain-dream`** + `chad-log-event` — daily maintenance + structured event log that the cron prompts call. See the Memory workflow section below.
 
 ## Embedder env-var contract
 

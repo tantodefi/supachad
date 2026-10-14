@@ -28,22 +28,41 @@ default_kind="researcher"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --task-file) task_file="$2"; shift 2 ;;
-    --task)      task_body="$2"; shift 2 ;;
-    --default)   default_kind="$2"; shift 2 ;;
-    -h|--help)
+    --task-file)
+      task_file="$2"
+      shift 2
+      ;;
+    --task)
+      task_body="$2"
+      shift 2
+      ;;
+    --default)
+      default_kind="$2"
+      shift 2
+      ;;
+    -h | --help)
       sed -n '2,25p' "$0" | sed -e 's/^# \{0,1\}//' -e '1,3d'
-      exit 0 ;;
-    *) echo "chad-route: unknown argument: $1" >&2; exit 2 ;;
+      exit 0
+      ;;
+    *)
+      echo "chad-route: unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
 if [ -n "$task_file" ]; then
-  [ -f "$task_file" ] || { echo "chad-route: task file not found: $task_file" >&2; exit 4; }
+  [ -f "$task_file" ] || {
+    echo "chad-route: task file not found: $task_file" >&2
+    exit 4
+  }
   task_body="$(cat "$task_file")"
 fi
 
-[ -n "$task_body" ] || { echo "chad-route: --task or --task-file required" >&2; exit 2; }
+[ -n "$task_body" ] || {
+  echo "chad-route: --task or --task-file required" >&2
+  exit 2
+}
 
 CHAD_ROUTE_BODY="$task_body" CHAD_ROUTE_DEFAULT="$default_kind" python3 <<'PY'
 import os, re, sys

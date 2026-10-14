@@ -45,17 +45,21 @@
       if (redirect && (redirect === "//" || /^\/{2,}/.test(redirect))) {
         params.set("redirect", "/");
         history.replaceState(null, "", location.pathname + "?" + params.toString() + location.hash);
-        console.log("[chad-loader] normalized broken auth redirect param: '" + redirect + "' → '/'");
+        console.log(
+          "[chad-loader] normalized broken auth redirect param: '" + redirect + "' → '/'",
+        );
       }
     }
     try {
       const stale = localStorage.getItem("redirectPath");
       if (stale && (stale === "//" || /^\/{2,}/.test(stale))) {
         localStorage.setItem("redirectPath", "/");
-        console.log("[chad-loader] normalized stale localStorage redirectPath: '" + stale + "' → '/'");
+        console.log(
+          "[chad-loader] normalized stale localStorage redirectPath: '" + stale + "' → '/'",
+        );
       }
-    } catch (_) {}
-  } catch (_) {}
+    } catch {}
+  } catch {}
 
   // ── Shared helpers ───────────────────────────────────────────────────────
   const CSS_ID = "chad-mc";
@@ -70,10 +74,6 @@
   const STYLE_TRIGGER_ID = "chad-mc-trigger-style";
   const STYLE_PANEL_ID = "chad-mc-style";
 
-  function sleep(ms) {
-    return new Promise((res) => setTimeout(res, ms));
-  }
-
   function cssEscape(s) {
     if (window.CSS && CSS.escape) return CSS.escape(s);
     return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -87,7 +87,7 @@
         let v = null;
         try {
           v = pred();
-        } catch (_) {}
+        } catch {}
         if (v) {
           clearInterval(timer);
           resolve(v);
@@ -101,8 +101,7 @@
 
   // ── 2. Model metadata (baked fallback + live /api/models) ────────────────
   const BAKED = {
-    "chad":
-      "Local OpenClaw agent on the chad sandbox. Use when you want access to private data/context, long-term memory (gbrain), custom skills, agent orchestration, or anything that needs tools (read/edit/exec, web, browser, cron). Slower (~20s/turn) but full agent harness with workspace files baked in.",
+    chad: "Local OpenClaw agent on the chad sandbox. Use when you want access to private data/context, long-term memory (gbrain), custom skills, agent orchestration, or anything that needs tools (read/edit/exec, web, browser, cron). Slower (~20s/turn) but full agent harness with workspace files baked in.",
     "nvidia/nemotron-3-super-120b-a12b":
       "Frontier general-purpose. 120B MoE / 12B active, NVIDIA's flagship for chat, reasoning, code, summarization. Same model Chad uses internally — pick this when you want raw inference without the agent wrapper.",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning":
@@ -129,24 +128,6 @@
       "ChatGLM frontier. Best for Chinese-language tasks, English-Chinese bilingual chat, translation. Strong reasoning in both languages.",
     "minimaxai/minimax-m2.5":
       "MiniMax frontier. Strong at long-context document processing, creative writing, narrative generation. Pick when you have a lot of context to thread through.",
-  };
-
-  // Display-name prefixes for matching trigger labels back to descriptions.
-  const NAME_PREFIXES = {
-    "Chad": BAKED["chad"],
-    "Nemotron 3 Super": BAKED["nvidia/nemotron-3-super-120b-a12b"],
-    "Nemotron 3 Nano": BAKED["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"],
-    "Llama 3.3 70B": BAKED["meta/llama-3.3-70b-instruct"],
-    "Llama 3.1 405B": BAKED["meta/llama-3.1-405b-instruct"],
-    "Llama 3.1 70B": BAKED["meta/llama-3.1-70b-instruct"],
-    "Mixtral": BAKED["mistralai/mixtral-8x22b-instruct-v0.1"],
-    "Gemma": BAKED["google/gemma-3-27b-it"],
-    "GPT-OSS 20B": BAKED["openai/gpt-oss-20b"],
-    "GPT-OSS 120B": BAKED["openai/gpt-oss-120b"],
-    "Phi-4": BAKED["microsoft/phi-4-multimodal-instruct"],
-    "Qwen3 Coder": BAKED["qwen/qwen3-coder-480b-a35b-instruct"],
-    "GLM-5.1": BAKED["z-ai/glm-5.1"],
-    "MiniMax": BAKED["minimaxai/minimax-m2.5"],
   };
 
   const MODEL_STATE = { models: [], byId: {}, tags: {}, fetchedAt: 0, fetched: false };
@@ -200,18 +181,6 @@
     return null;
   }
 
-  function descriptionForLabel(label) {
-    if (!label) return null;
-    const trimmed = label.trim();
-    for (const prefix of Object.keys(NAME_PREFIXES)) {
-      if (trimmed.startsWith(prefix)) return NAME_PREFIXES[prefix];
-    }
-    const rec = MODEL_STATE.models.find(
-      (m) => m.name === trimmed || trimmed.startsWith(m.name.split(" — ")[0])
-    );
-    return rec && rec.description ? rec.description : null;
-  }
-
   // ── 2a. Dropdown tooltip annotation ──────────────────────────────────────
   // open-webui's listbox is windowed: the same DOM nodes get recycled for
   // different models during scroll. Re-patch keyed on the CURRENT data-value.
@@ -222,7 +191,7 @@
     if (el.dataset.chadTippy === key) return false;
     try {
       inst.setContent(newContent);
-    } catch (_) {
+    } catch {
       return false;
     }
     el.dataset.chadTippy = key;
@@ -346,16 +315,26 @@
       const st = document.createElement("style");
       st.id = STYLE_TRIGGER_ID;
       st.textContent =
-        "#" + TRIGGER_ID + " {" +
+        "#" +
+        TRIGGER_ID +
+        " {" +
         "  display: inline-flex; align-items: center; gap: 0.35rem; height: 1.75rem;" +
         "  padding: 0 0.65rem; margin: 0 0.25rem; border-radius: 0.6rem;" +
         "  font-size: 0.75rem; font-weight: 500; cursor: pointer; white-space: nowrap;" +
         "  color: #4f46e5; background: rgba(79,70,229,0.08); border: 1px solid rgba(79,70,229,0.35);" +
         "}" +
-        "#" + TRIGGER_ID + ":hover { background: rgba(79,70,229,0.15); }" +
-        "#" + TRIGGER_ID + " .chad-mc-label { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }" +
-        "html.dark #" + TRIGGER_ID + " { color: #818cf8; background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.4); }" +
-        "html.dark #" + TRIGGER_ID + ":hover { background: rgba(99,102,241,0.2); }";
+        "#" +
+        TRIGGER_ID +
+        ":hover { background: rgba(79,70,229,0.15); }" +
+        "#" +
+        TRIGGER_ID +
+        " .chad-mc-label { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }" +
+        "html.dark #" +
+        TRIGGER_ID +
+        " { color: #818cf8; background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.4); }" +
+        "html.dark #" +
+        TRIGGER_ID +
+        ":hover { background: rgba(99,102,241,0.2); }";
       (document.head || document.documentElement).appendChild(st);
     }
   }
@@ -385,7 +364,7 @@
     const label = currentModelName();
     if (!label) return null;
     const rec = MODEL_STATE.models.find(
-      (m) => m.name === label || label.startsWith(m.name.split(" — ")[0])
+      (m) => m.name === label || label.startsWith(m.name.split(" — ")[0]),
     );
     return rec ? rec.id : null;
   }
@@ -405,13 +384,23 @@
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
     panel.innerHTML =
-      '<input id="' + SEARCH_ID + '" type="text" placeholder="Search models…" autocomplete="off">' +
+      '<input id="' +
+      SEARCH_ID +
+      '" type="text" placeholder="Search models…" autocomplete="off">' +
       '<div style="display:flex;align-items:center;gap:0.5rem;">' +
-      '<span id="' + COUNT_ID + '"></span>' +
-      '<button id="' + CLEAR_ID + '" type="button">Clear</button>' +
+      '<span id="' +
+      COUNT_ID +
+      '"></span>' +
+      '<button id="' +
+      CLEAR_ID +
+      '" type="button">Clear</button>' +
       "</div>" +
-      '<div id="' + CLOUD_ID + '"></div>' +
-      '<div id="' + LIST_ID + '"></div>';
+      '<div id="' +
+      CLOUD_ID +
+      '"></div>' +
+      '<div id="' +
+      LIST_ID +
+      '"></div>';
     return panel;
   }
 
@@ -465,8 +454,12 @@
     listEl.innerHTML = "";
     if (countEl) {
       countEl.textContent =
-        filtered.length + " model" + (filtered.length === 1 ? "" : "s") +
-        (selected.size > 0 ? " · " + selected.size + " categor" + (selected.size === 1 ? "y" : "ies") : "");
+        filtered.length +
+        " model" +
+        (filtered.length === 1 ? "" : "s") +
+        (selected.size > 0
+          ? " · " + selected.size + " categor" + (selected.size === 1 ? "y" : "ies")
+          : "");
     }
 
     if (filtered.length === 0) {
@@ -539,9 +532,7 @@
       input.dispatchEvent(new Event("input", { bubbles: true }));
 
       const opt = await waitFor(() => {
-        return document.querySelector(
-          '[role="option"][data-value="' + cssEscape(modelId) + '"]'
-        );
+        return document.querySelector('[role="option"][data-value="' + cssEscape(modelId) + '"]');
       }, 1200);
       if (opt) {
         opt.click();
@@ -757,6 +748,6 @@
   };
   console.log(
     "[chad-loader] v3 loaded — tooltips + top-nav 'Switch Model' search. " +
-    "Try the Switch Model button in the top bar, or chadModelCloud.refresh()."
+      "Try the Switch Model button in the top bar, or chadModelCloud.refresh().",
   );
 })();

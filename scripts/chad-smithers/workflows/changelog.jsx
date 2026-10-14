@@ -33,7 +33,7 @@ const schemas = {
   commits: z.object({ count: z.number(), log: z.string() }),
   draft: z.object({
     heading: z.string(),
-    entry: z.string(),   // markdown changelog body
+    entry: z.string(), // markdown changelog body
     highlights: z.array(z.string()),
   }),
   post: z.object({ status: z.string(), title: z.string() }),
@@ -44,7 +44,9 @@ const { smithers, Workflow, Task, Sequence, outputs } = api;
 
 function git(args) {
   return new Promise((resolve) => {
-    execFile("git", args, { cwd: REPO_DIR, maxBuffer: 8 * 1024 * 1024 }, (_e, out) => resolve(out ? out.toString() : ""));
+    execFile("git", args, { cwd: REPO_DIR, maxBuffer: 8 * 1024 * 1024 }, (_e, out) =>
+      resolve(out ? out.toString() : ""),
+    );
   });
 }
 
@@ -57,17 +59,33 @@ export const workflow = smithers((ctx) => {
     <Workflow name="chad-changelog">
       <Sequence>
         {/* 1) Collect recent commits (read-only). Conventional-Commit subjects. */}
-        <Task id="collect" output={outputs.commits} sideEffect idempotencyKey={`changelog-collect-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="collect"
+          output={outputs.commits}
+          sideEffect
+          idempotencyKey={`changelog-collect-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
-            const log = await git(["log", `--since=${SINCE}`, "--pretty=format:%h %s", "--no-merges"]);
+            const log = await git([
+              "log",
+              `--since=${SINCE}`,
+              "--pretty=format:%h %s",
+              "--no-merges",
+            ]);
             const lines = log.split("\n").filter(Boolean);
             return { count: lines.length, log: lines.join("\n").slice(0, 8000) };
           }}
         </Task>
 
         {/* 2) Draft the entry (capable tier), skipped when there's nothing to write. */}
-        <Task id="draft" skipIf={!hasCommits} output={outputs.draft}
-          agent={pickAgent("summarize")} fallbackAgent={pickFallback("summarize")} {...taskOpts("summarize")}>
+        <Task
+          id="draft"
+          skipIf={!hasCommits}
+          output={outputs.draft}
+          agent={pickAgent("summarize")}
+          fallbackAgent={pickFallback("summarize")}
+          {...taskOpts("summarize")}
+        >
           {[
             "Draft a changelog entry from these Conventional-Commit subjects. Group by theme, lead with",
             "user-facing changes, drop pure chore/ci noise. Match a terse, builder voice — no marketing.",
@@ -80,14 +98,24 @@ export const workflow = smithers((ctx) => {
 
         {/* 3) Post — Approval-gated (human approves the wording), shadow unless
             CHAD_CHANGELOG_POST=1. Never edits the changelog file directly. */}
-        <Task id="post" skipIf={!hasCommits} needsApproval output={outputs.post} sideEffect
-          idempotencyKey={`changelog-post-${new Date().toISOString().slice(0, 10)}`}>
+        <Task
+          id="post"
+          skipIf={!hasCommits}
+          needsApproval
+          output={outputs.post}
+          sideEffect
+          idempotencyKey={`changelog-post-${new Date().toISOString().slice(0, 10)}`}
+        >
           {async () => {
             const title = `Changelog draft — ${draft?.heading || new Date().toISOString().slice(0, 10)}`;
-            const body = `# ${title}\n\n${draft?.entry || ""}\n\n**Highlights:**\n` +
+            const body =
+              `# ${title}\n\n${draft?.entry || ""}\n\n**Highlights:**\n` +
               (draft?.highlights || []).map((h) => `- ${h}`).join("\n");
             if (POST) await postNote({ title, content: body, tags: "chad-changelog" });
-            return { status: POST ? "posted" : "shadow-logged", title: POST ? `${title} (posted)` : `SHADOW: ${title}` };
+            return {
+              status: POST ? "posted" : "shadow-logged",
+              title: POST ? `${title} (posted)` : `SHADOW: ${title}`,
+            };
           }}
         </Task>
       </Sequence>

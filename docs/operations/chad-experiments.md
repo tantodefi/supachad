@@ -28,7 +28,7 @@ agent loop to stall. (The previous design — an 8-tool-call multi-phase
 cron prompt — stalled nightly on free-tier inference and produced
 ledger entries without operator-visible artifacts.)
 
-```
+```text
 02:00 UTC nightly cron (nightly-experiments)
   → chad-experiment-cron (deterministic driver)
 

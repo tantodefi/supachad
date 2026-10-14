@@ -55,14 +55,35 @@ PARALLEL="3"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --fixtures) FIXTURES_DIR="$2"; shift 2 ;;
-    --out)      OUT_ROOT="$2"; shift 2 ;;
-    --only)     ONLY="$2"; shift 2 ;;
-    --variants) VARIANTS="$2"; shift 2 ;;
-    --models)   MODELS="$2"; shift 2 ;;
-    --samples)  SAMPLES="$2"; shift 2 ;;
-    --parallel) PARALLEL="$2"; shift 2 ;;
-    *)          shift ;;
+    --fixtures)
+      FIXTURES_DIR="$2"
+      shift 2
+      ;;
+    --out)
+      OUT_ROOT="$2"
+      shift 2
+      ;;
+    --only)
+      ONLY="$2"
+      shift 2
+      ;;
+    --variants)
+      VARIANTS="$2"
+      shift 2
+      ;;
+    --models)
+      MODELS="$2"
+      shift 2
+      ;;
+    --samples)
+      SAMPLES="$2"
+      shift 2
+      ;;
+    --parallel)
+      PARALLEL="$2"
+      shift 2
+      ;;
+    *) shift ;;
   esac
 done
 
@@ -79,10 +100,10 @@ PROMPT_VERSION="$(sha256sum /usr/local/bin/chad-drafter 2>/dev/null | awk '{prin
 PROMPT_VERSION="${PROMPT_VERSION:-unknown}"
 
 FIXTURES_DIR="$FIXTURES_DIR" RUN_DIR="$RUN_DIR" RUN_TS="$RUN_TS" \
-ONLY="$ONLY" PROMPT_VERSION="$PROMPT_VERSION" \
-VARIANTS="$VARIANTS" MODELS="$MODELS" SAMPLES="$SAMPLES" PARALLEL="$PARALLEL" \
-VARIANTS_DIR="$VARIANTS_DIR" \
-python3 <<'PY'
+  ONLY="$ONLY" PROMPT_VERSION="$PROMPT_VERSION" \
+  VARIANTS="$VARIANTS" MODELS="$MODELS" SAMPLES="$SAMPLES" PARALLEL="$PARALLEL" \
+  VARIANTS_DIR="$VARIANTS_DIR" \
+  python3 <<'PY'
 import json, os, re, subprocess, sys, time, glob, threading, traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 

@@ -15,9 +15,15 @@
 
 set -uo pipefail
 HOOK="${MOSHI_HOOK_BIN:-/opt/homebrew/bin/moshi-hook}"
-[ -x "$HOOK" ] || { echo "moshi-refresh: moshi-hook not found at $HOOK; skipping" >&2; exit 0; }
+[ -x "$HOOK" ] || {
+  echo "moshi-refresh: moshi-hook not found at $HOOK; skipping" >&2
+  exit 0
+}
 
-status="$("$HOOK" status 2>/dev/null)" || { echo "moshi-refresh: status failed; skipping" >&2; exit 0; }
+status="$("$HOOK" status 2>/dev/null)" || {
+  echo "moshi-refresh: status failed; skipping" >&2
+  exit 0
+}
 
 # The status line for the claude target looks like:  "claude   stale   missing: …"
 # or "claude   current  <path>". Re-install only when it's not current.

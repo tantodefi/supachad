@@ -23,7 +23,10 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 # shellcheck source=/dev/null
-set -a; . "$ENV_FILE"; set +a
+set -a
+# shellcheck source=/dev/null # env file path is runtime-configurable
+. "$ENV_FILE"
+set +a
 
 echo "==> Stopping docker compose (all profiles)"
 (cd "$WEBUI_DIR" && docker compose --env-file "$ENV_FILE" \

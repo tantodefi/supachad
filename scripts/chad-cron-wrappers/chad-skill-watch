@@ -45,16 +45,16 @@ fi
 LIVE_FILE="$(mktemp)"
 trap 'rm -f "$LIVE_FILE"' EXIT
 
-if ! openclaw skills list --json 2>/dev/null > "$LIVE_FILE"; then
+if ! openclaw skills list --json 2>/dev/null >"$LIVE_FILE"; then
   echo "chad-skill-watch: 'openclaw skills list --json' failed; nothing to compare"
   exit 0
 fi
 
 SNAPSHOT_FILE="$SNAPSHOT_FILE" \
-LIVE_FILE="$LIVE_FILE" \
-MEMORY_FILE="$MEMORY_FILE" \
-TS="$TS" \
-python3 <<'PY'
+  LIVE_FILE="$LIVE_FILE" \
+  MEMORY_FILE="$MEMORY_FILE" \
+  TS="$TS" \
+  python3 <<'PY'
 import json, os, sys
 
 snap_path = os.environ["SNAPSHOT_FILE"]

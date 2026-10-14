@@ -8,8 +8,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  rollingMean, recordScore, select, needsExpansion, addCandidate,
-  activeCandidates, champions, paretoFront, POLICY,
+  rollingMean,
+  recordScore,
+  select,
+  needsExpansion,
+  addCandidate,
+  activeCandidates,
+  champions,
+  paretoFront,
+  POLICY,
 } from "./population.js";
 
 function freshPop() {
@@ -90,12 +97,14 @@ test("paretoFront is empty without cost data (scalar fallback)", () => {
 test("paretoFront keeps non-dominated trade-offs and drops dominated points", () => {
   const pop = freshPop();
   const strong = addCandidate(pop, { kind: "p", spec: { label: "strong" } }); // high quality, costly
-  const lean = addCandidate(pop, { kind: "p", spec: { label: "lean" } });     // lower quality, cheap
+  const lean = addCandidate(pop, { kind: "p", spec: { label: "lean" } }); // lower quality, cheap
   const dominated = addCandidate(pop, { kind: "p", spec: { label: "dom" } }); // worse on both
   recordScore(pop, strong, 0.9, undefined, 0.8);
   recordScore(pop, lean, 0.6, undefined, 0.1);
   recordScore(pop, dominated, 0.5, undefined, 0.9);
-  const front = paretoFront(pop.candidates).map((c) => c.id).sort();
+  const front = paretoFront(pop.candidates)
+    .map((c) => c.id)
+    .sort();
   assert.deepEqual(front, [strong, lean].sort());
 });
 

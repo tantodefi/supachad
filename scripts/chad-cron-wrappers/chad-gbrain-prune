@@ -23,9 +23,9 @@
 set -uo pipefail
 
 DRY_RUN="${DRY_RUN:-${1:-1}}"
-HORIZON_LONG="${HORIZON_LONG:-365}"     # gbrain memory/events/chat
-HORIZON_SHORT="${HORIZON_SHORT:-30}"    # workspace digest/feedback/prune logs
-HORIZON_CHAT="${HORIZON_CHAT:-180}"     # gbrain chat/<id>
+HORIZON_LONG="${HORIZON_LONG:-365}"  # gbrain memory/events/chat
+HORIZON_SHORT="${HORIZON_SHORT:-30}" # workspace digest/feedback/prune logs
+HORIZON_CHAT="${HORIZON_CHAT:-180}"  # gbrain chat/<id>
 WORKSPACE="/sandbox/.openclaw/workspace"
 MEMORY_DIR="${WORKSPACE}/memory"
 TS="$(date -u +%FT%TZ)"
@@ -64,7 +64,7 @@ while IFS= read -r slug; do
   prefix="${slug%%/*}"
   date_part="${slug##*/}"
   case "$prefix" in
-    memory|events) cut="$CUT_LONG" ;;
+    memory | events) cut="$CUT_LONG" ;;
     chat) cut="$CUT_CHAT" ;;
     *) continue ;;
   esac

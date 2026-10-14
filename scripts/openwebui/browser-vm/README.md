@@ -10,7 +10,7 @@ Deliberately **no scripts run on the relay host**: the CheerpX VM is a
 user-mode WebAssembly sandbox inside Chromium. The relay only routes frames
 and (optionally) proxies a network via CheerpX.Network.
 
-```
+```text
 ┌────────────┐   https://supachad.com/vm-bridge  ┌───────────────────────┐
 │ Chromium   │  WS: register /exec /term:data    │ browser-vm-relay      │
 │  loader.js │◄───────────────┐                  │  (fastapi+uvicorn)    │
@@ -26,7 +26,7 @@ and (optionally) proxies a network via CheerpX.Network.
 
 ## Layout
 
-```
+```text
 relay/relay.py          FastAPI daemon: /vm (browser WS), /api/terminals/{id}
                         (native WS bridge), POST /api/cmd (tool HTTP), /files/*
                         (Open Terminal sidebar), /api/status, /api/config,
@@ -311,7 +311,7 @@ like they had network will now fail to resolve — correctly, but visibly.
 between two OSC 999 sentinels that xterm swallows (unknown OSC ⇒ no visible
 output, and the markers never reach the relay mirror):
 
-```
+```text
 stty -echo
 __bvps1="$PS1"; __bvcd="$PWD"; PS1=""; PS2=""
 printf '\033]999;bv%s%s-b\007' 'a1b2' 'c3d4'                      # begin

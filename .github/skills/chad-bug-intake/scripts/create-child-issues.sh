@@ -53,7 +53,7 @@ while [ "$#" -gt 0 ]; do
       dry_run=1
       shift
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -110,7 +110,8 @@ while IFS= read -r line || [ -n "$line" ]; do
     title_part="task: $title_part"
   fi
 
-  issue_body="$(cat <<EOF
+  issue_body="$(
+    cat <<EOF
 ## Description
 
 ${desc_part}
@@ -127,7 +128,7 @@ ${desc_part}
 - [ ] Tests added or updated as needed
 - [ ] Parent issue updated with progress
 EOF
- )"
+  )"
 
   if [ "$dry_run" -eq 1 ]; then
     printf 'TITLE=%s\n' "$title_part"
@@ -138,7 +139,7 @@ EOF
 
   created_url="$(gh issue create --repo "$repo" --title "$title_part" --body "$issue_body" "${label_args[@]}")"
   created_issues+=("$created_url")
-done < "$tasks_file"
+done <"$tasks_file"
 
 if [ "$dry_run" -eq 1 ]; then
   exit 0
