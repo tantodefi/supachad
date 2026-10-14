@@ -50,6 +50,7 @@ GW_PORT="${CHAD_GATEWAY_PORT:-18789}"
 HOST_CREDS="${CHAD_HOST_CREDS:-${HOME}/.nemoclaw/credentials.json}"
 ALLOWLIST_FILE="/sandbox/.openclaw-data/state/operator-allowlist"
 INBOX="/sandbox/.openclaw-data/state/agent-inbox.jsonl"
+CRON_JOBS="/sandbox/.openclaw-data/cron/jobs.json"
 GUI="gui/$(id -u)"
 
 # Container-model (OpenShell 0.0.116 docker driver) support. CHAD_SANDBOX_MODE=
@@ -88,6 +89,15 @@ sshp() {
     "$OPENSHELL_BIN" --gateway "$GW_NAME" sandbox exec -n "$SANDBOX_NAME" --timeout 60 -- sh -c "$1" </dev/null 2>&1 | grep -viE 'UNDICI|trace-warnings'
   else
     ssh -n -o BatchMode=yes -o ConnectTimeout=12 "$SSH_HOST" "$1" 2>&1 | grep -viE 'UNDICI|trace-warnings'
+  fi
+}
+
+# sshp() with stdin streamed through (sshp/kx redirect </dev/null) — sandbox user.
+sshin() {
+  if [ "$SANDBOX_MODE" = container ]; then
+    docker exec -i -u sandbox "$SANDBOX_CONTAINER" sh -c "$1" 2>&1
+  else
+    ssh -o BatchMode=yes -o ConnectTimeout=12 "$SSH_HOST" "$1" 2>&1
   fi
 }
 
@@ -264,12 +274,37 @@ json.dump({k:src[k] for k in keep if k in src}, sys.stdout)
 
 cmd_restore_data() {
   step "restore-data (chad-restore-from-github: workspace/memory/gbrain/cron)"
+  # A container/pod restart wipes the image layer (bin/, cron store) but /sandbox
+  # data often survives. Restoring then REPLACES the live brain with the older
+  # GitHub snapshot — only do it when the state is actually gone, or on FORCE.
+  local gb idn
+  gb=$(sshp 'du -sm /sandbox/.gbrain 2>/dev/null | cut -f1')
+  idn=$(sshp 'test -s /sandbox/.openclaw/workspace/IDENTITY.md && echo y')
+  if [ "${CHAD_FORCE_RESTORE:-0}" != 1 ] && [[ "$gb" =~ ^[0-9]+$ ]] && [ "$gb" -ge 5 ] && [ "$idn" = y ]; then
+    ok "state survived (gbrain ${gb}M + identity) — skipping restore (CHAD_FORCE_RESTORE=1 to override)"
+    return 0
+  fi
   warn "overwrites pod workspace state from the chad-state backup"
   sshp 'chad-restore-from-github 2>&1 | tail -20'
 }
 
 cmd_cron_reload() {
   step "cron-reload (re-register crons from restored jobs.json)"
+  # The cron store lives on the wiped layer; when restore-data is skipped (state
+  # survived) jobs.json is gone. Pull just that file from chad-state with the
+  # host GITHUB_TOKEN (classic ghp_; gh CLI is Supachad and can't read the repo).
+  if [ "$(sshp "test -s $CRON_JOBS && echo y")" != y ]; then
+    local tok repo
+    tok=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('GITHUB_TOKEN',''))" 2>/dev/null)
+    repo=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('CHAD_STATE_REPO','tantodefi/chad-state'))" 2>/dev/null)
+    if curl -fsS -m 20 -H "Authorization: token $tok" -H 'Accept: application/vnd.github.raw' \
+      "https://api.github.com/repos/$repo/contents/cron/jobs.json" \
+      | sshin "mkdir -p \$(dirname $CRON_JOBS) && cat > $CRON_JOBS" >/dev/null; then
+      ok "jobs.json missing — fetched from $repo"
+    else
+      bad "jobs.json missing and fetch from $repo failed"
+    fi
+  fi
   sshp 'chad-cron-reload 2>&1 | tail -8'
 }
 
@@ -333,6 +368,12 @@ cmd_doctor() {
   local code
   code=$(curl -sS -o /dev/null -w '%{http_code}' -m 6 "http://127.0.0.1:$SHIM_PORT/v1/models" 2>/dev/null)
   [ "$code" = "200" ] && ok "shim :$SHIM_PORT → 200" || bad "shim :$SHIM_PORT → ${code:-unreachable}"
+  # sandbox reachable? sshp folds transport errors into stdout, so every check
+  # below would read "sandbox not found"/BadSignature text as a value — stop here.
+  if [ "$(sshp 'echo chad-reachable')" != chad-reachable ]; then
+    bad "sandbox unreachable via $([ "$SANDBOX_MODE" = container ] && echo "openshell sandbox exec" || echo "ssh $SSH_HOST") — check gateway on :8080, CLI mTLS, handshake secret"
+    return 1
+  fi
   # gateway
   [ "$(sshp "ss -tln 2>/dev/null | grep -q ':$GW_PORT' && echo y")" = "y" ] && ok "gateway listening :$GW_PORT" || bad "gateway not listening :$GW_PORT"
   # gbrain
@@ -346,11 +387,12 @@ cmd_doctor() {
   # allowlist gate
   local n
   n=$(sshp "test -s '$ALLOWLIST_FILE' && wc -l < '$ALLOWLIST_FILE'")
-  [ -n "$n" ] && ok "allowlist gate armed ($n operators)" || bad "allowlist EMPTY — gate fail-open (run: chad-ops gate-sync)"
+  [[ "$n" =~ ^[0-9]+$ ]] && ok "allowlist gate armed ($n operators)" || bad "allowlist EMPTY — gate fail-open (run: chad-ops gate-sync)"
   # crons registered (canonical durable set = 10 pod crons; 3 more are host timers)
   local crons
   crons=$(sshp "openclaw cron list 2>/dev/null | grep -cE 'cron [0-9*]'")
-  [ "${crons:-0}" -ge 10 ] && ok "crons registered ($crons)" || warn "only ${crons:-0} crons registered (expect 10) — run: chad-ops cron-reload"
+  [[ "$crons" =~ ^[0-9]+$ ]] || crons=0
+  [ "$crons" -ge 10 ] && ok "crons registered ($crons)" || warn "only ${crons:-0} crons registered (expect 10) — run: chad-ops cron-reload"
   # Chad's custom skills loaded (extraDirs)
   local sk
   sk=$(sshp "python3 -c \"import json;print('y' if 'openclaw-data/skills' in str(json.load(open('/sandbox/.openclaw/openclaw.json')).get('skills',{}).get('load',{}).get('extraDirs')) else 'n')\"")
@@ -362,7 +404,21 @@ cmd_doctor() {
   # inbox noise today
   local errs
   errs=$(sshp "grep \$(date -u +%Y-%m-%d) '$INBOX' 2>/dev/null | grep -c '\"severity\":\"error\"'")
-  [ "${errs:-0}" -gt 50 ] && warn "agent-inbox has ${errs} error events today (run: chad-ops inbox-prune)" || ok "agent-inbox clean (${errs:-0} errors today)"
+  [[ "$errs" =~ ^[0-9]+$ ]] || errs=0
+  [ "$errs" -gt 50 ] && warn "agent-inbox has ${errs} error events today (run: chad-ops inbox-prune)" || ok "agent-inbox clean (${errs:-0} errors today)"
+  # chad-state backup freshness (workspace-backup cron runs every 6h)
+  local tok repo last
+  tok=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('GITHUB_TOKEN',''))" 2>/dev/null)
+  repo=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('CHAD_STATE_REPO','tantodefi/chad-state'))" 2>/dev/null)
+  last=$(curl -fsS -m 15 -H "Authorization: token $tok" "https://api.github.com/repos/$repo/commits?per_page=1" 2>/dev/null \
+    | python3 -c "import json,sys,datetime as d;c=json.load(sys.stdin)[0]['commit']['committer']['date'];print(int((d.datetime.now(d.timezone.utc)-d.datetime.fromisoformat(c.replace('Z','+00:00'))).total_seconds()//3600))" 2>/dev/null)
+  if ! [[ "$last" =~ ^[0-9]+$ ]]; then
+    warn "chad-state backup age unknown (GitHub API unreachable or token lacks access)"
+  elif [ "$last" -gt 12 ]; then
+    warn "last chad-state backup ${last}h ago (expect ≤6h) — workspace-backup cron not running?"
+  else
+    ok "chad-state backup fresh (${last}h ago)"
+  fi
 }
 
 cmd_recover() {
