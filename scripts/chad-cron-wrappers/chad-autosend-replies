@@ -39,7 +39,9 @@ if [ "$#" -ne 3 ]; then
   exit 64
 fi
 
-CLASSIFIED="$1"; DRAFTER_OUT="$2"; MEMORY_FILE="$3"
+CLASSIFIED="$1"
+DRAFTER_OUT="$2"
+MEMORY_FILE="$3"
 
 if [ ! -r "$CLASSIFIED" ] || [ ! -r "$DRAFTER_OUT" ]; then
   echo "chad-autosend-replies: input not readable" >&2
@@ -96,10 +98,10 @@ echo '[]' >"$RESULTS"
 
 i=0
 while [ "$i" -lt "$ITEM_COUNT" ]; do
-  ID="$(python3 -c    'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["id"])'      "$WORK" "$i")"
-  FROM="$(python3 -c  'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["from"])'    "$WORK" "$i")"
-  SUBJ="$(python3 -c  'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["subject"])' "$WORK" "$i")"
-  BODY="$(python3 -c  'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["body"])'    "$WORK" "$i")"
+  ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["id"])' "$WORK" "$i")"
+  FROM="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["from"])' "$WORK" "$i")"
+  SUBJ="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["subject"])' "$WORK" "$i")"
+  BODY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["body"])' "$WORK" "$i")"
 
   # Extract a stable email address from the From: header for the gate target.
   ADDR="$(python3 -c '
@@ -109,15 +111,36 @@ m = re.search(r"<([^>]+)>", s)
 print((m.group(1) if m else s).strip().lower())
 ' "$FROM")"
 
-  DECISION="$("$GATE" check email_reply "$ADDR" 2>/dev/null || true)"
-  RC=$?
+  # Capture the gate's REAL exit code. `$(... || true)` + `RC=$?` always read 0,
+  # so every draft was classified auto-sent regardless of review/policy-block/
+  # budget/kill-switch (shellcheck SC2034 caught the unused DECISION, 2026-10-14).
+  RC=0
+  "$GATE" check email_reply "$ADDR" >/dev/null 2>&1 || RC=$?
   case "$RC" in
-    0) NEW_ACTION="auto-sent";   STATUS="" ;;
-    1) NEW_ACTION="draft";       STATUS="kept-for-review" ;;
-    2) NEW_ACTION="blocked";     STATUS="policy-block" ;;
-    3) NEW_ACTION="deferred";    STATUS="budget-exhausted" ;;
-    4) NEW_ACTION="deferred";    STATUS="kill-switch" ;;
-    *) NEW_ACTION="draft";       STATUS="gate-error-rc${RC}" ;;
+    0)
+      NEW_ACTION="auto-sent"
+      STATUS=""
+      ;;
+    1)
+      NEW_ACTION="draft"
+      STATUS="kept-for-review"
+      ;;
+    2)
+      NEW_ACTION="blocked"
+      STATUS="policy-block"
+      ;;
+    3)
+      NEW_ACTION="deferred"
+      STATUS="budget-exhausted"
+      ;;
+    4)
+      NEW_ACTION="deferred"
+      STATUS="kill-switch"
+      ;;
+    *)
+      NEW_ACTION="draft"
+      STATUS="gate-error-rc${RC}"
+      ;;
   esac
 
   RESULT="ok"
@@ -177,7 +200,7 @@ PY
 TS="$(date -u +%FT%TZ)"
 SHIPPED="$(python3 -c 'import json,sys; print(sum(1 for r in json.load(open(sys.argv[1])) if r["action"]=="auto-sent" and r["result"]=="ok"))' "$RESULTS")"
 BLOCKED="$(python3 -c 'import json,sys; print(sum(1 for r in json.load(open(sys.argv[1])) if r["action"] in ("blocked","deferred")))' "$RESULTS")"
-FAILED="$(python3 -c  'import json,sys; print(sum(1 for r in json.load(open(sys.argv[1])) if r["action"]=="draft"  and r["result"]=="error"))' "$RESULTS")"
+FAILED="$(python3 -c 'import json,sys; print(sum(1 for r in json.load(open(sys.argv[1])) if r["action"]=="draft"  and r["result"]=="error"))' "$RESULTS")"
 
 if [ "$SHIPPED" -gt 0 ]; then
   {
@@ -191,7 +214,7 @@ for r in json.load(open(sys.argv[1])):
         print(f"  id: {r['id']}")
         print(f"  body:\n  > " + (r["body"] or "").replace("\n", "\n  > "))
 PY
-  } >> "$MEMORY_FILE"
+  } >>"$MEMORY_FILE"
 fi
 
 if [ "$BLOCKED" -gt 0 ]; then
@@ -204,7 +227,7 @@ for r in json.load(open(sys.argv[1])):
     if r["action"] in ("blocked", "deferred"):
         print(f"- [{r['id']}] {r['subject']} — from: {r['from']} — {r['action']} ({r['status']})")
 PY
-  } >> "$MEMORY_FILE"
+  } >>"$MEMORY_FILE"
 fi
 
 if [ "$FAILED" -gt 0 ]; then
@@ -217,7 +240,7 @@ for r in json.load(open(sys.argv[1])):
     if r["action"] == "draft" and r["result"] == "error":
         print(f"- [{r['id']}] {r['subject']} — from: {r['from']} — {r['status']}")
 PY
-  } >> "$MEMORY_FILE"
+  } >>"$MEMORY_FILE"
 fi
 
 echo "auto-sent: ${SHIPPED}  blocked-or-deferred: ${BLOCKED}  failed: ${FAILED}  (total considered: ${ITEM_COUNT})"

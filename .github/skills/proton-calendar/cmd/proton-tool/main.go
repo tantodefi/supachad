@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/mail"
 	"net/url"
@@ -130,9 +131,16 @@ func login(ctx context.Context) (*proton.Manager, *proton.Client) {
 		os.Exit(1)
 	}
 
+	// Proton rejects retired client versions with Code=5003 ("This web page is
+	// out of date"). Track https://mail.proton.me/assets/version.json; override
+	// without a rebuild via PROTON_APP_VERSION.
+	appVersion := os.Getenv("PROTON_APP_VERSION")
+	if appVersion == "" {
+		appVersion = "web-mail@5.0.136.4"
+	}
 	m := proton.New(
 		proton.WithHostURL("https://mail-api.proton.me"),
-		proton.WithAppVersion("web-mail@5.0.36"),
+		proton.WithAppVersion(appVersion),
 	)
 
 	// Try to restore session from cached tokens (uses /auth/v4/refresh,
@@ -148,10 +156,38 @@ func login(ctx context.Context) (*proton.Manager, *proton.Client) {
 	}
 
 	// Full SRP login — this is rate-limited by Proton to ~10/hour.
-	c, auth, err := m.NewClientWithLogin(ctx, username, []byte(password))
+	// Human verification (Code=9001): Proton gates scripted SRP logins behind a
+	// CAPTCHA. Save the challenge next to the session cache and print the URL;
+	// once the operator solves it in a browser, the next run replays the same
+	// token (the Proton Bridge flow) and the session cache takes over from there.
+	hvFile := sessionFile + ".hv"
+	var hv *proton.APIHVDetails
+	if data, rerr := os.ReadFile(hvFile); rerr == nil {
+		hv = new(proton.APIHVDetails)
+		if json.Unmarshal(data, hv) != nil {
+			hv = nil
+		}
+	}
+	c, auth, err := m.NewClientWithLoginWithHVToken(ctx, username, []byte(password), hv)
 	if err != nil {
+		var apiErr *proton.APIError
+		if errors.As(err, &apiErr) && apiErr.IsHVError() {
+			if details, derr := apiErr.GetHVDetails(); derr == nil {
+				if data, merr := json.Marshal(details); merr == nil {
+					_ = os.MkdirAll(filepath.Dir(hvFile), 0700)
+					_ = os.WriteFile(hvFile, data, 0600)
+				}
+				fmt.Fprintf(os.Stderr, "Error: Proton requires human verification (CAPTCHA).\n"+
+					"Open this URL in a browser, solve it, then re-run the command:\n"+
+					"  https://verify.proton.me/?methods=%s&token=%s\n",
+					url.QueryEscape(strings.Join(details.Methods, ",")), url.QueryEscape(details.Token))
+				m.Close()
+				os.Exit(3)
+			}
+		}
 		fatal("login failed", err)
 	}
+	_ = os.Remove(hvFile)
 
 	if auth.TwoFA.Enabled&proton.HasTOTP != 0 {
 		fmt.Fprintln(os.Stderr, "Error: 2FA (TOTP) is enabled. This tool does not support 2FA yet.")
@@ -985,8 +1021,8 @@ func cmdReplyMail(ctx context.Context, args []string) {
 			Body:     bodyText,
 			MIMEType: mimeType,
 		},
-		ParentID:     orig.ID,
-		Action:       proton.ReplyAction,
+		ParentID: orig.ID,
+		Action:   proton.ReplyAction,
 	})
 	if err != nil {
 		fatal("create reply draft", err)

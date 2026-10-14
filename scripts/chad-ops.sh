@@ -26,6 +26,7 @@
 #   chad-ops restart-gateway  Bounce openclaw gateway + wait for :18789
 #   chad-ops creds-sync     Host creds → pod credentials.json (GITHUB_TOKEN, etc.)
 #   chad-ops gh-auth        Write sandbox gh hosts.yml from GITHUB_TOKEN (github skills)
+#   chad-ops proton-wrap    Reinstall the proton-tool creds wrapper (email-check, calendar)
 #   chad-ops gh-auth        Write sandbox gh hosts.yml from GITHUB_TOKEN (github skills)
 #   chad-ops restore-data   chad-restore-from-github (workspace/memory/gbrain/cron)
 #   chad-ops cron-reload    Re-register crons from the restored jobs.json
@@ -152,6 +153,22 @@ cmd_gbrain_fix() {
   # copy — recreate the identical stub pointing at the image's gbrain code.
   kx 'printf "#!/bin/sh\nexec bun /usr/local/lib/gbrain/node_modules/gbrain/src/cli.ts \"\$@\"\n" > /usr/local/bin/gbrain-bin && chmod 755 /usr/local/bin/gbrain-bin && echo done' >/dev/null
   if sshp 'gbrain health 2>&1 | head -1' | grep -qiE 'health score|coverage'; then ok "gbrain-bin restored, health responds"; else bad "gbrain still not answering"; fi
+}
+
+cmd_proton_wrap() {
+  step "proton-wrap (proton-tool → env-injecting wrapper over proton-tool-bin)"
+  # The image ships the raw Go binary at /usr/local/bin/proton-tool; chad-setup
+  # moves it to proton-tool-bin and installs a wrapper that loads PROTON_* from
+  # credentials.json. A pod restart drops that, leaving email-check + the
+  # proton-calendar skill failing "PROTON_USERNAME and PROTON_PASSWORD must be set".
+  if kx 'head -c2 /usr/local/bin/proton-tool' | grep -q '^#!'; then
+    ok "proton-tool wrapper present"
+    return 0
+  fi
+  local b64
+  b64=$(base64 <"$HERE/sandbox-bin/proton-tool-wrapper.sh" | tr -d '\n')
+  kx "[ -x /usr/local/bin/proton-tool-bin ] || cp /usr/local/bin/proton-tool /usr/local/bin/proton-tool-bin; echo '$b64' | base64 -d > /usr/local/bin/proton-tool && chmod 755 /usr/local/bin/proton-tool && echo done" >/dev/null
+  if sshp 'timeout 60 proton-tool whoami 2>&1' | grep -qviE 'must be set|error'; then ok "proton-tool wrapper installed, whoami OK"; else bad "proton-tool still failing (creds-sync first?)"; fi
 }
 
 cmd_restart_shim() {
@@ -426,6 +443,8 @@ cmd_doctor() {
   crons=$(sshp "openclaw cron list 2>/dev/null | grep -cE 'cron [0-9*]'")
   [[ "$crons" =~ ^[0-9]+$ ]] || crons=0
   [ "$crons" -ge 10 ] && ok "crons registered ($crons)" || warn "only ${crons:-0} crons registered (expect 10) — run: chad-ops cron-reload"
+  # proton-tool wrapper (email-check cron + proton-calendar skill)
+  if kx 'head -c2 /usr/local/bin/proton-tool' | grep -q '^#!'; then ok "proton-tool wrapper installed"; else bad "proton-tool is the raw binary — email/calendar broken (run: chad-ops proton-wrap)"; fi
   # gh auth (github/gh-issues skills shell out to gh)
   local ghw
   ghw=$(sshp 'env -u GH_TOKEN -u GITHUB_TOKEN gh api user --jq .login 2>/dev/null')
@@ -471,6 +490,7 @@ cmd_recover() {
   cmd_gh_auth
   cmd_chown
   cmd_gbrain_fix
+  cmd_proton_wrap
   cmd_gbrain_config # NVIDIA embed key/model (clobbered by gbrain init on restart)
   cmd_restore_data
   cmd_deploy || true
@@ -501,6 +521,7 @@ main() {
     restart-gateway) cmd_restart_gateway ;;
     creds-sync) cmd_creds_sync ;;
     gh-auth) cmd_gh_auth ;;
+    proton-wrap) cmd_proton_wrap ;;
     restore-data) cmd_restore_data ;;
     cron-reload) cmd_cron_reload ;;
     embed-backfill) cmd_embed_backfill ;;
