@@ -106,22 +106,6 @@ wait
   timeout 10 gbrain doctor 2>&1 | tail -3 || echo "doctor: FAILED or timed out"
 } >>"$MEMORY_FILE"
 
-# Detach slow steps. embed --stale walks all pages (~1s/page over 1000+);
-# extract links is LLM-driven (60s+). They write their own logs and the
-# next dream cycle picks up wherever they left off. nohup + disown so they
-# survive shell exit.
-TS_TAG="$(date -u +%Y%m%dT%H%M%SZ)"
-EMBED_LOG="/tmp/chad-gbrain-embed-${TS_TAG}.log"
-LINK_LOG="/tmp/chad-gbrain-extract-links-${TS_TAG}.log"
-nohup bash -c "gbrain embed --stale" >"$EMBED_LOG" 2>&1 </dev/null &
-disown 2>/dev/null || true
-nohup bash -c "gbrain extract links --source db" >"$LINK_LOG" 2>&1 </dev/null &
-disown 2>/dev/null || true
-{
-  echo "embed --stale: detached (log: ${EMBED_LOG})"
-  echo "extract links: detached (log: ${LINK_LOG})"
-} >>"$MEMORY_FILE"
-
 # ── Dream digest ────────────────────────────────────────────────────
 # Surface "what changed in the brain since yesterday" so the morning
 # email-check + signal-detector pass can actually reason against fresh
@@ -148,15 +132,18 @@ HEALTH_FILE="${WORKSPACE}/memory/feedback_brain_health_${today}.md"
   if [ -n "$yesterday" ]; then
     echo "Pages added/updated since ${yesterday}:"
     # gbrain doesn't expose `--since`; list newest and post-filter for
-    # date-suffixed slugs >= yesterday, plus every chat/<uuid> page
-    # (they were upserted by chad-webui-ingest in the last 25h).
+    # date-suffixed slugs >= yesterday, plus chat/<uuid> pages whose
+    # gbrain updated-date (col 3, JS toDateString "Thu Oct 05") is today or
+    # yesterday — chad-webui-ingest only re-puts chats that changed.
+    d_today="$(date -u +'%a %b %d')"
+    d_yday="$(date -u -d 'yesterday' +'%a %b %d' 2>/dev/null || date -u -v-1d +'%a %b %d')"
     timeout 10 gbrain list --limit 500 2>/dev/null \
-      | awk -F'\t' -v y="$yesterday" '
+      | awk -F'\t' -v y="$yesterday" -v t="$d_today" -v yd="$d_yday" '
           $1 ~ "^memory/" || $1 ~ "^events/" {
             d = $1; sub("^[^/]*/", "", d)
             if (d >= y) print "  - " $1
           }
-          $1 ~ "^chat/" { print "  - " $1 }
+          $1 ~ "^chat/" && ($3 == t || $3 == yd) { print "  - " $1 " — " $4 }
         ' | head -30 \
       || echo "_(gbrain list unavailable)_"
   else
@@ -234,6 +221,25 @@ if timeout 10 gbrain doctor 2>&1 | grep -qE '\[(WARN|FAIL|ERROR)\]'; then
     echo "will surface it as a proposal."
   } >"$HEALTH_FILE"
 fi
+
+# Detach slow steps LAST: both hold PGLite's single-writer lock, so running
+# them before the digest made its `gbrain list`/`stats` time out
+# (2026-10-15 digest: "gbrain list unavailable", "stats parse failed").
+# embed --stale walks all pages (~1s/page over 1000+);
+# extract links is LLM-driven (60s+). They write their own logs and the
+# next dream cycle picks up wherever they left off. nohup + disown so they
+# survive shell exit.
+TS_TAG="$(date -u +%Y%m%dT%H%M%SZ)"
+EMBED_LOG="/tmp/chad-gbrain-embed-${TS_TAG}.log"
+LINK_LOG="/tmp/chad-gbrain-extract-links-${TS_TAG}.log"
+nohup bash -c "gbrain embed --stale" >"$EMBED_LOG" 2>&1 </dev/null &
+disown 2>/dev/null || true
+nohup bash -c "gbrain extract links --source db" >"$LINK_LOG" 2>&1 </dev/null &
+disown 2>/dev/null || true
+{
+  echo "embed --stale: detached (log: ${EMBED_LOG})"
+  echo "extract links: detached (log: ${LINK_LOG})"
+} >>"$MEMORY_FILE"
 
 rm -rf "$RESULTS" "$LOG"
 echo "gbrain dream complete → ${MEMORY_FILE}, digest → ${DIGEST_FILE}"
