@@ -294,14 +294,51 @@ silent until someone checked.
   TG/WhatsApp channel configured, add a dispatch that sends through the openclaw
   messaging path (or `chad-webui`-style bridge). Needs the channel set up + the
   send command confirmed.
-- **Moshi app** — hard. `moshi-hook` has **no generic notify/push verb** (push only
-  flows through `claude` lifecycle hooks), so an arbitrary "approval pending" push
-  needs the `claude-hook` stdin schema captured and a synthetic-event emitter
-  (Phase-2 follow-up, see §Phase 1). Not a quick win.
+- **Moshi app** — **done 2026-10-14**, see the next section. (The original note
+  here said `moshi-hook` had no generic push verb; 0.4.28 ships `ask` and `notify`.)
 
 **Recommendation:** browser push (on now) + `CHAD_APPROVAL_NOTIFY=webui` for an
 async OpenWebUI trail; add email for away-from-desk; TG/WhatsApp once the openclaw
 channel is configured.
+
+## Moshi Approve/Deny cards for Smithers gates (2026-10-14)
+
+`serve-runs` now pushes every **fresh** pending gate to the operator's phone as
+an interactive card, and the tap approves or denies the gate.
+
+- **Path:** `dispatchApproval` spawns `moshi-hook ask --require-remote
+  --source chad --label Chad --timeout 24h "<title>\n<body>"`. This rides the
+  moshi-hook daemon's WebSocket, so it needs no tmux pane (unlike `claude-hook`
+  approvals).
+- **Exit codes:** `0` approves, `1` (Deny or dismissed) denies — the safe
+  default for a gate — `3` (timeout) leaves the gate for the web UI, and `4`
+  (phone unreachable) falls back to the one-way `chad-moshi-notify` push.
+  Before acting, it re-checks that the gate is still pending, so a gate already
+  decided in the browser is never re-applied.
+- **Use the plain yes/no card.** With `--options "Approve,Deny"` the Approve tap
+  never round-tripped (the daemon reports `premiumAttached=false
+  reason=no_license`); Deny did. The plain card works on the free tier.
+- **Fresh gates only.** The notifier pushes gates requested in the last 24 hours
+  (`CHAD_APPROVAL_NOTIFY_MAX_AGE_H`). Without that cap, a restart re-pushed 309
+  stale `requested` gates from old runs as live cards, and one tap really
+  approved and resumed a run.
+- **Card text** says what approving does and whether the step is LIVE or shadow,
+  read from the workflow's env flag (`GATE_INFO` in `serve-runs.js`; for
+  example `CHAD_BUGREPORT_POST`, `CHAD_TOKENOPT_APPLY`).
+- **Turn it on** with `{"channels":["moshi"]}` in
+  `scripts/chad-smithers/state/notify-config.json` (gitignored; the Approvals
+  tab edits the same file).
+
+`chad-moshi-notify` (the one-way push CLI) threw a `ReferenceError` on every call
+from the day it was written until this fix; it now delegates to
+`lib/notify.js#moshiPing`.
+
+**Claude Code sessions** are a separate path. Approve/deny buttons, Chat View,
+and steering need `moshi-hook context` to report `kind: tmux`; a session in a
+bare terminal reports `kind: shell` and degrades to "respond on <host>". Start
+sessions with `chad-claude` (on `~/.local/bin`), which launches `claude` inside a
+per-directory tmux session on the default socket that Moshi's session picker
+scans.
 
 ## Next steps & hanging TODOs
 

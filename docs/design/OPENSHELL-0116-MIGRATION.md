@@ -37,7 +37,9 @@ model is gone in 0.0.116.
    Also tar out the gbrain+bun RUNTIME: `tar c /usr/local/lib/gbrain /usr/local/bin/bun`.
 2. **Quiet watchdogs:** `launchctl bootout` chad-gateway/shim/tunnel-watchdog.
 3. **Free 8080:** `docker stop openshell-cluster-nemoclaw` (live chad goes down here).
-4. **Promote gateway:** `launchctl bootstrap … dev.nemoclaw.openshell-gateway` (native 0.0.116 on
+4. **Promote gateway:** `launchctl enable gui/$(id -u)/dev.nemoclaw.openshell-gateway` (it is
+   disabled while chad is on 0.0.20 — see rollback), then
+   `launchctl bootstrap … dev.nemoclaw.openshell-gateway` (native 0.0.116 on
    8080, `--drivers docker`, `OPENSHELL_LOCAL_TLS_DIR` with jwt/ → logs "mTLS … enabled" +
    "gateway-minted sandbox JWT enabled"). Re-enroll CLI: `openshell gateway add https://127.0.0.1:8080
    --name nemoclaw --local`.
@@ -61,8 +63,32 @@ model is gone in 0.0.116.
     --local 127.0.0.1:8901 chad` (persistent via launchd); point OWUI/nvidia-proxy at host:8901.
     Retire the SSH-tunnel + pod-gateway watchdogs (container self-supervises the gateway).
 12. **Verify:** OWUI 200, chad responds, gbrain health, operator-allowlist gate denies/allows.
-    **Rollback:** `launchctl bootout` the 0.0.116 gateway → `docker start openshell-cluster-nemoclaw`
-    → reload watchdogs; chad back on 0.0.20 in ~1–2 min (the cluster is stopped, not deleted).
+    **Rollback:** `launchctl bootout` **and `launchctl disable`** the 0.0.116 gateway →
+    `docker start openshell-cluster-nemoclaw` → `chad-ops cli-mtls` (the step-4 re-enroll overwrote
+    the CLI certs) → reload watchdogs; chad back on 0.0.20 in ~1–2 min (the cluster is stopped, not
+    deleted). Attempt 1 only booted the gateway out: its plist is `RunAtLoad`, so the next login
+    relaunched it on `127.0.0.1:8080` over the cluster's `*:8080` and chad stayed down after a reboot.
+
+### Cutover attempt 1 (2026-10-14) — what it proved and what changed since
+
+Attempt 1 ran steps 1–10 on real chad (`ONBOARD_EXIT=0`, "Deployment verified"), then
+`chad-ops recover` killed the container (exit 137) and it rolled back. Fixed since, on `main`:
+
+- `creds-sync` streams over `docker exec -i` in container mode; `restart-gateway` / `restart-shim`
+  no longer `pkill` the container's main process (`b5443809be`; full recover rehearsed on chad-next).
+- `creds-sync` now pushes 11 keys (adds `OPENWEBUI_API_KEY`, `CF_ACCESS_*`, `CHAD_STATE_REPO`).
+- `restore-data` skips when the brain has pages, so step 9 can't overwrite step 10's restore; use
+  `CHAD_FORCE_RESTORE=1` only when the container really is empty.
+- New steps run by `recover`: `gh-auth`, `proton-wrap`. `cron-reload` fetches `jobs.json` from
+  chad-state when missing.
+- **Step 10 is now `chad-ops gbrain-dims`** (vector(2048), no hnsw) after importing `brain/` from
+  chad-state — see `docs/operations/gbrain.md`. A fresh init creates vector(1536)+hnsw.
+- **A fresh container is also the fix for Proton**: OpenShell's binary-integrity cache pinned the old
+  `proton-tool` hash on 0.0.20, so the rebuilt binary (app version `web-mail@5.0.136.4`, CAPTCHA
+  handoff) only works in a sandbox that sees it first. Expect one CAPTCHA URL from
+  `proton-tool whoami` after the cutover; solve it, re-run once.
+
+Runbook for host-reboot recovery on 0.0.20 (until the cutover): `docs/operations/chad-ops.md`.
 
 ### Still TODO before/around the cutover
 

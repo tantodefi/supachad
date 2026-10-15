@@ -246,6 +246,15 @@ a much higher rate limit.
 | Fallback | If refresh fails, falls back to full SRP login |
 | Clear session | `proton-tool logout` |
 
+### Login errors
+
+| Error | Cause | Fix |
+|---|---|---|
+| `PROTON_USERNAME and PROTON_PASSWORD must be set` | `/usr/local/bin/proton-tool` is the raw binary; the wrapper that loads credentials from `credentials.json` was dropped by a restart. | `chad-ops proton-wrap` (host) |
+| `422 … This web page is out of date (Code=5003)` | Proton retired the client version the tool declares. | Set `PROTON_APP_VERSION=web-mail@<current>` (current version: `https://mail.proton.me/assets/version.json`), or rebuild with a newer default. |
+| `422 … please complete CAPTCHA (Code=9001)` | Proton gated the password (SRP) login, usually after repeated failures. | The tool saves the challenge to `<session file>.hv` and prints a `verify.proton.me` URL. Solve it in a browser, then re-run the command once; the session cache takes over after that. Stop retrying until then. |
+| `Post … Forbidden` | The sandbox network policy denied the binary (wrong path or changed hash). | `openshell logs chad \| grep action=deny` shows the reason. |
+
 ### Rate limit budget
 
 With the 30-minute cron and session caching:

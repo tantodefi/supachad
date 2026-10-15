@@ -56,17 +56,24 @@ changes and rebuild the sandbox image.
 To test a local build against Chad without a full image rebuild:
 
 ```bash
-# Build for linux/amd64 (match sandbox arch)
-cd .github/skills/proton-calendar
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 bash scripts/build.sh
+# Chad's sandbox is linux/arm64 (aarch64), not amd64.
+cd .github/skills/proton-calendar/cmd/proton-tool
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /tmp/proton-tool-linux-arm64 .
 
-# Copy to sandbox (temporary, will be overwritten on next image build)
-scp ./proton-tool openshell-chad:/tmp/proton-tool-dev
-ssh openshell-chad 'chmod +x /tmp/proton-tool-dev'
-
-# Test it — note: /tmp/proton-tool-dev is NOT in the proton_api policy,
-# so network calls will be blocked. For a full network test, rebuild the image.
+# scp is blocked into the sandbox and raw binary over its ssh proxy corrupts,
+# so stream base64 and compare checksums.
+shasum -a 256 /tmp/proton-tool-linux-arm64
+base64 < /tmp/proton-tool-linux-arm64 \
+  | ssh openshell-chad 'base64 -d > /tmp/proton-tool-new && sha256sum /tmp/proton-tool-new'
 ```
+
+**Swapping the installed binary does not work on a running sandbox.** OpenShell
+records the SHA-256 of each allowed binary on first use and denies a changed
+one (`binary integrity check failed … hash changed`, visible with
+`openshell logs chad | grep action=deny`). Network calls from
+`/tmp/proton-tool-new` are also blocked, because only `/usr/local/bin/proton-tool`
+and `/usr/local/bin/proton-tool-bin` are on the `proton_api` allowlist. Ship a
+new build through the image so a fresh sandbox records its hash.
 
 ## Verify
 

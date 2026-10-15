@@ -154,14 +154,22 @@ gbrain put memory/2026-04-29 --content "$(cat /sandbox/.openclaw/workspace/memor
 ### Verify embedder
 
 ```bash
-gbrain doctor
-# look for: "embedder: ok (model=nvidia/llama-3.2-nv-embedqa-1b-v2, dim=1024)"
+gbrain health
+# Embed coverage: 100.0%   Missing embeddings: 0
+gbrain stats
+# Pages: 4076  Chunks: 4167  Embedded: 4167
 ```
 
-If `doctor` reports an embedder error, the most common causes are: bad
-`OPENAI_API_KEY`, wrong model id (model removed from gateway), dim mismatch
-between `GBRAIN_EMBED_DIMENSIONS` and the schema (vector column is fixed at
-init time), or the L7 binary allowlist not including `bun` (see below).
+The current embedder is `nvidia/nemotron-3-embed-1b` at **2048** dimensions
+(`llama-nemotron-embed-1b-v2` @ 1536 hit EOL on 2026-08-25 with HTTP 410).
+pgvector's HNSW index caps at 2000 dimensions, so the brain runs on a
+`vector(2048)` column with **no HNSW index** (sequential scan; fine at this size).
+
+If embeds fail, the usual causes are: a bad `OPENAI_API_KEY`, a retired model
+id (HTTP 410), a dimension mismatch between the model and the schema column
+(`expected 1536 dimensions, not 2048`), or the L7 binary allowlist missing
+`bun` (see below). `chad-ops doctor` reports page count and embed coverage —
+a health score alone passes an empty brain.
 
 ### L7 policy / binary identity
 
@@ -186,51 +194,67 @@ tunnel failed, response 403` on every embed call. Confirm by tailing
 `feedback_openshell_l7_binary_identity` rule — wrapper paths must always
 include the wrapped binary.
 
-## Recovery: corrupt or wrong-dim brain
+## Recovery: empty or wrong-dim brain
 
-If the schema vector dim no longer matches the embedder (e.g. you changed
-`GBRAIN_EMBED_DIMENSIONS` after init), `gbrain put` will silently store pages
-with zero chunks. Recover by reinitializing:
+### Detect
+
+An empty PGLite brain is already about 39 MB on disk, so never judge a brain by
+size. Check pages and coverage:
 
 ```bash
-# Inside the sandbox (or via kubectl exec as root):
-mv /sandbox/.gbrain/brain.pglite /sandbox/.gbrain/brain.pglite.broken-$(date -u +%FT%TZ)
-rm -f /sandbox/.gbrain/postmaster.pid /sandbox/.gbrain/.gbrain-lock
-
-HOME=/sandbox \
-  GBRAIN_EMBED_MODEL=nvidia/llama-3.2-nv-embedqa-1b-v2 \
-  GBRAIN_EMBED_DIMENSIONS=1024 \
-  gbrain init
-
-# CRITICAL: gbrain init silently overwrites config.json to bare minimum
-# ({"engine": ..., "database_path": ...}). The wrapper relies on
-# openai_api_key + embed_* fields being present, so re-write the config
-# AFTER every init or the next call goes out as `OPENAI_API_KEY=unused`
-# and gets a 401.
-cat > /sandbox/.gbrain/config.json <<'JSON'
-{
-  "engine": "pglite",
-  "database_path": "/sandbox/.gbrain/brain.pglite",
-  "openai_api_key": "<NIM key>",
-  "openai_base_url": "https://integrate.api.nvidia.com/v1",
-  "embed_model": "nvidia/llama-3.2-nv-embedqa-1b-v2",
-  "embed_dimensions": "1024",
-  "embed_input_type": "passage"
-}
-JSON
-chmod 0600 /sandbox/.gbrain/config.json
+ssh openshell-chad 'gbrain stats | head -3; gbrain health | grep -i coverage'
 ```
 
-Then re-import. A full 990-chunk fitness-books ingest takes ~3 min against
-NVIDIA NIM (verified 2026-05-02). Verify the round-trip with:
+`Pages: 0` means the brain was re-initialized (the 2026-10-14 reboot found it
+empty). `chad-ops doctor` flags this as `gbrain EMPTY`.
+
+### Restore pages from chad-state
+
+The 6-hourly `workspace-backup` cron exports every page as Markdown to
+`brain/` in the `chad-state` repo (additive — an empty brain never deletes the
+export). Pull that folder on the host and import it without embedding:
 
 ```bash
-ssh openshell-chad 'gbrain stats'
-# Pages: 990  Chunks: 991  Embedded: 991   ← embedded == chunks means OK
-ssh openshell-chad 'gbrain query "supple leopard hip mobility"'
-# expect 0.65+ similarity hits returned within 1s
-ssh openshell-chad 'gbrain doctor 2>&1 | grep embeddings'
-# [OK] embeddings: 100% coverage, 0 missing
+# Host: download only brain/ from chad-state (owner token from the git keychain)
+curl -fsSL -H "Authorization: token $TOKEN" \
+  https://api.github.com/repos/tantodefi/chad-state/tarball/main \
+  | tar xz --strip-components=1 --include='*/brain/*'
+# Stream it in as base64 — raw binary over the sandbox ssh proxy corrupts.
+COPYFILE_DISABLE=1 tar czf - --no-xattrs brain | base64 \
+  | ssh openshell-chad 'mkdir -p /tmp/brain-restore && base64 -d | tar xzf - -C /tmp/brain-restore'
+ssh openshell-chad 'HOME=/sandbox gbrain import /tmp/brain-restore/brain --no-embed'
+```
+
+### Fix the schema dimension
+
+A fresh `gbrain init` creates `vector(1536)` plus an HNSW index. Before
+embedding, migrate the column to 2048 and drop the index. The migration
+refuses to run if any chunk is already embedded:
+
+```bash
+bash scripts/chad-ops.sh gbrain-dims   # vector(1536)+hnsw → vector(2048), no hnsw; idempotent
+```
+
+It imports PGLite by absolute path
+(`/usr/local/lib/gbrain/node_modules/@electric-sql/pglite/dist/…`) because Bun
+resolves bare imports relative to the script file, and the gbrain package
+directory is root-owned.
+
+### Re-write the config after any init
+
+`gbrain init` overwrites `config.json` with only `engine` and `database_path`,
+so the next call goes out as `OPENAI_API_KEY=unused` and gets a 401. Run
+`chad-ops gbrain-config` after every init.
+
+### Embed and verify
+
+```bash
+ssh openshell-chad 'nohup gbrain embed --stale > /tmp/gbrain-embed.log 2>&1 &'
+# 4167 chunks take a few minutes against NVIDIA NIM.
+ssh openshell-chad 'gbrain health | head -3'
+# Embed coverage: 100.0%
+ssh openshell-chad 'gbrain query "squat programming for a novice lifter"'
+# expect starting-strength-chunk-* hits around 0.8+
 ```
 
 The canonical entry point for re-ingesting fitness reference content is

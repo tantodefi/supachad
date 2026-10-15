@@ -100,6 +100,12 @@ manifests, orchestrator helpers — belongs in the top `Dockerfile`.
 
 ### 3.1 One-command recovery (the happy path)
 
+For a **restart or host reboot of an existing sandbox**, use
+`bash scripts/chad-ops.sh doctor` and then `chad-ops recover` instead; see
+[docs/operations/chad-ops.md](docs/operations/chad-ops.md) for the reboot
+runbook (gateway shadowing on `:8080`, CLI certs, SSH handshake secret).
+`chad-setup.sh` below is for a blank sandbox.
+
 After a sandbox reset or a fresh deploy:
 
 ```bash
@@ -702,7 +708,7 @@ Chad's state lives in three places, in order of criticality:
 
 | Tier | Location | Contents | Restored by |
 |---|---|---|---|
-| **1. GitHub** | `tantodefi/chad-state` (private) | `workspace/` including MEMORY.md, memory/, subagents/, queue/, budget.json | `chad-restore-from-github` |
+| **1. GitHub** | `tantodefi/chad-state` (private) | `workspace/` including MEMORY.md, memory/, subagents/, queue/, budget.json; `brain/` (every gbrain page as Markdown); `cron/jobs.json` | `chad-restore-from-github`; brain-only and cron-only restores in [docs/operations/gbrain.md](docs/operations/gbrain.md) and `chad-ops cron-reload` |
 | **2. Host tarball** | `~/.nemoclaw/backups/sandbox-state-*.tar.gz` | Full `/sandbox` snapshot streamed via SSH tar | `tar -xzf` + `kubectl cp` |
 | **3. Pod ephemeral fs** | container writable layer (NOT a PVC) | Live filesystem | **NOTHING — see warning below** |
 

@@ -45,7 +45,9 @@ openclaw config set skills.load.extraDirs --strict-json \
   '["/sandbox/.openclaw-data/skills"]'
 ```
 
-`chad-setup.sh` runs this on every invocation (idempotent). Without the
+`chad-setup.sh` and `chad-ops skills-register` (part of `chad-ops recover`)
+both run this, and it is idempotent. A gateway restart drops the setting, so
+`chad-ops doctor` checks it. Without the
 `extraDirs` registration, OpenClaw's `loadSkillEntries` only scans the
 managed dirs (`/sandbox/.openclaw/skills/`,
 `/sandbox/.agents/skills/`, workspace `.agents/skills/`,
@@ -58,8 +60,13 @@ sync, so the canonical names below are the only ones present.
 ## Chad-managed skills, repo-shipped (3)
 
 Source: `.github/skills/chad-*/` and `.github/skills/proton-calendar/`.
-Synced by `bash scripts/chad-bug-intake/scripts/sync-skills-to-sandbox.sh`
-(invoked from `chad-setup.sh` step 2).
+Shipped by `chad-deploy` through `scripts/chad-deploy-manifest.txt` (the
+`SKILL.md`, the helper scripts each skill cites by relative path, and the
+orchestrator `kinds/*.yaml`), so every redeploy and `chad-ops recover`
+reinstalls them. Before 2026-10-14 only `chad-setup.sh` installed them, and a
+restart left four of the five custom skills dark. The binaries they call
+(`proton-tool`, `chad-spawn`, `chad-intake`, and others) deploy separately to
+`/usr/local/bin/`.
 
 | Skill | One-line description |
 |---|---|
@@ -67,16 +74,27 @@ Synced by `bash scripts/chad-bug-intake/scripts/sync-skills-to-sandbox.sh`
 | `chad-orchestrator` | Spawn typed sub-agents (coder/researcher/writer/reviewer/fitness/brain) with bounded budget, structured `result.json`, and memory merge |
 | `proton-calendar` | List + read mail and calendar events via `proton-tool`; the building block for `chad-mail-check` and the email-check cron |
 
+### What these skills need to run
+
+| Skill | Needs | Restored by |
+|---|---|---|
+| `chad-bug-intake`, `gh-issues`, `github` | `gh` authenticated as Supachad. `gh auth login` rejects the classic PAT (no `read:org`) and the OpenClaw exec tool strips `GH_TOKEN`, so `gh` reads `/sandbox/.config/gh/hosts.yml`. | `chad-ops gh-auth` |
+| `proton-calendar` | The `/usr/local/bin/proton-tool` wrapper that loads `PROTON_*` from `credentials.json` and execs `proton-tool-bin`. Both paths are on the `proton_api` policy allowlist. | `chad-ops proton-wrap` |
+| `openwebui` | `OPENWEBUI_API_KEY`, `CF_ACCESS_CLIENT_ID`, and `CF_ACCESS_CLIENT_SECRET` in the pod's `credentials.json`; base URL defaults to `https://chad.supachad.com/api/v1`. | `chad-ops creds-sync` |
+| `chad-orchestrator` | `CHAD_STATE_REPO` in `credentials.json` and the `kinds/*.yaml` manifests under the skill directory. | `chad-ops creds-sync`, `chad-deploy` |
+
 ## Runtime-synced chad-managed skills (2)
 
 Source: `scripts/openwebui/openwebui-skill.md` and
-`scripts/openwebui/chad-experiment-skill.md`. Deployed at runtime to
+`scripts/openwebui/chad-experiment-skill.md`. Deployed by `chad-deploy` to
 `/sandbox/.openclaw-data/skills/<name>/SKILL.md` (and backed up under
-`skills/` via the workspace manifest). Added 2026-05-13/14.
+`skills/` via the workspace manifest). Added 2026-05-13/14. The `openwebui`
+skill tracks OpenWebUI 0.11.4 and lists the `chad-webui` command for each
+0.11.4 endpoint.
 
 | Skill | One-line description |
 |---|---|
-| `openwebui` | Chad's complete control surface for the OpenWebUI deployment at `chad.supachad.com` — 60 CLI sub-commands across 10 groups (calendar/notes/automations/memories/chats/knowledge/models/functions/tools/folders) with worked examples, recipes, and a failure-mode table. Also indexes the matching `webui__*` MCP tools. See `docs/operations/openwebui.md`. |
+| `openwebui` | Chad's complete control surface for the OpenWebUI 0.11.4 deployment at `chad.supachad.com` — 60+ CLI sub-commands across 10 groups (calendar/notes/automations/memories/chats/knowledge/models/functions/tools/folders) with worked examples, recipes, and a failure-mode table. Also indexes the matching `webui__*` MCP tools. See `docs/operations/openwebui.md`. |
 | `chad-experiment` | Autonomous experiment lifecycle methodology: scan memory for objectives, decide what's worthy of automation, design + start + observe + evaluate + promote-or-retire experiments, A/B test paired variants. Documents the 13-verb CLI, success-metric authoring rules, calendar tag conventions (`[chad-block]`, `[chad-experiment]`, `[operator-sync]`, `[experiment-review]`), worthy-of-automation checklist, ground rules. See `docs/operations/chad-experiments.md`. |
 
 ## GStack engineering skills (≈18)

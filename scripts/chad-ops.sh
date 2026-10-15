@@ -27,7 +27,9 @@
 #   chad-ops creds-sync     Host creds → pod credentials.json (GITHUB_TOKEN, etc.)
 #   chad-ops gh-auth        Write sandbox gh hosts.yml from GITHUB_TOKEN (github skills)
 #   chad-ops proton-wrap    Reinstall the proton-tool creds wrapper (email-check, calendar)
-#   chad-ops gh-auth        Write sandbox gh hosts.yml from GITHUB_TOKEN (github skills)
+#   chad-ops handshake-sync Re-sync the rotated SSH handshake secret after a cluster restart
+#   chad-ops cli-mtls       Restore host CLI certs for the 0.0.20 gateway (after a cutover)
+#   chad-ops gbrain-dims    Migrate a re-initialized brain to vector(2048) before embedding
 #   chad-ops restore-data   chad-restore-from-github (workspace/memory/gbrain/cron)
 #   chad-ops cron-reload    Re-register crons from the restored jobs.json
 #   chad-ops embed-backfill Backfill gbrain embeddings (bg) after a restore
@@ -169,6 +171,88 @@ cmd_proton_wrap() {
   b64=$(base64 <"$HERE/sandbox-bin/proton-tool-wrapper.sh" | tr -d '\n')
   kx "[ -x /usr/local/bin/proton-tool-bin ] || cp /usr/local/bin/proton-tool /usr/local/bin/proton-tool-bin; echo '$b64' | base64 -d > /usr/local/bin/proton-tool && chmod 755 /usr/local/bin/proton-tool && echo done" >/dev/null
   if sshp 'timeout 60 proton-tool whoami 2>&1' | grep -qviE 'must be set|error'; then ok "proton-tool wrapper installed, whoami OK"; else bad "proton-tool still failing (creds-sync first?)"; fi
+}
+
+cmd_handshake_sync() {
+  step "handshake-sync (point the openshell StatefulSet at the chad pod's SSH handshake secret)"
+  # A cluster restart makes K3s re-reconcile the openshell Helm chart, which
+  # rotates OPENSHELL_SSH_HANDSHAKE_SECRET on the StatefulSet; the long-lived chad
+  # pod keeps its old value, so `ssh openshell-chad` (and every sshp step) fails.
+  local pod sts v
+  K() { docker exec "$DOCKER_HOST" kubectl -n "$K8S_NS" "$@"; }
+  v=$(K exec "$POD" -- printenv OPENSHELL_SSH_HANDSHAKE_SECRET 2>/dev/null)
+  [ -n "$v" ] || {
+    bad "could not read the chad pod's handshake secret"
+    return 1
+  }
+  pod=$(printf '%s' "$v" | shasum | cut -c1-10)
+  sts=$(K get statefulset openshell -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OPENSHELL_SSH_HANDSHAKE_SECRET")].value}' | shasum | cut -c1-10)
+  if [ "$pod" = "$sts" ]; then
+    ok "handshake secrets already match"
+    return 0
+  fi
+  K set env statefulset/openshell OPENSHELL_SSH_HANDSHAKE_SECRET="$v" >/dev/null
+  K rollout status statefulset/openshell --timeout=180s >/dev/null 2>&1
+  ssh -n -o BatchMode=yes -o ConnectTimeout=20 "$SSH_HOST" true 2>/dev/null && ok "secret re-synced, ssh OK" || bad "secret re-synced but ssh still failing"
+}
+
+cmd_cli_mtls() {
+  step "cli-mtls (restore host openshell CLI certs for the 0.0.20 cluster gateway)"
+  # Re-enrolling the 'nemoclaw' gateway against a 0.0.116 gateway (cutover)
+  # overwrites ~/.config/openshell/gateways/nemoclaw/mtls; the cluster's own
+  # client bundle lives in the in-cluster secret openshell-client-tls.
+  # Verifies against the live :8080 gateway before swapping; backs up first.
+  local D T k B
+  D="$HOME/.config/openshell/gateways/nemoclaw/mtls"
+  T=$(mktemp -d)
+  chmod 700 "$T"
+  for k in ca.crt tls.crt tls.key; do
+    docker exec "$DOCKER_HOST" kubectl get secret -n "$K8S_NS" openshell-client-tls \
+      -o "jsonpath={.data.${k//./\\.}}" | base64 -d >"$T/$k"
+  done
+  if ! echo | openssl s_client -connect 127.0.0.1:8080 -CAfile "$T/ca.crt" \
+    -cert "$T/tls.crt" -key "$T/tls.key" 2>/dev/null | grep -q 'Verify return code: 0'; then
+    rm -rf "$T"
+    bad "cluster client bundle does not verify against :8080 — not swapping"
+    return 1
+  fi
+  B="$D.bak-$(date +%Y%m%d%H%M%S)"
+  cp -Rp "$D" "$B"
+  install -m 644 "$T/ca.crt" "$D/ca.crt"
+  install -m 644 "$T/tls.crt" "$D/tls.crt"
+  install -m 600 "$T/tls.key" "$D/tls.key"
+  rm -rf "$T"
+  ok "restored (previous certs → $B)"
+}
+
+cmd_gbrain_dims() {
+  step "gbrain-dims (content_chunks.embedding → vector(2048), drop hnsw; refuses if embedded)"
+  # nemotron-3-embed-1b emits 2048d; pgvector HNSW caps at 2000. A fresh
+  # `gbrain init` recreates vector(1536)+hnsw, so every embed then fails
+  # "expected 1536 dimensions, not 2048". Bun resolves bare imports relative to
+  # the script file and the gbrain package dir is root-owned → absolute imports.
+  local P=/usr/local/lib/gbrain/node_modules/@electric-sql/pglite/dist
+  sshin "cat > /tmp/gbrain-dim2048.mjs" >/dev/null <<EOF
+import { PGlite } from "$P/index.js";
+import { vector } from "$P/vector/index.js";
+import { pg_trgm } from "$P/contrib/pg_trgm.js";
+const db = await PGlite.create({ dataDir: "/sandbox/.gbrain/brain.pglite", extensions: { vector, pg_trgm } });
+const typ = async () => (await db.query("SELECT format_type(a.atttypid, a.atttypmod) t FROM pg_attribute a WHERE a.attrelid='content_chunks'::regclass AND a.attname='embedding'")).rows[0]?.t;
+const before = await typ();
+if (before === "vector(2048)") { console.log("already vector(2048)"); await db.close(); process.exit(0); }
+const n = (await db.query("SELECT count(*)::int c FROM content_chunks WHERE embedding IS NOT NULL")).rows[0].c;
+if (n > 0) { console.error("refusing: " + n + " chunks already embedded"); process.exit(1); }
+for (const r of (await db.query("SELECT indexname FROM pg_indexes WHERE tablename='content_chunks' AND indexdef ILIKE '%hnsw%'")).rows) await db.exec('DROP INDEX IF EXISTS "' + r.indexname + '"');
+await db.exec("ALTER TABLE content_chunks ALTER COLUMN embedding TYPE vector(2048)");
+console.log(before + " -> " + (await typ()));
+await db.close();
+EOF
+  local out
+  out=$(sshp 'bun /tmp/gbrain-dim2048.mjs')
+  case "$out" in
+    *"vector(2048)"*) ok "$out" ;;
+    *) bad "${out:-no output}" ;;
+  esac
 }
 
 cmd_restart_shim() {
@@ -522,6 +606,9 @@ main() {
     creds-sync) cmd_creds_sync ;;
     gh-auth) cmd_gh_auth ;;
     proton-wrap) cmd_proton_wrap ;;
+    handshake-sync) cmd_handshake_sync ;;
+    cli-mtls) cmd_cli_mtls ;;
+    gbrain-dims) cmd_gbrain_dims ;;
     restore-data) cmd_restore_data ;;
     cron-reload) cmd_cron_reload ;;
     embed-backfill) cmd_embed_backfill ;;
