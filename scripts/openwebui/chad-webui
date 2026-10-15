@@ -370,12 +370,20 @@ def cmd_notes_get(args):
     _print(_http("GET", f"/notes/{args.note_id}"))
 
 
+def _note_data(markdown: str) -> dict:
+    """OpenWebUI notes keep content as {"md","html","json"}; the editor renders
+    md when html is absent. A bare string here 500s GET /notes/ for the whole
+    list (_truncate_note_data calls content.get) — every note Chad wrote before
+    2026-10-15 had that shape and broke the operator's Notes page."""
+    return {"content": {"md": markdown}}
+
+
 def cmd_notes_create(args):
     content = args.content
     if args.content_file:
         with open(args.content_file) as fh:
             content = fh.read()
-    body = {"title": args.title, "data": {"content": content or ""}, "meta": {}}
+    body = {"title": args.title, "data": _note_data(content or ""), "meta": {}}
     if args.tags:
         body["meta"]["tags"] = args.tags.split(",")
     _print(_http("POST", "/notes/create", body=body))
@@ -386,11 +394,11 @@ def cmd_notes_update(args):
     if args.content_file:
         with open(args.content_file) as fh:
             content = fh.read()
-    body = {}
-    if args.title:
-        body["title"] = args.title
+    # The update route validates against NoteForm, where title is required:
+    # without it every content-only update 422'd. Reuse the current title.
+    body = {"title": args.title or _http("GET", f"/notes/{args.note_id}").get("title", "")}
     if content is not None:
-        body["data"] = {"content": content}
+        body["data"] = _note_data(content)
     if args.tags:
         body.setdefault("meta", {})["tags"] = args.tags.split(",")
     _print(_http("POST", f"/notes/{args.note_id}/update", body=body))
