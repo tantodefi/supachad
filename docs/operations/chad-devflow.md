@@ -210,7 +210,7 @@ When something looks wrong, the file you want is usually one of:
 | `/sandbox/.openclaw-data/credentials/` | Bearer token cache | ❌ excluded |
 | `/sandbox/.gbrain/` | PGLite knowledge brain | ✅ via `gbrain export` → `brain/` |
 
-See [Workspace Files §Sectioned Manifest](../workspace/workspace-files.md#sectioned-manifest) for the complete manifest format and [Backup Policy §1.2](../resources/backup-policy.md) for the rationale behind exclusions.
+See [Workspace Files §Sectioned Manifest](../manage-sandboxes/workspace-files.mdx) for the complete manifest format and [Backup Policy §1.2](../resources/backup-policy.md) for the rationale behind exclusions.
 
 ## Failure Modes & First Steps
 
@@ -230,8 +230,8 @@ See [Workspace Files §Sectioned Manifest](../workspace/workspace-files.md#secti
 
 ## Next Steps
 
-- [Backup and Restore](../workspace/backup-restore.md) — the canonical persistence guide
-- [Workspace Files](../workspace/workspace-files.md) — what each file does and the sectioned manifest format
+- [Backup and Restore](../manage-sandboxes/backup-restore.mdx) — the canonical persistence guide
+- [Workspace Files](../manage-sandboxes/workspace-files.mdx) — what each file does and the sectioned manifest format
 - [Backup Policy](../resources/backup-policy.md) — full inventory across all four state layers
 - [Open WebUI Front-End](openwebui.md) — chat UI exposed via Cloudflare Tunnel + Access
 - [Workflow Scenarios](chad-workflows.md) — named email scenarios + regression spec

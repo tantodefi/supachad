@@ -741,6 +741,6 @@ notes in `AGENTS.md` inside the workspace.
 ## Next steps
 
 - [Chad Devflow](chad-devflow.md) — primary operator commands.
-- [Backup and Restore](../workspace/backup-restore.md) — preserving chat
+- [Backup and Restore](../manage-sandboxes/backup-restore.mdx) — preserving chat
   history (the `~/.nemoclaw/openwebui/data/` volume) is **not** part of the
   Chad sectioned manifest; it's local to the host.

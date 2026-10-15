@@ -56,7 +56,6 @@ network_policies:
           - allow: { method: POST, path: "/**" }
     binaries:
       - { path: /usr/local/bin/openclaw }
-      - { path: /usr/local/bin/claude }
       - { path: /usr/local/bin/gbrain }
       - { path: /usr/local/bin/bun }
       - { path: /usr/local/bin/node }

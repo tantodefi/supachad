@@ -46,3 +46,5 @@ runs:
         file: coverage/plugin/cobertura-coverage.xml
         language: TypeScript
         label: code-coverage/plugin
+        # Forks have no code-coverage service (upload 404s); keep it fatal upstream only.
+        fail-on-error: ${{ github.repository == 'NVIDIA/NemoClaw' }}
