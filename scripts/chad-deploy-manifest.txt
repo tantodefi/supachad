@@ -67,6 +67,13 @@ scripts/chad-github-worker/chad-dispatch             /usr/local/bin/chad-dispatc
 .github/skills/chad-orchestrator/scripts/chad-spawn-gha.sh     /usr/local/bin/chad-spawn-gha     755 kubectl
 .github/skills/chad-orchestrator/scripts/chad-spawn-status.sh  /usr/local/bin/chad-spawn-status  755 kubectl
 .github/skills/chad-orchestrator/scripts/chad-intake.sh        /usr/local/bin/chad-intake        755 kubectl
+# Previously installed only by chad-setup.sh, so chad-deploy never updated them
+# (2026-10-14: chad-budget crashed KeyError CHAD_BUDGET_FILE outside the gateway).
+.github/skills/chad-orchestrator/scripts/chad-budget.sh           /usr/local/bin/chad-budget       755 kubectl
+.github/skills/chad-orchestrator/scripts/chad-collect.sh          /usr/local/bin/chad-collect      755 kubectl
+.github/skills/chad-orchestrator/scripts/chad-route.sh            /usr/local/bin/chad-route        755 kubectl
+.github/skills/chad-orchestrator/scripts/chad-issue-triage.sh     /usr/local/bin/chad-issue-triage 755 kubectl
+.github/skills/chad-orchestrator/scripts/chad-ingest-fitness-books.sh /usr/local/bin/chad-ingest-fitness-books 755 kubectl
 
 # ─────────────────────────────────────────────────────────────────────────
 # OPENWEBUI / SANDBOX TOOLS — /sandbox/.openclaw-data/bin/ (sandbox, ssh)
