@@ -425,7 +425,7 @@ fetch_state_file() {
 }
 
 cmd_restore_runtime() {
-  step "restore-runtime (missing [runtime] files only — never overwrites live state)"
+  step "restore-runtime (missing [runtime] + workspace files only — never overwrites live state)"
   # restore-data is skipped when the brain survived, but the small config files
   # on the wiped layer still vanish: 2026-10-14 lost auto-actions.json (the
   # action-gate policy → every action fell through to block), queue/budget.json,
@@ -442,6 +442,29 @@ cmd_restore_runtime() {
     fi
   done < <(sed -n '/^\[runtime\]/,/^\[/p' "$manifest" | sed 's/#.*//;s/[[:space:]]*$//' | grep -vE '^\[|^$')
   [ "$missing" -eq 0 ] && ok "all [runtime] files present"
+  # Workspace: MEMORY.md + memory/ history live on the wiped layer too (the
+  # 2026-10-14 reboot lost MEMORY.md and 109 daily notes while IDENTITY.md
+  # etc. survived). Pull workspace/ once and copy with no-clobber, so live
+  # files (today's notes, identity) are never overwritten.
+  local tok repo tmpd before after
+  tok=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('GITHUB_TOKEN',''))" 2>/dev/null)
+  repo=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('CHAD_STATE_REPO','tantodefi/chad-state'))" 2>/dev/null)
+  tmpd=$(mktemp -d)
+  if curl -fsSL -m 120 -H "Authorization: token $tok" "https://api.github.com/repos/$repo/tarball/main" 2>/dev/null \
+    | tar xz -C "$tmpd" --strip-components=1 --include='*/workspace/*' 2>/dev/null && [ -d "$tmpd/workspace" ]; then
+    before=$(sshp 'find /sandbox/.openclaw/workspace -type f | wc -l')
+    COPYFILE_DISABLE=1 tar czf - --no-xattrs -C "$tmpd" workspace | base64 \
+      | sshin 'rm -rf /tmp/ws-restore && mkdir -p /tmp/ws-restore && base64 -d | tar xzf - -C /tmp/ws-restore && cp -Rn /tmp/ws-restore/workspace/. /sandbox/.openclaw/workspace/ && rm -rf /tmp/ws-restore' >/dev/null
+    after=$(sshp 'find /sandbox/.openclaw/workspace -type f | wc -l')
+    if [[ "$before" =~ ^[0-9]+$ && "$after" =~ ^[0-9]+$ ]]; then
+      [ "$after" -gt "$before" ] && ok "workspace: restored $((after - before)) missing files (no-clobber)" || ok "workspace: nothing missing"
+    else
+      warn "workspace restore ran but file counts unreadable"
+    fi
+  else
+    warn "workspace/ not fetched from $repo — skipped"
+  fi
+  rm -rf "$tmpd"
   sshp "chown sandbox:sandbox -R /sandbox/.openclaw-data/queue /sandbox/.openclaw-data/memory 2>/dev/null; true" >/dev/null
   [ "$got" -gt 0 ] && dim "restored $got of $missing from chad-state"
   return 0

@@ -107,6 +107,41 @@ def iso(ts) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(v))
 
 
+def operator_slug(email: str) -> str:
+    """tantodefi@proton.me → tantodefi (gbrain people/<slug> entity page)."""
+    local = (email or "").split("@", 1)[0].lower()
+    return re.sub(r"[^a-z0-9-]+", "-", local).strip("-") or "unknown"
+
+
+def render_person(slug: str, email: str, chats: list[tuple]) -> str:
+    """people/<slug>: who the operator is to Chad + a dated chat timeline.
+
+    Deterministic (no LLM): gbrain's timeline extractor reads
+    `- **YYYY-MM-DD** | summary` lines, and every chat page links back here
+    via `[slug](people/slug)`, so `gbrain extract links|timeline` finally
+    builds a graph instead of reporting 0% coverage.
+    """
+    lines = [
+        "---",
+        "type: person",
+        f"title: {json.dumps(slug)}",
+        f"email: {email}",
+        "source: openwebui",
+        f"chats: {len(chats)}",
+        "---",
+        "",
+        f"# {slug}",
+        "",
+        f"OpenWebUI operator `{email}`. {len(chats)} chats with Chad.",
+        "",
+        "## Timeline",
+        "",
+    ]
+    for chat_id, title, updated_at in chats:
+        lines.append(f"- **{iso(updated_at)[:10]}** | {title or '(untitled)'} (chat/{chat_id})")
+    return "\n".join(lines) + "\n"
+
+
 def extract_text(content) -> str:
     if isinstance(content, str):
         return content
@@ -133,6 +168,8 @@ def render_chat(
         "---",
         "",
         f"# {title or '(untitled)'}",
+        "",
+        f"Operator: [{operator_slug(operator)}](people/{operator_slug(operator)})" if operator else "Operator: unknown",
         "",
     ]
     for i, m in enumerate(normalize_messages(chat_obj), start=1):
@@ -229,6 +266,19 @@ def main() -> None:
         else:
             failed += 1
             log(f"FAIL chat/{chat_id}: {detail}")
+    # Rebuild each operator's people/<slug> page from ALL live chats (cheap: one
+    # page per operator) so the timeline stays complete even when a sweep only
+    # pushed a few changed chats.
+    by_op: dict[str, list[tuple]] = {}
+    for r in all_rows:
+        if r[6]:
+            by_op.setdefault(r[6], []).append((r[0], r[2], r[4]))
+    for email, chats in sorted(by_op.items()):
+        slug = operator_slug(email)
+        ok, detail = push_to_sandbox(f"people/{slug}", render_person(slug, email, chats))
+        if not ok:
+            failed += 1
+            log(f"FAIL people/{slug}: {detail}")
     save_state(state)
     log(f"sweep done — pushed={pushed} skipped={skipped} failed={failed} (failed chats retry next sweep)")
 
