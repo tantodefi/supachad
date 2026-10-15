@@ -603,7 +603,15 @@ $ /opt/homebrew/bin/python3 ~/.nemoclaw/source/scripts/openwebui/chad-webui-inge
 $ tail -f ~/.nemoclaw/openwebui/webui-ingest.log
 # verify chats reached the brain:
 $ ssh openshell-chad 'gbrain list --limit 100 | grep "^chat/"'
+# drop pages for chats deleted in OpenWebUI (dry run; add --apply to delete):
+$ /opt/homebrew/bin/python3 ~/.nemoclaw/source/scripts/openwebui/chad-webui-ingest.py --prune-deleted
 ```
+
+The nightly job never deletes pages, so a chat deleted in OpenWebUI keeps
+its `chat/<id>` page until you prune it. Archived chats count as live. An
+hourly automation that opens a new chat on every run can flood the brain
+this way. On 2026-10-15 the prune removed 1,935 such pages, 1,787 of them
+from the "Proton Mail auth reset" automation.
 
 Retention: weekly `chad-gbrain-prune` (sandbox cron, Sundays 02:00 UTC)
 deletes `chat/<id>` pages older than 180 days, `memory/<date>` and

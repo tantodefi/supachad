@@ -223,6 +223,44 @@ def push_to_sandbox(slug: str, markdown: str) -> tuple[bool, str]:
     return True, "ok"
 
 
+def prune_deleted(apply: bool) -> None:
+    """Delete chat/<id> brain pages whose OpenWebUI chat no longer exists.
+
+    Chats deleted in OpenWebUI kept their gbrain pages forever: by 2026-10-15
+    1,935 of 2,005 chat pages were copies of automation-spawned chats that
+    were long gone (1,787 of one "Proton Mail auth reset" prompt), drowning
+    search. Archived chats are kept. Dry run unless apply=True.
+    """
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    keep = {r[0] for r in con.execute("SELECT id FROM chat")}
+    con.close()
+    if not keep:
+        log("prune: OpenWebUI has 0 chats — refusing to prune (wrong DB?)")
+        return
+    # gbrain list caps at 100 rows; export is the only full enumeration.
+    listing = subprocess.run(
+        ["ssh", "-o", "BatchMode=yes", SSH_HOST,
+         "set -eu; d=$(mktemp -d); gbrain export --dir \"$d\" >/dev/null 2>&1; "
+         "ls \"$d/chat\" 2>/dev/null | sed 's/\\.md$//'; rm -rf \"$d\""],
+        capture_output=True, timeout=600,
+    )
+    if listing.returncode != 0:
+        log(f"prune: brain listing failed: {listing.stderr.decode('utf-8', 'replace')[:240]}")
+        return
+    in_brain = set(listing.stdout.decode().split())
+    stale = sorted(in_brain - keep)
+    log(f"prune: brain chat pages={len(in_brain)} openwebui chats={len(keep)} stale={len(stale)}"
+        + ("" if apply else " (dry run; pass --apply to delete)"))
+    if not apply or not stale:
+        return
+    result = subprocess.run(
+        ["ssh", "-o", "BatchMode=yes", SSH_HOST,
+         'n=0; while read -r s; do gbrain delete "chat/$s" >/dev/null 2>&1 && n=$((n+1)); done; echo "$n"'],
+        input="\n".join(stale).encode() + b"\n", capture_output=True, timeout=3600,
+    )
+    log(f"prune: deleted {result.stdout.decode().strip() or 0} of {len(stale)} stale chat pages")
+
+
 def main() -> None:
     if not DB.exists():
         log(f"webui.db missing at {DB}; nothing to ingest")
@@ -284,4 +322,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if "--prune-deleted" in sys.argv:
+        prune_deleted(apply="--apply" in sys.argv)
+    else:
+        main()
