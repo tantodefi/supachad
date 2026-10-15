@@ -1874,7 +1874,7 @@ function dispatchApproval(p) {
   const body = `${gateLine(p)} · run ${String(p.run_id).slice(0, 8)} — details at ${RUNS_PUBLIC_URL}`;
   if (channels.includes("webui"))
     podRun(
-      `${POD_WEBUI} notes create --title ${shq(title)} --content ${shq(body)} --tags chad-approvals 2>/dev/null || true`,
+      `CHAD_WEBUI_TRUSTED=1 ${POD_WEBUI} notes create --title ${shq(title)} --content ${shq(body)} --tags chad-approvals 2>/dev/null || true`,
     );
   if (channels.includes("email"))
     podRun(
