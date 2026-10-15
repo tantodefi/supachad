@@ -22,7 +22,7 @@ NemoClaw state is spread across four isolation boundaries:
 | **Sandbox runtime state** | `/sandbox/.openclaw-data/` (cron, agents, action-gate, ledger) | Ephemeral container storage | Same as workspace, plus the in-memory gateway list goes stale |
 | **Source tree** | `~/.nemoclaw/source/` (git) | Git repo | Force push, uncommitted changes in `tmp/` |
 
-The `backup-workspace.sh` and `chad-backup-to-github.sh` scripts cover the workspace and runtime layers via the [sectioned manifest](../workspace/workspace-files.md#sectioned-manifest). This policy adds host config and uncommitted work on top.
+The `backup-workspace.sh` and `chad-backup-to-github.sh` scripts cover the workspace and runtime layers via the [sectioned manifest](../manage-sandboxes/workspace-files.mdx). This policy adds host config and uncommitted work on top.
 
 ### 1.1 Two GitHub repos, two purposes
 
@@ -41,7 +41,7 @@ Chad uses two distinct GitHub repos with different visibility and contents — d
 
 ### 1.2 What the chad-state repo does NOT contain
 
-The manifest's `[exclude]` section deliberately leaves out the device keypair (`identity/`), peer tokens (`devices/`), bearer cache (`credentials/`), per-run logs (`subagents/`, `logs/`), and the raw PGLite brain files (`gbrain/` — the canonical form is the `brain/` markdown export). See [Workspace Files §Sectioned Manifest](../workspace/workspace-files.md#sectioned-manifest) for the full table and per-path rationale.
+The manifest's `[exclude]` section deliberately leaves out the device keypair (`identity/`), peer tokens (`devices/`), bearer cache (`credentials/`), per-run logs (`subagents/`, `logs/`), and the raw PGLite brain files (`gbrain/` — the canonical form is the `brain/` markdown export). See [Workspace Files §Sectioned Manifest](../manage-sandboxes/workspace-files.mdx) for the full table and per-path rationale.
 
 If you ever need a *persona checkpoint* that includes operator-role tokens (e.g. to migrate Chad to a new sandbox while preserving authority), do it as a separate, encrypted, passphrase-gated archive — not as part of the routine cron backup.
 

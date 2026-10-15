@@ -19,8 +19,8 @@ describe("reviewed cloudflared prerequisite (#6141)", () => {
 
   it("reads the reviewed version and digest from the exact workflow", () => {
     expect(readReviewedCloudflaredPin()).toEqual({
-      version: "2026.6.1",
-      debSha256: "ccd02ec216c62bfa573395d8f72cb2e91e95cbdf8726a8acc06b3e2d9aa31526",
+      version: "2026.10.0",
+      debSha256: "9721287c28f78cb623e77c7b95a63feea87e909054d75666a0ec9eff20e5d548",
     });
   });
 

@@ -22,7 +22,7 @@ status: published
 
 # Inference Providers and Per-Task Routing
 
-This page catalogs every provider NemoClaw can route through, names the model that serves each task by default, and explains how to opt into the premium (Anthropic) endpoint for flows that benefit from it. See also [Inference Options](inference-options.md) for what the onboard wizard exposes.
+This page catalogs every provider NemoClaw can route through, names the model that serves each task by default, and explains how to opt into the premium (Anthropic) endpoint for flows that benefit from it. See also [Inference Options](choose-inference-provider.mdx) for what the onboard wizard exposes.
 
 ## Provider catalog
 

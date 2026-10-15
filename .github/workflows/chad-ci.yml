@@ -13,7 +13,7 @@
 # Advisory by default: it reports pass/fail but does not block merges until you add
 # it to the branch's required status checks (Settings -> Branches).
 
-name: Chad CI
+name: CI / Chad
 
 on:
   pull_request:
@@ -37,10 +37,13 @@ jobs:
           fetch-depth: 0 # full history for the commitlint range
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
+          node-version: 24.18.1
           cache: npm
+
+      - name: Install reviewed npm
+        uses: ./.github/actions/setup-reviewed-npm
 
       - name: Install deps (no lifecycle scripts)
         run: npm install --ignore-scripts --no-audit --no-fund
