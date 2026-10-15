@@ -90,7 +90,7 @@ bash scripts/chad-ops.sh recover
    others).
 8. `cron-reload` re-registers the 10 crons. If `jobs.json` is missing, it
    fetches `cron/jobs.json` from `chad-state` first.
-9. `bonjour-off`, `skills-register`, `restart-gateway`, `gate-sync`, and
+9. `bonjour-off`, `skills-register`, `mcp-register`, `restart-gateway`, `gate-sync`, and
    `embed-backfill` finish the bring-up.
 
 ## Recover After a Host Reboot

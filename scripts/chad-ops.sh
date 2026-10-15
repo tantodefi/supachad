@@ -37,6 +37,7 @@
 #   chad-ops bonjour-off    Disable the mDNS plugin that crashes the gateway
 #   chad-ops gbrain-config  Rewrite gbrain embed config (NVIDIA key/model)
 #   chad-ops skills-register  Set skills.load.extraDirs → Chad's custom skills
+#   chad-ops mcp-register   Register the chad-webui MCP server (webui__* tools)
 #   chad-ops gate-check     Verify the Chad-lite allowlist denies/allows correctly
 #   chad-ops inbox-prune    Strip watchdog error noise from the agent-inbox
 #
@@ -317,6 +318,22 @@ cmd_skills_register() {
   ok "extraDirs set (gateway restart applies it)"
 }
 
+# chad-webui-mcp exposes chad-webui as native webui__* tools; the openwebui
+# skill tells Chad to use them. Registration lives only in openclaw.json, and
+# nothing re-created it after the 2026-10-14 rewrite, so Chad lost every
+# OpenWebUI tool (calendar/notes/automations/memories) without any error.
+cmd_mcp_register() {
+  step "mcp-register (mcp.servers.webui → chad-webui-mcp; a config rewrite drops it)"
+  local cur
+  cur=$(sshp 'python3 -c "import json;print(json.load(open(\"/sandbox/.openclaw/openclaw.json\")).get(\"mcp\",{}).get(\"servers\",{}).get(\"webui\",{}).get(\"command\",\"\"))"')
+  if echo "$cur" | grep -q "chad-webui-mcp"; then
+    ok "webui MCP server already registered"
+    return 0
+  fi
+  sshp 'openclaw mcp set webui "{\"command\":\"/sandbox/.openclaw-data/bin/chad-webui-mcp\"}" 2>&1 | grep -v -e UNDICI -e trace-warnings | tail -1' >/dev/null
+  ok "webui MCP server registered (gateway restart loads its tools)"
+}
+
 cmd_restart_gateway() {
   step "restart-gateway (wait :$GW_PORT)"
   if [ "$SANDBOX_MODE" = container ]; then
@@ -586,6 +603,10 @@ cmd_doctor() {
   local sk
   sk=$(sshp "python3 -c \"import json;print('y' if 'openclaw-data/skills' in str(json.load(open('/sandbox/.openclaw/openclaw.json')).get('skills',{}).get('load',{}).get('extraDirs')) else 'n')\"")
   [ "$sk" = "y" ] && ok "custom skills loaded (extraDirs set)" || bad "skills.load.extraDirs unset — Chad skills dark (run: chad-ops skills-register)"
+  # chad-webui MCP server registered (webui__* tools)
+  local mc
+  mc=$(sshp "python3 -c \"import json;print('y' if 'chad-webui-mcp' in str(json.load(open('/sandbox/.openclaw/openclaw.json')).get('mcp',{}).get('servers',{}).get('webui',{})) else 'n')\"")
+  [ "$mc" = "y" ] && ok "webui MCP server registered" || bad "webui MCP unregistered — Chad has no OpenWebUI tools (run: chad-ops mcp-register)"
   # gbrain embed config (NVIDIA key, not clobbered)
   local ek
   ek=$(sshp "python3 -c \"import json;c=json.load(open('/sandbox/.gbrain/config.json'));print('y' if c.get('openai_api_key') and c['openai_api_key']!='unused' and 'nvidia' in c.get('openai_base_url','') else 'n')\"")
@@ -631,6 +652,7 @@ cmd_recover() {
   cmd_cron_reload     # reconcile gateway ← jobs.json (restores the durable cron set)
   cmd_bonjour_off     # before gateway restart: stops the ~20s crash loop
   cmd_skills_register # before gateway restart: loads Chad's custom skills
+  cmd_mcp_register    # before gateway restart: loads the webui__* MCP tools
   cmd_restart_gateway
   cmd_gate_sync # writes allowlist, restarts shim, verifies deny/allow
   cmd_embed_backfill
@@ -666,6 +688,7 @@ main() {
     bonjour-off) cmd_bonjour_off ;;
     gbrain-config) cmd_gbrain_config ;;
     skills-register) cmd_skills_register ;;
+    mcp-register) cmd_mcp_register ;;
     gate-sync) cmd_gate_sync ;;
     gate-check) cmd_gate_check ;;
     inbox-prune) cmd_inbox_prune ;;
