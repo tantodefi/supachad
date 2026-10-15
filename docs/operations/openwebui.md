@@ -585,10 +585,16 @@ OpenWebUI chats persist in two places that need to stay in sync:
 
 The **`chad-webui-ingest`** host launchd job at
 `~/Library/LaunchAgents/dev.nemoclaw.chad-webui-ingest.plist` closes
-that gap: daily at 04:30 UTC it reads chats updated in the last 25h
-from `webui.db`, renders each as markdown, and SSHes into the sandbox
-to run `gbrain put chat/<chat-id>`. After ingest, the next
-`chad-gbrain-dream` pass picks them up alongside the workspace journal.
+that gap: daily at 04:30 UTC it reads every chat whose `updated_at` is
+newer than its per-chat high-water mark (kept in the ingest state file,
+so a missed or failed night is retried rather than lost), renders the
+full thread by walking `history.currentId`, and SSHes into the sandbox
+to run `gbrain put chat/<chat-id>`. Each chat page names its operator
+and links to a `people/<operator>` page, which the job rebuilds with a
+dated timeline of that operator's chats. Those links give gbrain its
+entity graph (`gbrain health` link and timeline coverage). After ingest,
+the next `chad-gbrain-dream` pass picks them up alongside the workspace
+journal.
 
 ```console
 # manual sweep:

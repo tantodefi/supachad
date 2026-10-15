@@ -80,7 +80,11 @@ bash scripts/chad-ops.sh recover
 6. `restore-runtime` restores any **missing** `[runtime]` file from
    `chad-state` (the action-gate policy `auto-actions.json`, `queue/`,
    `memory/feedback-proposals.md`) without touching files that exist. Without
-   `auto-actions.json`, every gated action falls through to `block`.
+   `auto-actions.json`, every gated action falls through to `block`. It also
+   copies `workspace/` from `chad-state` with no-clobber, which brings back
+   `MEMORY.md` and the daily notes under `memory/` while leaving live files
+   (identity, today's notes) untouched. The 2026-10-14 reboot lost 285 such
+   files.
 7. `deploy` pushes every manifest file, including all five custom skills and
    the orchestrator tools (`chad-budget`, `chad-collect`, `chad-route`, and
    others).
