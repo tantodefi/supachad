@@ -1073,6 +1073,9 @@ A `docker restart nemoclaw-openwebui` does **not** revert the loader
 - Source-of-truth: `scripts/openwebui/chad-webui` and `scripts/openwebui/chad-webui-mcp`
 - Credentials: `/sandbox/.nemoclaw/credentials.json`
 - MCP registration: `mcp.servers.webui` in `/sandbox/.openclaw/openclaw.json`
+  (host: `chad-ops mcp-register`; `chad-ops doctor` flags it when missing)
+- Credential fields (`token`, `api_key`, …) in any command's output are
+  printed as `[redacted]`. Never ask for or repeat an operator's API key.
 
 ### In-container source (for endpoint discovery)
 

@@ -213,8 +213,22 @@ def _http_multipart(path: str, file_path: str) -> dict:
         sys.exit(1)
 
 
+_SECRET_KEYS = {"token", "api_key", "access_token", "refresh_token", "password", "secret"}
+
+
+def _redact(obj):
+    """Blank credential fields before they reach stdout, i.e. the model's
+    context. /auths/ returns the caller's own bearer token; via the MCP
+    webui__whoami tool Chad read it back verbatim to the operator (2026-10-15)."""
+    if isinstance(obj, dict):
+        return {k: ("[redacted]" if k.lower() in _SECRET_KEYS and v else _redact(v)) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_redact(v) for v in obj]
+    return obj
+
+
 def _print(payload) -> None:
-    json.dump(payload, sys.stdout, indent=2, default=str)
+    json.dump(_redact(payload), sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")
 
 
