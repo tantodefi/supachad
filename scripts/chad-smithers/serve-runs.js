@@ -1990,6 +1990,53 @@ function approvalNotifier() {
     }
   }, 20000);
 }
+// Expire abandoned gates. Nightly workflows open a fresh gate every run and never
+// retire the last one, so unanswered proposals pile up (303 by 2026-10-15, back to
+// July). CANCEL (not deny) runs whose gate has waited longer than the window — it
+// records "abandoned", not an operator decision. Gates held by a running chain are
+// left alone. CHAD_APPROVAL_EXPIRE_DAYS=0 disables.
+const EXPIRE_MS = Number(process.env.CHAD_APPROVAL_EXPIRE_DAYS ?? 7) * 86400 * 1000;
+function expireStaleApprovals() {
+  if (!(EXPIRE_MS > 0)) return;
+  const held = new Set(
+    loadChains()
+      .filter((ch) => ch.status === "running")
+      .flatMap((ch) => (ch.steps || []).map((s) => s.runId).filter(Boolean)),
+  );
+  let n = 0;
+  for (const path of listDbs()) {
+    let stale = [];
+    try {
+      withDb(path, (db) => {
+        if (!tableExists(db, "_smithers_approvals")) return;
+        stale = db
+          .query(
+            `SELECT DISTINCT a.run_id FROM _smithers_approvals a
+             JOIN _smithers_runs r ON a.run_id = r.run_id
+             WHERE a.status IN ('pending','requested')
+               AND r.status NOT IN ('finished','failed','cancelled','denied','errored')
+               AND a.requested_at_ms < ?`,
+          )
+          .all(Date.now() - EXPIRE_MS)
+          .map((r) => r.run_id)
+          .filter((id) => !held.has(id));
+      });
+    } catch {
+      continue;
+    }
+    for (const id of stale) {
+      cliWithDb(path, ["cancel", id]);
+      n++;
+    }
+  }
+  if (n)
+    console.error(
+      `approval-expiry: cancelled ${n} runs with gates older than ${EXPIRE_MS / 86400000}d`,
+    );
+}
+expireStaleApprovals();
+setInterval(expireStaleApprovals, 3600 * 1000);
+
 approvalNotifier();
 chainTick(); // advance any running workflow chains
 
