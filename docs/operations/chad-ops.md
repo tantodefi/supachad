@@ -77,10 +77,16 @@ bash scripts/chad-ops.sh recover
    the brain has zero pages or identity is missing. Otherwise it skips, so a
    surviving brain is never replaced by an older snapshot. Set
    `CHAD_FORCE_RESTORE=1` to override.
-6. `deploy` pushes every manifest file, including all five custom skills.
-7. `cron-reload` re-registers the 10 crons. If `jobs.json` is missing, it
+6. `restore-runtime` restores any **missing** `[runtime]` file from
+   `chad-state` (the action-gate policy `auto-actions.json`, `queue/`,
+   `memory/feedback-proposals.md`) without touching files that exist. Without
+   `auto-actions.json`, every gated action falls through to `block`.
+7. `deploy` pushes every manifest file, including all five custom skills and
+   the orchestrator tools (`chad-budget`, `chad-collect`, `chad-route`, and
+   others).
+8. `cron-reload` re-registers the 10 crons. If `jobs.json` is missing, it
    fetches `cron/jobs.json` from `chad-state` first.
-8. `bonjour-off`, `skills-register`, `restart-gateway`, `gate-sync`, and
+9. `bonjour-off`, `skills-register`, `restart-gateway`, `gate-sync`, and
    `embed-backfill` finish the bring-up.
 
 ## Recover After a Host Reboot

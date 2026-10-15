@@ -40,7 +40,7 @@ mkdir -p "$(dirname "$BUDGET_FILE")"
 cmd="${1:-show}"
 shift || true
 
-export CHAD_BUDGET_FILE CHAD_BUDGET_CMD="$cmd" CHAD_BUDGET_DEFAULT_LIMIT="$DEFAULT_LIMIT"
+export CHAD_BUDGET_FILE="$BUDGET_FILE" CHAD_BUDGET_CMD="$cmd" CHAD_BUDGET_DEFAULT_LIMIT="$DEFAULT_LIMIT"
 export CHAD_BUDGET_ARG1="${1:-}" CHAD_BUDGET_ARG2="${2:-}"
 
 python3 <<'PY'

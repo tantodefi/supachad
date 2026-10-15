@@ -31,6 +31,7 @@
 #   chad-ops cli-mtls       Restore host CLI certs for the 0.0.20 gateway (after a cutover)
 #   chad-ops gbrain-dims    Migrate a re-initialized brain to vector(2048) before embedding
 #   chad-ops restore-data   chad-restore-from-github (workspace/memory/gbrain/cron)
+#   chad-ops restore-runtime Restore missing [runtime] files (gate policy, budget, queue)
 #   chad-ops cron-reload    Re-register crons from the restored jobs.json
 #   chad-ops embed-backfill Backfill gbrain embeddings (bg) after a restore
 #   chad-ops bonjour-off    Disable the mDNS plugin that crashes the gateway
@@ -409,22 +410,47 @@ cmd_restore_data() {
   sshp 'chad-restore-from-github 2>&1 | tail -20'
 }
 
+# Fetch one [runtime] file from chad-state into /sandbox/.openclaw-data/<rel>.
+# Uses the host GITHUB_TOKEN (classic ghp_; the gh CLI is Supachad and can't
+# read the repo). Repo paths mirror the relative path under .openclaw-data.
+fetch_state_file() {
+  local rel="$1" tok repo
+  tok=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('GITHUB_TOKEN',''))" 2>/dev/null)
+  repo=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('CHAD_STATE_REPO','tantodefi/chad-state'))" 2>/dev/null)
+  curl -fsS -m 20 -H "Authorization: token $tok" -H 'Accept: application/vnd.github.raw' \
+    "https://api.github.com/repos/$repo/contents/$rel" 2>/dev/null \
+    | sshin "d='/sandbox/.openclaw-data/$rel'; mkdir -p \"\$(dirname \"\$d\")\" && cat >\"\$d.part\" && if [ -s \"\$d.part\" ]; then mv \"\$d.part\" \"\$d\"; else rm -f \"\$d.part\"; fi" >/dev/null
+  # A failed download must not leave an empty file behind (it would mask the gap).
+  [ "$(sshp "test -s '/sandbox/.openclaw-data/$rel' && echo y")" = y ]
+}
+
+cmd_restore_runtime() {
+  step "restore-runtime (missing [runtime] files only — never overwrites live state)"
+  # restore-data is skipped when the brain survived, but the small config files
+  # on the wiped layer still vanish: 2026-10-14 lost auto-actions.json (the
+  # action-gate policy → every action fell through to block), queue/budget.json,
+  # queue/tasks.jsonl and memory/feedback-proposals.md.
+  local manifest="$HERE/chad-workspace-files.txt" rel missing=0 got=0
+  while IFS= read -r rel; do
+    [ "$(sshp "test -e '/sandbox/.openclaw-data/$rel' && echo y")" = y ] && continue
+    missing=$((missing + 1))
+    if fetch_state_file "$rel"; then
+      got=$((got + 1))
+      ok "restored $rel"
+    else
+      warn "$rel missing and not in chad-state"
+    fi
+  done < <(sed -n '/^\[runtime\]/,/^\[/p' "$manifest" | sed 's/#.*//;s/[[:space:]]*$//' | grep -vE '^\[|^$')
+  [ "$missing" -eq 0 ] && ok "all [runtime] files present"
+  sshp "chown sandbox:sandbox -R /sandbox/.openclaw-data/queue /sandbox/.openclaw-data/memory 2>/dev/null; true" >/dev/null
+  [ "$got" -gt 0 ] && dim "restored $got of $missing from chad-state"
+  return 0
+}
+
 cmd_cron_reload() {
   step "cron-reload (re-register crons from restored jobs.json)"
-  # The cron store lives on the wiped layer; when restore-data is skipped (state
-  # survived) jobs.json is gone. Pull just that file from chad-state with the
-  # host GITHUB_TOKEN (classic ghp_; gh CLI is Supachad and can't read the repo).
   if [ "$(sshp "test -s $CRON_JOBS && echo y")" != y ]; then
-    local tok repo
-    tok=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('GITHUB_TOKEN',''))" 2>/dev/null)
-    repo=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('CHAD_STATE_REPO','tantodefi/chad-state'))" 2>/dev/null)
-    if curl -fsS -m 20 -H "Authorization: token $tok" -H 'Accept: application/vnd.github.raw' \
-      "https://api.github.com/repos/$repo/contents/cron/jobs.json" \
-      | sshin "mkdir -p \$(dirname $CRON_JOBS) && cat > $CRON_JOBS" >/dev/null; then
-      ok "jobs.json missing — fetched from $repo"
-    else
-      bad "jobs.json missing and fetch from $repo failed"
-    fi
+    if fetch_state_file cron/jobs.json; then ok "jobs.json missing — fetched from chad-state"; else bad "jobs.json missing and fetch from chad-state failed"; fi
   fi
   sshp 'chad-cron-reload 2>&1 | tail -8'
 }
@@ -577,6 +603,7 @@ cmd_recover() {
   cmd_proton_wrap
   cmd_gbrain_config # NVIDIA embed key/model (clobbered by gbrain init on restart)
   cmd_restore_data
+  cmd_restore_runtime # small config files restore-data skips when the brain survived
   cmd_deploy || true
   cmd_cron_reload     # reconcile gateway ← jobs.json (restores the durable cron set)
   cmd_bonjour_off     # before gateway restart: stops the ~20s crash loop
@@ -611,6 +638,7 @@ main() {
     gbrain-dims) cmd_gbrain_dims ;;
     restore-data) cmd_restore_data ;;
     cron-reload) cmd_cron_reload ;;
+    restore-runtime) cmd_restore_runtime ;;
     embed-backfill) cmd_embed_backfill ;;
     bonjour-off) cmd_bonjour_off ;;
     gbrain-config) cmd_gbrain_config ;;
