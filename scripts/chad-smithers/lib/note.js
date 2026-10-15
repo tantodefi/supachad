@@ -40,7 +40,7 @@ function ssh(args, opts = {}) {
 export async function postNote({ title, content, tags = "" }) {
   const safeTitle = String(title || "Chad note").replace(/'/g, "");
   const tagArg = tags ? `--tags ${String(tags).replace(/'/g, "")}` : "";
-  const remote = `cat > /tmp/chad-note.md && '${POD_WEBUI}' notes create --title '${safeTitle}' --content-file /tmp/chad-note.md ${tagArg}`;
+  const remote = `cat > /tmp/chad-note.md && CHAD_WEBUI_TRUSTED=1 '${POD_WEBUI}' notes create --title '${safeTitle}' --content-file /tmp/chad-note.md ${tagArg}`;
   // No -n here: we pipe the note body to the remote `cat` via stdin (`input`).
   const r = await ssh([POD_SSH, remote], { input: String(content || "") });
   if (r.code !== 0) return { posted: false, error: (r.stderr || `ssh rc=${r.code}`).slice(0, 300) };

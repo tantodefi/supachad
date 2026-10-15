@@ -72,6 +72,15 @@ not the surface — the result is identical.
 
 ## Auth model (read this before any write)
 
+> **In chat, these tools are currently disabled (since 2026-10-15).** Every
+> `chad-webui` call and `webui__*` tool exits 3 with "no operator identity",
+> because the operator's identity doesn't yet reach the gateway where chat
+> turns run, and without it the call would act as the admin. When that
+> happens, tell the operator that OpenWebUI actions are temporarily
+> unavailable from chat. Don't retry, don't set `CHAD_WEBUI_TRUSTED`, and
+> don't read keys from `credentials.json` to work around it. Nightly
+> automation (experiments, approval notes) still works.
+
 Two layers, both required, both already configured in
 `/sandbox/.nemoclaw/credentials.json`:
 

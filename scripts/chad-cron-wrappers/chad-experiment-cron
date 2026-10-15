@@ -52,6 +52,9 @@ BUDGET_FILE = os.environ.get(
 ENSURE_MEMORY = "/usr/local/bin/chad-ensure-today-memory"
 MEMORY_DIR = Path("/sandbox/.openclaw/workspace/memory")
 LOCK_FILE = "/tmp/chad-experiment-cron.lock"
+# Operator-less automation: opt in to chad-webui's default key (it refuses
+# calls without an operator identity otherwise).
+os.environ["CHAD_WEBUI_TRUSTED"] = "1"
 
 MIN_BUDGET_FALLBACK = 20000
 

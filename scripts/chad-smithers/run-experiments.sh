@@ -97,7 +97,7 @@ if [ -f "$REPORT" ]; then
   # Capture the created note id to a log — `notes list` is currently broken
   # (HTTP 500), so the returned id is the only handle for later cleanup.
   note_out="$(ssh -o ConnectTimeout=15 "$POD_SSH" \
-    "cat > /tmp/chad-exp-report.md && '$POD_WEBUI' notes create --title '$title' --content-file /tmp/chad-exp-report.md --tags chad-experiments" \
+    "cat > /tmp/chad-exp-report.md && CHAD_WEBUI_TRUSTED=1 '$POD_WEBUI' notes create --title '$title' --content-file /tmp/chad-exp-report.md --tags chad-experiments" \
     <"$REPORT" 2>&1 || true)"
   note_id="$(printf '%s' "$note_out" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)"
   if [ -n "$note_id" ]; then

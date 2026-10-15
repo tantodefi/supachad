@@ -89,9 +89,15 @@ def _pick_api_key(creds: dict) -> str:
     user-role key, so any cross-operator write returns 403 at the API
     even if Chad is talked into attempting it.
 
-    Anonymous requests (no slug — direct curl, internal cron, etc.) fall
-    back to OPENWEBUI_API_KEY. Set that to a low-privilege key if you
-    want defense-in-depth for non-operator callers too."""
+    No slug → refuse unless the caller opts in with CHAD_WEBUI_TRUSTED=1
+    (crons, host-side Smithers). Chat turns run inside the long-lived
+    openclaw-gateway, which never receives chad-shim's per-request
+    CHAD_OPERATOR_* env (verified 2026-10-15: a tjcooke turn saw no slug
+    and webui__whoami resolved to the admin key). Until operator identity
+    reaches the gateway, chat-side calls fail closed instead of acting as
+    admin. NOTE: env is not a boundary against an exec-capable model (it
+    can set the var or read credentials.json); this stops the default and
+    accidental path, not a deliberate jailbreak."""
     slug = os.environ.get("CHAD_OPERATOR_SLUG", "").strip().lower()
     if slug:
         key_name = f"OPENWEBUI_API_KEY_{slug.upper().replace('-', '_').replace('.', '_')}"
@@ -102,6 +108,14 @@ def _pick_api_key(creds: dict) -> str:
             f"chad-webui: refusing to use default key for operator {slug!r} — "
             f"missing {key_name} in credentials. Either add it or run without "
             f"CHAD_OPERATOR_SLUG to use the default key explicitly.\n"
+        )
+        sys.exit(3)
+    if os.environ.get("CHAD_WEBUI_TRUSTED") != "1":
+        sys.stderr.write(
+            "chad-webui: no operator identity (CHAD_OPERATOR_SLUG) reached this call, "
+            "so it would run with the admin key; refusing. OpenWebUI tools are "
+            "unavailable in chat until per-operator identity is wired through the "
+            "gateway. Trusted automation sets CHAD_WEBUI_TRUSTED=1.\n"
         )
         sys.exit(3)
     default = creds.get("OPENWEBUI_API_KEY")
