@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -33,6 +34,23 @@ SSH_HOST = os.environ.get("CHAD_SSH_HOST", "openshell-chad")
 LOOKBACK_HOURS = int(os.environ.get("LOOKBACK_HOURS", "25"))
 LOG_FILE = Path(os.environ.get("WEBUI_INGEST_LOG", HOME / ".nemoclaw/openwebui/webui-ingest.log"))
 PUT_TIMEOUT = int(os.environ.get("PUT_TIMEOUT", "60"))
+# Per-chat high-water mark of the updated_at we last pushed successfully. A
+# fixed lookback window silently dropped every chat whose push failed: the
+# 2026-10-08..10 sweeps all hit transport errors and those chats aged out.
+STATE_FILE = Path(os.environ.get("WEBUI_INGEST_STATE", HOME / ".nemoclaw/openwebui/webui-ingest-state.json"))
+
+
+def load_state() -> dict[str, float]:
+    try:
+        return {str(k): float(v) for k, v in json.loads(STATE_FILE.read_text()).items()}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def save_state(state: dict[str, float]) -> None:
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=0, sort_keys=True))
+    tmp.replace(STATE_FILE)
 
 
 def log(msg: str) -> None:
@@ -44,21 +62,49 @@ def log(msg: str) -> None:
 
 
 def normalize_messages(chat_obj: dict) -> list[dict]:
-    """OpenWebUI stores messages either as an ordered list or a dict keyed by
-    id, depending on schema version. Normalize to a chronological list."""
+    """Return the active conversation thread in chronological order.
+
+    OpenWebUI 0.11 keeps the authoritative conversation in ``history``: a dict
+    of messages keyed by id, linked by ``parentId``, with ``currentId`` naming
+    the latest message on the active branch. The top-level ``messages`` list
+    can be stale — it often holds only the first user turn — so reading it
+    first dropped every assistant reply (2026-10-14: pages of ~300 bytes from
+    ~8 KB chats). Walk currentId → root instead, and fall back to the list.
+    """
+    history = chat_obj.get("history")
+    if isinstance(history, dict) and isinstance(history.get("messages"), dict):
+        by_id = history["messages"]
+        cur = history.get("currentId")
+        if cur not in by_id and by_id:
+            # No currentId: take the newest leaf on any branch.
+            leaves = [m for m in by_id.values() if not m.get("childrenIds")]
+            cur = max(leaves or by_id.values(), key=lambda m: m.get("timestamp") or 0).get("id")
+        thread, seen = [], set()
+        while cur in by_id and cur not in seen:
+            seen.add(cur)
+            thread.append(by_id[cur])
+            cur = by_id[cur].get("parentId")
+        if thread:
+            return list(reversed(thread))
     msgs = chat_obj.get("messages")
     if isinstance(msgs, list):
         return msgs
     if isinstance(msgs, dict):
-        # Fall back to dict-by-id with parent_id chains, but lists are most
-        # common. Use timestamp ordering when available.
         items = list(msgs.values())
         items.sort(key=lambda m: m.get("timestamp") or m.get("created_at") or 0)
         return items
-    history = chat_obj.get("history", {})
-    if isinstance(history, dict) and history.get("messages"):
-        return normalize_messages({"messages": history["messages"]})
     return []
+
+
+def iso(ts) -> str:
+    """Epoch seconds (or ms) → ISO-8601 UTC; pass anything else through."""
+    try:
+        v = float(ts)
+    except (TypeError, ValueError):
+        return str(ts)
+    if v > 1e12:
+        v /= 1000
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(v))
 
 
 def extract_text(content) -> str:
@@ -72,14 +118,17 @@ def extract_text(content) -> str:
     return ""
 
 
-def render_chat(chat_id: str, user_id: str, title: str, created_at, updated_at, chat_obj: dict) -> str:
+def render_chat(
+    chat_id: str, user_id: str, title: str, created_at, updated_at, chat_obj: dict, operator: str = ""
+) -> str:
     lines = [
         "---",
         f"chat_id: {chat_id}",
         f"user_id: {user_id}",
+        f"operator: {operator or 'unknown'}",
         f"title: {json.dumps(title or '(untitled)')}",
-        f"created_at: {created_at}",
-        f"updated_at: {updated_at}",
+        f"created_at: {iso(created_at)}",
+        f"updated_at: {iso(updated_at)}",
         "source: openwebui",
         "---",
         "",
@@ -93,11 +142,20 @@ def render_chat(chat_id: str, user_id: str, title: str, created_at, updated_at, 
         ts = m.get("timestamp") or m.get("created_at")
         head = f"## {i}. {role}"
         if ts:
-            head += f" — {ts}"
+            head += f" — {iso(ts)}"
         lines.append(head)
         lines.append("")
         body = extract_text(m.get("content")).strip()
-        lines.append(body or "_(empty)_")
+        # Nest the message's own headings under its "## N. Role" turn heading
+        # (outside code fences) so a reply's "## Summary" isn't read as a turn.
+        nested, fence = [], False
+        for bl in body.split("\n"):
+            if bl.lstrip().startswith(("```", "~~~")):
+                fence = not fence
+            if not fence and re.match(r"#{1,4} ", bl):
+                bl = "##" + bl
+            nested.append(bl)
+        lines.append("\n".join(nested) or "_(empty)_")
         lines.append("")
     return "\n".join(lines)
 
@@ -132,19 +190,26 @@ def main() -> None:
     if not DB.exists():
         log(f"webui.db missing at {DB}; nothing to ingest")
         return
-    cutoff_ts = time.time() - LOOKBACK_HOURS * 3600
-    con = sqlite3.connect(str(DB))
-    rows = con.execute(
-        "SELECT id, user_id, title, created_at, updated_at, chat "
-        "FROM chat WHERE archived = 0 AND updated_at > ? "
-        "ORDER BY updated_at DESC",
-        (cutoff_ts,),
+    state = load_state()
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    all_rows = con.execute(
+        "SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at, c.chat, "
+        "COALESCE(u.email, '') FROM chat c LEFT JOIN user u ON u.id = c.user_id "
+        "WHERE c.archived = 0 ORDER BY c.updated_at DESC",
     ).fetchall()
     con.close()
+    # Pending = never pushed, or changed since the last successful push. With
+    # no state yet, fall back to the lookback window so a first run on a big
+    # instance doesn't replay years of chats (set LOOKBACK_HOURS=0 for all).
+    if state:
+        rows = [r for r in all_rows if float(r[4] or 0) > state.get(r[0], 0.0)]
+    else:
+        cutoff_ts = time.time() - LOOKBACK_HOURS * 3600 if LOOKBACK_HOURS > 0 else 0
+        rows = [r for r in all_rows if float(r[4] or 0) > cutoff_ts]
 
-    log(f"sweep start — db={DB} lookback={LOOKBACK_HOURS}h candidates={len(rows)}")
+    log(f"sweep start — db={DB} tracked={len(state)} pending={len(rows)}")
     pushed = skipped = failed = 0
-    for chat_id, user_id, title, created_at, updated_at, chat_json in rows:
+    for chat_id, user_id, title, created_at, updated_at, chat_json, operator in rows:
         try:
             chat_obj = json.loads(chat_json or "{}")
         except json.JSONDecodeError as e:
@@ -154,15 +219,18 @@ def main() -> None:
         if not normalize_messages(chat_obj):
             log(f"skip {chat_id}: no messages")
             skipped += 1
+            state[chat_id] = float(updated_at or 0)  # nothing to ingest at this revision
             continue
-        md = render_chat(chat_id, user_id, title, created_at, updated_at, chat_obj)
+        md = render_chat(chat_id, user_id, title, created_at, updated_at, chat_obj, operator)
         ok, detail = push_to_sandbox(f"chat/{chat_id}", md)
         if ok:
             pushed += 1
+            state[chat_id] = float(updated_at or 0)
         else:
             failed += 1
             log(f"FAIL chat/{chat_id}: {detail}")
-    log(f"sweep done — pushed={pushed} skipped={skipped} failed={failed}")
+    save_state(state)
+    log(f"sweep done — pushed={pushed} skipped={skipped} failed={failed} (failed chats retry next sweep)")
 
 
 if __name__ == "__main__":
