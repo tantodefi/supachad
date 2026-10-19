@@ -230,15 +230,19 @@ fi
 # next dream cycle picks up wherever they left off. nohup + disown so they
 # survive shell exit.
 TS_TAG="$(date -u +%Y%m%dT%H%M%SZ)"
+# chad-dream-distill (LLM: chats → per-operator context, see its header) runs
+# first in the SAME detached chain, so the three never contend for the lock and
+# the embed pass picks up the people/<slug>-context pages it writes.
+DISTILL_LOG="/tmp/chad-dream-distill-${TS_TAG}.log"
 EMBED_LOG="/tmp/chad-gbrain-embed-${TS_TAG}.log"
 LINK_LOG="/tmp/chad-gbrain-extract-links-${TS_TAG}.log"
-nohup bash -c "gbrain embed --stale" >"$EMBED_LOG" 2>&1 </dev/null &
-disown 2>/dev/null || true
-nohup bash -c "gbrain extract links --source db" >"$LINK_LOG" 2>&1 </dev/null &
+nohup bash -c "timeout 1800 chad-dream-distill >'$DISTILL_LOG' 2>&1; \
+  gbrain embed --stale >'$EMBED_LOG' 2>&1; \
+  gbrain extract links --source db >'$LINK_LOG' 2>&1" </dev/null >/dev/null 2>&1 &
 disown 2>/dev/null || true
 {
-  echo "embed --stale: detached (log: ${EMBED_LOG})"
-  echo "extract links: detached (log: ${LINK_LOG})"
+  echo "distill → embed --stale → extract links: detached chain"
+  echo "  logs: ${DISTILL_LOG} ${EMBED_LOG} ${LINK_LOG}"
 } >>"$MEMORY_FILE"
 
 rm -rf "$RESULTS" "$LOG"

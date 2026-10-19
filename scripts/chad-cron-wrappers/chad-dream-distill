@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# chad-dream-distill — turn OpenWebUI chat transcripts into per-operator context.
+#
+# chad-gbrain-dream keeps the brain in sync but never *distills*: the digest
+# was a list of changed slugs, so nothing Chad learned about an operator
+# reached the next conversation. This pass reads chat/<id> pages updated since
+# the last run, asks the inference route (Nemotron via https://inference.local)
+# for grounded facts per operator, merges them into a deduped store, and writes:
+#
+#   identities/<slug>.context.md    chad-shim appends it to the hand-written
+#                                    identity on every turn (memory → context)
+#   identities/<slug>.context.json  merged store (survives via backup [runtime-dirs])
+#   gbrain people/<slug>-context    searchable copy
+#   workspace memory/distill-<date>.md  what was learned tonight
+#
+# Deterministic shell around one LLM call per batch: no agent, no tools.
+# First run (no watermark) backfills every chat. Idempotent per watermark.
+#
+# Usage: chad-dream-distill [--all] [--dry-run]
+
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+
+DATA = os.environ.get("CHAD_OPENCLAW_DATA", "/sandbox/.openclaw-data")
+WORKSPACE = os.environ.get("CHAD_WORKSPACE", "/sandbox/.openclaw/workspace")
+IDENT = os.path.join(DATA, "identities")
+WATERMARK = os.path.join(DATA, "state", "distill-watermark.json")
+URL = os.environ.get("CHAD_DISTILL_URL", "https://inference.local/v1/chat/completions")
+MODEL = os.environ.get("CHAD_DISTILL_MODEL", "nvidia/nemotron-3-super-120b-a12b")
+BATCH_CHARS = 20000
+PER_CHAT_CHARS = 8000
+KEEP_PER_CATEGORY = 20
+CONTEXT_MAX_BYTES = 3500
+CATEGORIES = {
+    "profile": "stable facts about the person: role, goals, background, constraints",
+    "preferences": "how they want Chad to respond or work",
+    "ongoing_work": "projects or threads in progress",
+    "open_requests": "things they asked Chad for that were not finished",
+    "decisions": "decisions they made",
+}
+
+PROMPT = """You maintain long-term notes about one operator of an AI assistant named Chad.
+Below are chat transcripts between {who} and Chad. Extract only what the transcripts
+actually show. Ignore automated/system chatter, error messages and empty replies.
+Never include passwords, API keys, tokens or other secrets.
+
+Return ONLY a JSON object with these keys, each a list of short strings
+(at most 8 items each, at most 160 characters per item, [] if nothing):
+{cats}
+
+Transcripts:
+{body}"""
+
+
+def log(msg):
+    print(f"[distill] {msg}", flush=True)
+
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+
+
+def frontmatter(text):
+    m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.S)
+    if not m:
+        return {}, text
+    meta = {}
+    for line in m.group(1).splitlines():
+        if ":" in line and not line.startswith(" "):
+            k, v = line.split(":", 1)
+            meta[k.strip()] = v.strip().strip("'\"")
+    return meta, m.group(2)
+
+
+def llm(prompt):
+    # Nemotron reasons before answering (~2.5k reasoning tokens on a 20 KB batch);
+    # at max_tokens=1500 the budget ran out mid-reasoning and content came back
+    # "" with no error (2026-10-19: 0 items from 23 chats). 4096 leaves room.
+    body = json.dumps({
+        "model": MODEL, "temperature": 0.2, "max_tokens": 4096,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode()
+    req = urllib.request.Request(URL, data=body, headers={"Content-Type": "application/json"})
+    for attempt in (1, 2, 3):
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                choice = json.load(r)["choices"][0]
+            content = choice["message"].get("content") or ""
+            if content:
+                return content
+            log(f"llm attempt {attempt}: empty content (finish={choice.get('finish_reason')})")
+        except Exception as e:  # noqa: BLE001 — 503s happen; back off and retry
+            log(f"llm attempt {attempt} failed: {e}")
+        time.sleep(20 * attempt)
+    return ""
+
+
+def parse(text):
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return {}
+    try:
+        d = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return {}
+    out = {}
+    for k in CATEGORIES:
+        v = d.get(k) or []
+        out[k] = [str(x).strip()[:160] for x in v if isinstance(x, (str, int, float)) and str(x).strip()][:8]
+    return out
+
+
+def norm(s):
+    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+
+
+def merge(store, new, day):
+    for k, items in new.items():
+        cur = store.setdefault(k, [])
+        seen = {norm(x["text"]) for x in cur}
+        for t in items:
+            if norm(t) and norm(t) not in seen:
+                cur.append({"text": t, "date": day})
+                seen.add(norm(t))
+        store[k] = cur[-KEEP_PER_CATEGORY:]
+    return store
+
+
+def render(slug, store):
+    if not any(store.get(k) for k in CATEGORIES):
+        return ""
+    lines = [f"## What Chad has learned about {slug} (auto-distilled from past chats)", ""]
+    for k, desc in CATEGORIES.items():
+        items = store.get(k) or []
+        if not items:
+            continue
+        lines.append(f"**{k.replace('_', ' ').title()}**")
+        for x in reversed(items):  # newest first, so truncation drops the oldest
+            lines.append(f"- {x['text']} ({x['date']})")
+        lines.append("")
+    out = "\n".join(lines).strip() + "\n"
+    while len(out.encode()) > CONTEXT_MAX_BYTES and "\n- " in out:
+        out = out[: out.rfind("\n- ")] + "\n"
+    return out
+
+
+def main():
+    dry = "--dry-run" in sys.argv
+    since = ""
+    if "--all" not in sys.argv and os.path.exists(WATERMARK):
+        since = json.load(open(WATERMARK)).get("since", "")
+    started = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    day = started[:10]
+
+    tmp = tempfile.mkdtemp(prefix="distill-")
+    r = run(["gbrain", "export", "--dir", tmp], timeout=900)
+    chat_dir = os.path.join(tmp, "chat")
+    if r.returncode != 0 or not os.path.isdir(chat_dir):
+        log(f"gbrain export failed: {(r.stderr or r.stdout)[-300:]}")
+        return 1
+
+    by_op = {}
+    for name in sorted(os.listdir(chat_dir)):
+        meta, body = frontmatter(open(os.path.join(chat_dir, name), encoding="utf-8").read())
+        op = (meta.get("operator") or "").lower()
+        if "@" not in op or (since and meta.get("updated_at", "") <= since):
+            continue
+        body = re.sub(r"\n{3,}", "\n\n", body.replace("_(empty)_", "")).strip()
+        by_op.setdefault(op, []).append(f"### {meta.get('title', 'chat')} ({meta.get('updated_at', '')[:10]})\n{body[:PER_CHAT_CHARS]}")
+
+    if not by_op:
+        log(f"no chats updated since {since or 'ever'} — nothing to distill")
+        _save_watermark(started, dry)
+        return 0
+
+    learned, failed = [], 0
+    for op, chats in by_op.items():
+        slug = op.split("@", 1)[0]
+        # Only operators with a hand-written identity: chad-shim ignores context
+        # without one (unknown users keep default.md's restricted rules).
+        if not os.path.exists(os.path.join(IDENT, f"{slug}.md")):
+            log(f"{slug}: no identities/{slug}.md — skipped")
+            continue
+        batches, cur = [], ""
+        for c in chats:
+            if cur and len(cur) + len(c) > BATCH_CHARS:
+                batches.append(cur)
+                cur = ""
+            cur += c + "\n\n"
+        if cur:
+            batches.append(cur)
+        log(f"{slug}: {len(chats)} chats in {len(batches)} batches")
+
+        store_path = os.path.join(IDENT, f"{slug}.context.json")
+        store = json.load(open(store_path)) if os.path.exists(store_path) else {}
+        cats = "\n".join(f'- "{k}": {v}' for k, v in CATEGORIES.items())
+        got = 0
+        for b in batches:
+            reply = llm(PROMPT.format(who=slug, cats=cats, body=b))
+            if not reply:
+                failed += 1
+                continue
+            new = parse(reply)
+            n = sum(len(v) for v in new.values())
+            got += n
+            merge(store, new, day)
+            for k, v in new.items():
+                learned += [f"- [{slug}/{k}] {t}" for t in v]
+        log(f"{slug}: {got} items extracted")
+        if dry:
+            print(render(slug, store))
+            continue
+        os.makedirs(IDENT, exist_ok=True)
+        json.dump(store, open(store_path, "w"), indent=2)
+        md = render(slug, store)
+        ctx_path = os.path.join(IDENT, f"{slug}.context.md")
+        if not md:  # nothing learned yet: no file, so the shim injects nothing
+            if os.path.exists(ctx_path):
+                os.remove(ctx_path)
+            continue
+        with open(ctx_path, "w", encoding="utf-8") as fh:
+            fh.write(md)
+        page = f"---\ntype: person\ntitle: {slug} — distilled context\n---\n\n{md}\nSee [{slug}](people/{slug}).\n"
+        pr = run(["gbrain", "put", f"people/{slug}-context", "--content", page], timeout=120)
+        if pr.returncode != 0:
+            log(f"gbrain put people/{slug}-context failed: {pr.stderr[-200:]}")
+
+    if not dry:
+        with open(os.path.join(WORKSPACE, "memory", f"distill-{day}.md"), "w", encoding="utf-8") as fh:
+            fh.write(f"# Distilled {day}\n\n_chad-dream-distill, chats since {since or 'the beginning'}._\n\n")
+            fh.write("\n".join(learned) + "\n" if learned else "_Nothing new._\n")
+    # A failed batch keeps the old watermark so those chats are retried tomorrow
+    # (merge dedupes, so re-reading the successful ones is harmless).
+    if failed:
+        log(f"{failed} batches failed — watermark not advanced")
+    else:
+        _save_watermark(started, dry)
+    run(["rm", "-rf", tmp])
+    log(f"done: {len(learned)} new items across {len(by_op)} operators")
+    return 0
+
+
+def _save_watermark(started, dry):
+    if dry:
+        return
+    os.makedirs(os.path.dirname(WATERMARK), exist_ok=True)
+    json.dump({"since": started}, open(WATERMARK, "w"))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
