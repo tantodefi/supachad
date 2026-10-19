@@ -128,11 +128,22 @@ def _slug_from_email(email: str) -> str:
 
 
 def _load_identity(slug: str) -> str:
-    """Read identity file with mtime-based caching. Returns empty string if
-    missing or unreadable."""
+    """Hand-written identity plus the auto-distilled context that
+    chad-dream-distill writes next to it (<slug>.context.md). Either may be
+    missing. Context is only added on top of a real identity: an operator with
+    no <slug>.md must still get "" so the caller falls back to default.md and
+    its restricted trust rules."""
     if not slug:
         return ""
-    path = os.path.join(IDENTITY_DIR, f"{slug}.md")
+    identity = _read_cached(os.path.join(IDENTITY_DIR, f"{slug}.md"))
+    if not identity:
+        return ""
+    context = _read_cached(os.path.join(IDENTITY_DIR, f"{slug}.context.md"))
+    return f"{identity}\n\n{context}" if context else identity
+
+
+def _read_cached(path: str) -> str:
+    """Read a file with mtime-based caching. Returns "" if missing or unreadable."""
     try:
         st = os.stat(path)
     except FileNotFoundError:
