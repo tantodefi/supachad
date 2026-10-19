@@ -33,6 +33,7 @@
 #   chad-ops restore-data   chad-restore-from-github (workspace/memory/gbrain/cron)
 #   chad-ops restore-runtime Restore missing [runtime] files (gate policy, budget, queue)
 #   chad-ops cron-reload    Re-register crons from the restored jobs.json
+#   chad-ops autorecover    (launchd) run recover only if the sandbox was wiped
 #   chad-ops embed-backfill Backfill gbrain embeddings (bg) after a restore
 #   chad-ops chat-prune     Drop chat/<id> brain pages for chats deleted in OpenWebUI
 #   chad-ops memory-register  Enable memory-lancedb (auto-recall/capture) in the memory slot
@@ -265,8 +266,18 @@ cmd_restart_shim() {
     # Container model: the shim runs in-container and is exposed to the host via
     # `openshell forward service` (not an SSH tunnel + launchd watchdog). Bounce the
     # in-container shim; host serving/forward is managed separately (not here).
-    sshp "pkill -9 -f chad-shim.py 2>/dev/null; true" >/dev/null
-    ok "in-container shim bounced (host serving via: openshell -g $GW_NAME forward service --target-port $SHIM_PORT --local 127.0.0.1:$SHIM_PORT $SANDBOX_NAME)"
+    # No launchd watchdog relaunches it here (2026-10-19 rehearsal: bounced shim
+    # stayed dead), so relaunch it ourselves with the pod watchdog's env.
+    local list up
+    list="$(python3 -c "import json;v=json.load(open('$HOST_CREDS')).get('CHAD_OPERATOR_ALLOWLIST','');print(','.join(v) if isinstance(v,list) else v)" 2>/dev/null || true)"
+    sshp "pkill -9 -f chad-shim.py 2>/dev/null; s=/sandbox/.openclaw-data/bin/chad-shim.py; [ -x \$s ] || s=/usr/local/bin/chad-shim.py; HOME=/sandbox CHAD_OPERATOR_ALLOWLIST='$list' setsid nohup \$s >/tmp/chad-shim.log 2>&1 </dev/null & true" >/dev/null
+    for _ in $(seq 1 15); do
+      up=$(sshp "curl -s -o /dev/null -w '%{http_code}' -m 4 http://127.0.0.1:$SHIM_PORT/v1/models 2>/dev/null")
+      [ "$up" = 200 ] && break
+      sleep 2
+    done
+    [ "$up" = 200 ] && ok "in-container shim up on :$SHIM_PORT" || bad "in-container shim not answering on :$SHIM_PORT (see /tmp/chad-shim.log)"
+    dim "host serving: openshell -g $GW_NAME forward service --target-port $SHIM_PORT --local 127.0.0.1:$SHIM_PORT $SANDBOX_NAME"
     return 0
   fi
   sshp "pkill -9 -f chad-shim.py 2>/dev/null; true" >/dev/null
@@ -546,6 +557,13 @@ cmd_chat_prune() {
   # The chad-state backup only adds, never deletes, so restore-data brings back
   # every chat page pruned since (2026-10-19: 1,935 deleted on 10-15 came back).
   # Guarded in the script: refuses on an empty webui.db, keeps archived chats.
+  if [ "$SANDBOX_MODE" = container ]; then
+    # chad-webui-ingest.py reaches the sandbox over `ssh $CHAD_SSH_HOST` (the
+    # pod); in container mode that would prune the WRONG brain. Skip until the
+    # ingest gets a container transport (#43).
+    warn "chat-prune skipped in container mode (ingest is pod-ssh only)"
+    return 0
+  fi
   if python3 "$HERE/openwebui/chad-webui-ingest.py" --prune-deleted --apply 2>&1 | sed 's/^/  /'; then
     ok "chat-prune done"
   else
@@ -592,7 +610,14 @@ cmd_gate_check() {
   echo "$deny" | grep -q "Chad Lite" && ok "non-operator DENIED (Chad Lite)" || bad "non-operator NOT denied — gate is fail-open!"
   if [ -n "$op" ]; then
     allow=$(sshp "curl -sS -m 45 http://127.0.0.1:$SHIM_PORT/v1/chat/completions -H 'Content-Type: application/json' -H 'X-OpenWebUI-User-Email: $op' -d '{\"model\":\"chad\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'")
-    echo "$allow" | grep -q "Chad Lite" && bad "operator $op wrongly DENIED" || ok "operator $op passes the gate"
+    # Require a real completion: a dead shim (curl error) must not read as "allowed".
+    if echo "$allow" | grep -q "Chad Lite"; then
+      bad "operator $op wrongly DENIED"
+    elif echo "$allow" | grep -q '"choices"'; then
+      ok "operator $op passes the gate"
+    else
+      bad "operator check got no completion: $(echo "$allow" | head -c 120)"
+    fi
   fi
 }
 
@@ -611,8 +636,21 @@ cmd_doctor() {
   step "doctor — Chad health (read-only)"
   # shim
   local code
-  code=$(curl -sS -o /dev/null -w '%{http_code}' -m 6 "http://127.0.0.1:$SHIM_PORT/v1/models" 2>/dev/null)
+  if [ "$SANDBOX_MODE" = container ]; then
+    # Host :8901 is the LIVE pod's tunnel; probe the shim inside this container.
+    code=$(sshp "curl -sS -o /dev/null -w '%{http_code}' -m 6 http://127.0.0.1:$SHIM_PORT/v1/models 2>/dev/null")
+  else
+    code=$(curl -sS -o /dev/null -w '%{http_code}' -m 6 "http://127.0.0.1:$SHIM_PORT/v1/models" 2>/dev/null)
+  fi
   [ "$code" = "200" ] && ok "shim :$SHIM_PORT → 200" || bad "shim :$SHIM_PORT → ${code:-unreachable}"
+  if [ "$SANDBOX_MODE" = pod ]; then
+    # 2026-10-19: `nemoclaw <container-sandbox> …` auto-started a native
+    # openshell-gateway on 127.0.0.1:8080, shadowing the cluster's *:8080 →
+    # every host→pod call failed "invalid peer certificate: BadSignature".
+    local shadow
+    shadow=$(lsof -nP -iTCP:8080 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 && $1 ~ /^openshell/ {print $2}' | head -1)
+    [ -n "$shadow" ] && bad "native openshell-gateway (pid $shadow) shadows the cluster on 127.0.0.1:8080 — kill it (BadSignature)"
+  fi
   # sandbox reachable? sshp folds transport errors into stdout, so every check
   # below would read "sandbox not found"/BadSignature text as a value — stop here.
   if [ "$(sshp 'echo chad-reachable')" != chad-reachable ]; then
@@ -620,7 +658,14 @@ cmd_doctor() {
     return 1
   fi
   # gateway
-  [ "$(sshp "ss -tln 2>/dev/null | grep -q ':$GW_PORT' && echo y")" = "y" ] && ok "gateway listening :$GW_PORT" || bad "gateway not listening :$GW_PORT"
+  # Container gateways bind a 1879x dashboard port (18791 on chad-next), not 18789.
+  local gwp="$GW_PORT"
+  [ "$SANDBOX_MODE" = container ] && gwp='1879[0-9]'
+  [ "$(sshp "ss -tln 2>/dev/null | grep -qE ':$gwp' && echo y")" = "y" ] && ok "gateway listening :$gwp" || bad "gateway not listening :$gwp"
+  local itmo
+  # shellcheck disable=SC2046
+  itmo=$($(inference_gw_args) inference get 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk '/Gateway inference/{g=1} g && /Timeout:/{print $2; exit}' | tr -dc '0-9')
+  [ "${itmo:-0}" -ge "$INFERENCE_TIMEOUT" ] && ok "inference timeout ${itmo}s" || warn "inference timeout ${itmo:-?}s < ${INFERENCE_TIMEOUT}s — long replies 503 (run: chad-ops inference-timeout)"
   # gbrain
   local gh
   # Health score alone passes an EMPTY brain (8/10 with 0 pages, 2026-10-14) —
@@ -692,6 +737,146 @@ cmd_doctor() {
   fi
 }
 
+nemoclaw_for_sandbox() { # NemoClaw CLI aimed at this sandbox's gateway
+  if [ "$SANDBOX_MODE" = container ]; then
+    # Without these the CLI auto-starts a native gateway on 127.0.0.1:8080 that
+    # shadows the live pod cluster (BadSignature on every host→pod call).
+    NEMOCLAW_GATEWAY_PORT="${CHAD_GATEWAY_PORT:-8088}" NEMOCLAW_OPENSHELL_BIN="$OPENSHELL_BIN" nemoclaw "$SANDBOX_NAME" "$@"
+  else
+    nemoclaw "$SANDBOX_NAME" "$@"
+  fi
+}
+
+cmd_policy_sync() {
+  step "policy-sync (apply the presets in chad-policy-presets.txt that are missing)"
+  # A freshly onboarded sandbox has ~5 presets vs chad's 25, so restore's git
+  # clone, gh and chad-webui all hit 403s (2026-10-19 rehearsal).
+  local want have p n=0 fail=0
+  want=$(grep -vE '^\s*(#|$)' "$HERE/chad-policy-presets.txt")
+  have=$(nemoclaw_for_sandbox policy-list 2>&1 | sed -E 's/\x1b\[[0-9;]*m//g')
+  if echo "$have" | grep -q "Could not query OpenShell"; then
+    bad "policy state unavailable (gateway unreachable) — skipped"
+    return 1
+  fi
+  have=$(echo "$have" | grep "●" | awk '{print $2}')
+  for p in $want; do
+    echo "$have" | grep -qx "$p" && continue
+    if nemoclaw_for_sandbox policy-add "$p" --yes >/dev/null 2>&1; then n=$((n + 1)); else
+      fail=$((fail + 1))
+      warn "policy-add $p failed"
+    fi
+  done
+  [ "$fail" -eq 0 ] && ok "presets in sync ($n added)" || bad "$fail presets failed to apply ($n added)"
+}
+
+INFERENCE_TIMEOUT="${CHAD_INFERENCE_TIMEOUT:-300}"
+
+inference_gw_args() { # the CLI that owns this sandbox's gateway
+  if [ "$SANDBOX_MODE" = container ]; then echo "$OPENSHELL_BIN -g $GW_NAME"; else echo "openshell"; fi
+}
+
+cmd_inference_timeout() {
+  step "inference-timeout (gateway inference route timeout ≥ ${INFERENCE_TIMEOUT}s)"
+  # The route defaults to 60s. Nemotron reasons for ~60s on long prompts, so
+  # anything longer came back as HTTP 503 — the distiller and Chad's own long
+  # replies (2026-10-19). Onboard re-creates the route at the default.
+  local cur
+  # shellcheck disable=SC2046
+  cur=$($(inference_gw_args) inference get 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk '/Gateway inference/{g=1} g && /Timeout:/{print $2; exit}' | tr -dc '0-9')
+  if [ -n "$cur" ] && [ "$cur" -ge "$INFERENCE_TIMEOUT" ]; then
+    ok "timeout ${cur}s"
+    return 0
+  fi
+  # shellcheck disable=SC2046
+  if $(inference_gw_args) inference update --timeout "$INFERENCE_TIMEOUT" >/dev/null 2>&1; then
+    ok "timeout ${cur:-?}s → ${INFERENCE_TIMEOUT}s"
+  else
+    bad "could not set inference timeout (was ${cur:-?}s)"
+  fi
+}
+
+RUNTIME_CACHE="${CHAD_RUNTIME_CACHE:-$HOME/.nemoclaw/cache/runtime-bins}"
+
+cmd_runtime_bins() {
+  step "runtime-bins (gh, proton-tool-bin, bun, gbrain lib → container if missing)"
+  # The old pod image had these baked in; the 0.0.116 container image has none,
+  # and a container recreated by onboard starts without them (2026-10-19
+  # rehearsal: gh-auth + proton failed, gbrain would be gone). Static aarch64
+  # binaries snapshotted from the pod into $RUNTIME_CACHE (sha-verified).
+  if [ "$SANDBOX_MODE" != container ]; then
+    ok "pod image provides them"
+    return 0
+  fi
+  local b n=0
+  for b in gh proton-tool-bin bun; do
+    if kx "test -x /usr/local/bin/$b && echo y" | grep -q y; then continue; fi
+    [ -x "$RUNTIME_CACHE/$b" ] || {
+      bad "$b missing in container and not cached in $RUNTIME_CACHE"
+      continue
+    }
+    # kx returns grep's status (1 on empty output), so don't chain on it.
+    docker cp "$RUNTIME_CACHE/$b" "$SANDBOX_CONTAINER:/usr/local/bin/$b" && {
+      kx "chmod 755 /usr/local/bin/$b" >/dev/null
+      n=$((n + 1))
+    }
+  done
+  if ! kx 'test -f /usr/local/lib/gbrain/package.json && echo y' | grep -q y; then
+    if [ -f "$RUNTIME_CACHE/gbrain-lib.tgz" ]; then
+      docker cp "$RUNTIME_CACHE/gbrain-lib.tgz" "$SANDBOX_CONTAINER:/tmp/gbrain-lib.tgz" \
+        && {
+          kx 'mkdir -p /usr/local/lib && tar xzf /tmp/gbrain-lib.tgz -C /usr/local/lib && rm -f /tmp/gbrain-lib.tgz' >/dev/null
+          n=$((n + 1))
+        }
+    else
+      bad "gbrain lib missing and $RUNTIME_CACHE/gbrain-lib.tgz not cached"
+    fi
+  fi
+  ok "runtime bins present ($n installed)"
+}
+
+RECOVERED_MARK=/sandbox/.openclaw-data/state/.chad-recovered
+
+cmd_autorecover() {
+  # launchd every 10 min. The 2026-10-19 OOM restart wiped the writable layer
+  # and Chad sat broken for ~13h because nothing ran `recover`. The marker lives
+  # on that same ephemeral layer, so "marker missing" == "wiped, not recovered".
+  local lock="${TMPDIR:-/tmp}/chad-autorecover.lock" last="$HOME/.nemoclaw/state/autorecover-last" r
+  find "$lock" -maxdepth 0 -mmin +120 -exec rmdir {} \; 2>/dev/null # stale lock
+  mkdir "$lock" 2>/dev/null || return 0
+  trap 'rmdir "'"$lock"'" 2>/dev/null' RETURN
+  r=$(sshp "test -f $RECOVERED_MARK && echo present || echo missing")
+  case "$r" in
+    *present*) return 0 ;;
+    *missing*) ;;
+    *) return 0 ;; # unreachable (cluster/gateway down): recover can't help yet
+  esac
+  # Back off: a recover that leaves the marker unwritten must not bounce the
+  # gateway/shim every 10 minutes.
+  if [ -f "$last" ] && [ -n "$(find "$last" -mmin -60 2>/dev/null)" ]; then
+    warn "autorecover: wipe detected, last attempt <60 min ago — waiting"
+    return 0
+  fi
+  mkdir -p "$(dirname "$last")" && date -u +%FT%TZ >"$last"
+  step "autorecover: sandbox wiped (no $RECOVERED_MARK) — running recover $(date -u +%FT%TZ)"
+  cmd_recover
+}
+
+mark_recovered() {
+  # Only after the essentials are back, so autorecover retries a partial recover.
+  local crons pages
+  crons=$(sshp 'openclaw cron list --json 2>/dev/null' | python3 -c 'import json,sys
+try:
+    d = json.load(sys.stdin); print(len(d.get("jobs", d) if isinstance(d, dict) else d))
+except Exception: print(0)' 2>/dev/null)
+  pages=$(sshp 'gbrain stats 2>/dev/null' | awk '/^Pages:/{print $2}')
+  if [ "${crons:-0}" -ge 10 ] && [ "${pages:-0}" -gt 0 ]; then
+    sshp "mkdir -p \$(dirname $RECOVERED_MARK) && date -u +%FT%TZ > $RECOVERED_MARK" >/dev/null
+    ok "recovered marker written (crons=$crons pages=$pages)"
+  else
+    warn "not marking recovered (crons=${crons:-0} pages=${pages:-0}) — autorecover will retry"
+  fi
+}
+
 cmd_recover() {
   step "RECOVER — full post-restart cold-start (idempotent; skips healthy steps)"
   # Order matters:
@@ -702,11 +887,18 @@ cmd_recover() {
   #    source for binaries/config, so it must win — run it last of the two.
   #  - restart gateway/shim after deploy+chown so they pick up fresh binaries.
   cmd_creds_sync
+  cmd_runtime_bins # container: gh/proton/bun/gbrain absent from the 0.0.116 image
+  cmd_policy_sync  # egress presets before anything that needs GitHub/OpenWebUI
+  cmd_inference_timeout
   cmd_gh_auth
   cmd_chown
   cmd_gbrain_fix
   cmd_proton_wrap
   cmd_gbrain_config # NVIDIA embed key/model (clobbered by gbrain init on restart)
+  # Deploy once BEFORE restore too: restore runs chad-restore-from-github, which
+  # a fresh container image does not have (rehearsal 2026-10-19: "not found").
+  # The deploy after restore still wins over stale restored bin/.
+  [ "$SANDBOX_MODE" = container ] && { cmd_deploy || true; }
   cmd_restore_data
   cmd_restore_runtime # small config files restore-data skips when the brain survived
   # A wiped pod re-inits gbrain at vector(1536)+hnsw; every embed then fails
@@ -724,6 +916,7 @@ cmd_recover() {
   cmd_gate_sync   # writes allowlist, restarts shim, verifies deny/allow
   cmd_chat_prune  # before backfill: don't embed pages we're about to delete
   cmd_embed_backfill
+  mark_recovered
   echo
   step "post-recovery doctor"
   cmd_doctor
@@ -737,6 +930,11 @@ main() {
   case "$c" in
     doctor) cmd_doctor ;;
     recover) cmd_recover ;;
+    autorecover) cmd_autorecover ;;
+    runtime-bins) cmd_runtime_bins ;;
+    policy-sync) cmd_policy_sync ;;
+    inference-timeout) cmd_inference_timeout ;;
+    mark-recovered) mark_recovered ;;
     deploy) cmd_deploy "$@" ;;
     verify) cmd_verify ;;
     chown) cmd_chown ;;
