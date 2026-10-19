@@ -34,6 +34,8 @@
 #   chad-ops restore-runtime Restore missing [runtime] files (gate policy, budget, queue)
 #   chad-ops cron-reload    Re-register crons from the restored jobs.json
 #   chad-ops embed-backfill Backfill gbrain embeddings (bg) after a restore
+#   chad-ops chat-prune     Drop chat/<id> brain pages for chats deleted in OpenWebUI
+#   chad-ops memory-register  Enable memory-lancedb (auto-recall/capture) in the memory slot
 #   chad-ops bonjour-off    Disable the mDNS plugin that crashes the gateway
 #   chad-ops gbrain-config  Rewrite gbrain embed config (NVIDIA key/model)
 #   chad-ops skills-register  Set skills.load.extraDirs → Chad's custom skills
@@ -334,6 +336,32 @@ cmd_mcp_register() {
   ok "webui MCP server registered (gateway restart loads its tools)"
 }
 
+cmd_memory_register() {
+  step "memory-register (memory slot → memory-lancedb: auto-recall + autoCapture)"
+  # memory-lancedb was silently off from before 2026-10-12 to 2026-10-19 (config
+  # rewrites drop plugin entries, like mcp.servers.webui). It takes the exclusive
+  # memory slot from memory-core. Embedder = gbrain's NVIDIA key/model; plain
+  # nemotron-3-embed-1b accepts dimensions=2048, so the old Patch 5 is not needed.
+  local cur
+  cur=$(sshp 'python3 -c "import json;p=json.load(open(\"/sandbox/.openclaw/openclaw.json\")).get(\"plugins\",{});e=p.get(\"entries\",{}).get(\"memory-lancedb\",{});print(e.get(\"enabled\"),(p.get(\"slots\") or {}).get(\"memory\"),bool(e.get(\"config\",{}).get(\"autoCapture\")))"')
+  if [ "$cur" = "True memory-lancedb True" ]; then
+    ok "memory-lancedb already enabled"
+    return 0
+  fi
+  sshp 'python3 - <<"PY"
+import json, subprocess
+k = json.load(open("/sandbox/.gbrain/config.json"))["openai_api_key"]
+cfg = {"embedding": {"apiKey": k, "model": "nvidia/nemotron-3-embed-1b",
+       "baseUrl": "https://integrate.api.nvidia.com/v1", "dimensions": 2048},
+       "dbPath": "/sandbox/.openclaw-data/memory/lancedb",
+       "autoCapture": True, "autoRecall": True}
+subprocess.run(["openclaw", "config", "set", "plugins.entries.memory-lancedb.config",
+                json.dumps(cfg), "--strict-json"], capture_output=True)
+subprocess.run(["openclaw", "plugins", "enable", "memory-lancedb"], capture_output=True)
+PY' >/dev/null
+  ok "memory-lancedb enabled (gateway restart loads it)"
+}
+
 cmd_restart_gateway() {
   step "restart-gateway (wait :$GW_PORT)"
   if [ "$SANDBOX_MODE" = container ]; then
@@ -442,7 +470,7 @@ fetch_state_file() {
 }
 
 cmd_restore_runtime() {
-  step "restore-runtime (missing [runtime] + workspace files only — never overwrites live state)"
+  step "restore-runtime (missing [runtime] + identities/ + workspace files only — never overwrites live state)"
   # restore-data is skipped when the brain survived, but the small config files
   # on the wiped layer still vanish: 2026-10-14 lost auto-actions.json (the
   # action-gate policy → every action fell through to block), queue/budget.json,
@@ -463,12 +491,22 @@ cmd_restore_runtime() {
   # 2026-10-14 reboot lost MEMORY.md and 109 daily notes while IDENTITY.md
   # etc. survived). Pull workspace/ once and copy with no-clobber, so live
   # files (today's notes, identity) are never overwritten.
-  local tok repo tmpd before after
+  # Plus an explicit ALLOWLIST of [runtime-dirs]. NOT the whole section: the
+  # backup only adds/updates, never deletes, so a no-clobber copy of agents/,
+  # state/experiments/ or skills/ resurrects things removed on purpose (April
+  # session logs, May "active" experiments, stale skill scripts — seen
+  # 2026-10-15). identities/ = the per-operator persona chad-shim prepends to
+  # every turn; it went missing on 2026-10-14.
+  local tok repo tmpd before after d dirs=(identities) inc=(--include='*/workspace/*' --exclude='._*')
+  for d in "${dirs[@]}"; do inc+=(--include="*/$d/*"); done
   tok=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('GITHUB_TOKEN',''))" 2>/dev/null)
   repo=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('CHAD_STATE_REPO','tantodefi/chad-state'))" 2>/dev/null)
   tmpd=$(mktemp -d)
-  if curl -fsSL -m 120 -H "Authorization: token $tok" "https://api.github.com/repos/$repo/tarball/main" 2>/dev/null \
-    | tar xz -C "$tmpd" --strip-components=1 --include='*/workspace/*' 2>/dev/null && [ -d "$tmpd/workspace" ]; then
+  # bsdtar exits non-zero when an --include matches nothing (an empty
+  # runtime dir isn't in the backup), so judge success by what was extracted.
+  curl -fsSL -m 120 -H "Authorization: token $tok" "https://api.github.com/repos/$repo/tarball/main" 2>/dev/null \
+    | tar xz -C "$tmpd" --strip-components=1 "${inc[@]}" 2>/dev/null
+  if [ -d "$tmpd/workspace" ]; then
     before=$(sshp 'find /sandbox/.openclaw/workspace -type f | wc -l')
     COPYFILE_DISABLE=1 tar czf - --no-xattrs -C "$tmpd" workspace | base64 \
       | sshin 'rm -rf /tmp/ws-restore && mkdir -p /tmp/ws-restore && base64 -d | tar xzf - -C /tmp/ws-restore && cp -Rn /tmp/ws-restore/workspace/. /sandbox/.openclaw/workspace/ && rm -rf /tmp/ws-restore' >/dev/null
@@ -478,11 +516,19 @@ cmd_restore_runtime() {
     else
       warn "workspace restore ran but file counts unreadable"
     fi
+    for d in "${dirs[@]}"; do
+      [ -d "$tmpd/$d" ] || continue
+      before=$(sshp "find '/sandbox/.openclaw-data/$d' -type f 2>/dev/null | wc -l")
+      COPYFILE_DISABLE=1 tar czf - --no-xattrs -C "$tmpd" "$d" | base64 \
+        | sshin "rm -rf /tmp/rd-restore && mkdir -p /tmp/rd-restore '/sandbox/.openclaw-data/$d' && base64 -d | tar xzf - -C /tmp/rd-restore && cp -Rn '/tmp/rd-restore/$d/.' '/sandbox/.openclaw-data/$d/' && rm -rf /tmp/rd-restore" >/dev/null
+      after=$(sshp "find '/sandbox/.openclaw-data/$d' -type f 2>/dev/null | wc -l")
+      [[ "$before" =~ ^[0-9]+$ && "$after" =~ ^[0-9]+$ && "$after" -gt "$before" ]] && ok "$d/: restored $((after - before)) missing files (no-clobber)"
+    done
   else
     warn "workspace/ not fetched from $repo — skipped"
   fi
   rm -rf "$tmpd"
-  sshp "chown sandbox:sandbox -R /sandbox/.openclaw-data/queue /sandbox/.openclaw-data/memory 2>/dev/null; true" >/dev/null
+  sshp "chown sandbox:sandbox -R /sandbox/.openclaw-data/queue /sandbox/.openclaw-data/memory /sandbox/.openclaw-data/identities 2>/dev/null; true" >/dev/null
   [ "$got" -gt 0 ] && dim "restored $got of $missing from chad-state"
   return 0
 }
@@ -493,6 +539,18 @@ cmd_cron_reload() {
     if fetch_state_file cron/jobs.json; then ok "jobs.json missing — fetched from chad-state"; else bad "jobs.json missing and fetch from chad-state failed"; fi
   fi
   sshp 'chad-cron-reload 2>&1 | tail -8'
+}
+
+cmd_chat_prune() {
+  step "chat-prune (drop brain pages for chats deleted in OpenWebUI)"
+  # The chad-state backup only adds, never deletes, so restore-data brings back
+  # every chat page pruned since (2026-10-19: 1,935 deleted on 10-15 came back).
+  # Guarded in the script: refuses on an empty webui.db, keeps archived chats.
+  if python3 "$HERE/openwebui/chad-webui-ingest.py" --prune-deleted --apply 2>&1 | sed 's/^/  /'; then
+    ok "chat-prune done"
+  else
+    warn "chat-prune failed (continuing)"
+  fi
 }
 
 cmd_embed_backfill() {
@@ -576,7 +634,7 @@ cmd_doctor() {
   elif ! [[ "$gpages" =~ ^[0-9]+$ ]] || [ "$gpages" -eq 0 ]; then
     bad "gbrain EMPTY (${gpages:-?} pages) — restore brain/ from chad-state"
   elif [ "${gcov%.*}" -lt 90 ] 2>/dev/null; then
-    warn "gbrain: $gpages pages, embed coverage ${gcov}% — semantic recall degraded (run: chad-ops embed-backfill)"
+    warn "gbrain: $gpages pages, embed coverage ${gcov}% — semantic recall degraded (run: chad-ops gbrain-dims, then embed-backfill)"
   else
     ok "gbrain: $gh · $gpages pages · ${gcov}% embedded"
   fi
@@ -607,6 +665,9 @@ cmd_doctor() {
   local mc
   mc=$(sshp "python3 -c \"import json;print('y' if 'chad-webui-mcp' in str(json.load(open('/sandbox/.openclaw/openclaw.json')).get('mcp',{}).get('servers',{}).get('webui',{})) else 'n')\"")
   [ "$mc" = "y" ] && ok "webui MCP server registered" || bad "webui MCP unregistered — Chad has no OpenWebUI tools (run: chad-ops mcp-register)"
+  local ml
+  ml=$(sshp 'python3 -c "import json;p=json.load(open(\"/sandbox/.openclaw/openclaw.json\")).get(\"plugins\",{});print(\"y\" if (p.get(\"slots\") or {}).get(\"memory\")==\"memory-lancedb\" and p.get(\"entries\",{}).get(\"memory-lancedb\",{}).get(\"enabled\") else \"n\")"' 2>/dev/null)
+  [ "$ml" = "y" ] && ok "memory-lancedb in memory slot (auto-recall)" || bad "memory-lancedb off — no long-term recall (run: chad-ops memory-register)"
   # gbrain embed config (NVIDIA key, not clobbered)
   local ek
   ek=$(sshp "python3 -c \"import json;c=json.load(open('/sandbox/.gbrain/config.json'));print('y' if c.get('openai_api_key') and c['openai_api_key']!='unused' and 'nvidia' in c.get('openai_base_url','') else 'n')\"")
@@ -648,13 +709,20 @@ cmd_recover() {
   cmd_gbrain_config # NVIDIA embed key/model (clobbered by gbrain init on restart)
   cmd_restore_data
   cmd_restore_runtime # small config files restore-data skips when the brain survived
+  # A wiped pod re-inits gbrain at vector(1536)+hnsw; every embed then fails
+  # "expected 1536 dimensions, not 2048" until this runs (no-op on 2048).
+  cmd_gbrain_dims
   cmd_deploy || true
-  cmd_cron_reload     # reconcile gateway ← jobs.json (restores the durable cron set)
   cmd_bonjour_off     # before gateway restart: stops the ~20s crash loop
   cmd_skills_register # before gateway restart: loads Chad's custom skills
   cmd_mcp_register    # before gateway restart: loads the webui__* MCP tools
+  cmd_memory_register # before gateway restart: lancedb auto-recall/capture
   cmd_restart_gateway
-  cmd_gate_sync # writes allowlist, restarts shim, verifies deny/allow
+  # AFTER the restart: `cron add` talks to the gateway; on a cold start it is
+  # down until here, so every add failed (2026-10-19: errors=10, 0 crons).
+  cmd_cron_reload # reconcile gateway ← jobs.json (restores the durable cron set)
+  cmd_gate_sync   # writes allowlist, restarts shim, verifies deny/allow
+  cmd_chat_prune  # before backfill: don't embed pages we're about to delete
   cmd_embed_backfill
   echo
   step "post-recovery doctor"
@@ -685,6 +753,8 @@ main() {
     cron-reload) cmd_cron_reload ;;
     restore-runtime) cmd_restore_runtime ;;
     embed-backfill) cmd_embed_backfill ;;
+    chat-prune) cmd_chat_prune ;;
+    memory-register) cmd_memory_register ;;
     bonjour-off) cmd_bonjour_off ;;
     gbrain-config) cmd_gbrain_config ;;
     skills-register) cmd_skills_register ;;
