@@ -85,25 +85,30 @@ def frontmatter(text):
 
 
 def llm(prompt):
-    # Nemotron reasons before answering (~2.5k reasoning tokens on a 20 KB batch);
-    # at max_tokens=1500 the budget ran out mid-reasoning and content came back
-    # "" with no error (2026-10-19: 0 items from 23 chats). 4096 leaves room.
-    body = json.dumps({
-        "model": MODEL, "temperature": 0.2, "max_tokens": 4096,
-        "messages": [{"role": "user", "content": prompt}],
-    }).encode()
-    req = urllib.request.Request(URL, data=body, headers={"Content-Type": "application/json"})
-    for attempt in (1, 2, 3):
+    # Nemotron reasons before answering (~2.5k reasoning tokens on a 20 KB batch,
+    # sometimes far more). At max_tokens=1500 content came back "" with no error
+    # (2026-10-19: 0 items from 23 chats); some batches overrun 4096 too
+    # (finish=length). Escalate the budget on length, back off on errors (503s).
+    budgets = [4096, 8192, 12000]
+    attempt = 0
+    while attempt < len(budgets):
+        body = json.dumps({
+            "model": MODEL, "temperature": 0.2, "max_tokens": budgets[attempt],
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+        req = urllib.request.Request(URL, data=body, headers={"Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 choice = json.load(r)["choices"][0]
             content = choice["message"].get("content") or ""
             if content:
                 return content
-            log(f"llm attempt {attempt}: empty content (finish={choice.get('finish_reason')})")
-        except Exception as e:  # noqa: BLE001 — 503s happen; back off and retry
-            log(f"llm attempt {attempt} failed: {e}")
-        time.sleep(20 * attempt)
+            log(f"llm attempt {attempt + 1}: empty content (finish={choice.get('finish_reason')}, "
+                f"max_tokens={budgets[attempt]})")
+        except Exception as e:  # noqa: BLE001 — retry with backoff
+            log(f"llm attempt {attempt + 1} failed: {e}")
+            time.sleep(20 * (attempt + 1))
+        attempt += 1
     return ""
 
 
