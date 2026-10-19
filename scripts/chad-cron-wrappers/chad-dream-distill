@@ -19,7 +19,7 @@
 # Deterministic shell around one LLM call per batch: no agent, no tools.
 # First run (no watermark) backfills every chat. Idempotent per watermark.
 #
-# Usage: chad-dream-distill [--all] [--dry-run]
+# Usage: chad-dream-distill [--all] [--dry-run] [--consolidate-only]
 
 import datetime as dt
 import json
@@ -40,6 +40,8 @@ MODEL = os.environ.get("CHAD_DISTILL_MODEL", "nvidia/nemotron-3-super-120b-a12b"
 BATCH_CHARS = 20000
 PER_CHAT_CHARS = 8000
 KEEP_PER_CATEGORY = 20
+RENDER_PER_CATEGORY = 6  # equal share, so profile can't crowd out open requests
+CONSOLIDATE_OVER = 8
 CONTEXT_MAX_BYTES = 3500
 CATEGORIES = {
     "profile": "stable facts about the person: role, goals, background, constraints",
@@ -115,9 +117,36 @@ def parse(text):
         return {}
     out = {}
     for k in CATEGORIES:
-        v = d.get(k) or []
+        v = d.get(k) if isinstance(d.get(k), list) else []  # a bare string would split into chars
         out[k] = [str(x).strip()[:160] for x in v if isinstance(x, (str, int, float)) and str(x).strip()][:8]
     return out
+
+
+CONSOLIDATE = """Below are notes an assistant keeps about the operator {who}, grouped by category,
+oldest first. Many say the same thing in different words. Merge duplicates, keep
+the most specific wording, drop anything vague ("respond helpfully"), and when two
+notes conflict keep the newer one. Keep at most 8 per category, most important first.
+Return ONLY a JSON object with the same keys, each a list of strings.
+
+{notes}"""
+
+
+def consolidate(slug, store):
+    """One LLM pass that collapses paraphrased duplicates exact-match dedupe misses."""
+    if not any(len(store.get(k) or []) > CONSOLIDATE_OVER for k in CATEGORIES):
+        return store
+    notes = json.dumps({k: [x["text"] for x in store.get(k) or []] for k in CATEGORIES}, indent=1)
+    reply = llm(CONSOLIDATE.format(who=slug, notes=notes))
+    merged = parse(reply)
+    if not reply or not any(merged.values()):
+        log(f"{slug}: consolidation failed — keeping unconsolidated store")
+        return store
+    dates = {norm(x["text"]): x["date"] for k in CATEGORIES for x in store.get(k) or []}
+    newest = max(dates.values()) if dates else ""
+    # Most important first from the model → store oldest-first, so render (which
+    # reverses) shows them in the model's order.
+    return {k: [{"text": t, "date": dates.get(norm(t), newest)} for t in reversed(merged.get(k) or [])]
+            for k in CATEGORIES}
 
 
 def norm(s):
@@ -145,7 +174,7 @@ def render(slug, store):
         if not items:
             continue
         lines.append(f"**{k.replace('_', ' ').title()}**")
-        for x in reversed(items):  # newest first, so truncation drops the oldest
+        for x in list(reversed(items))[:RENDER_PER_CATEGORY]:  # newest/most important first
             lines.append(f"- {x['text']} ({x['date']})")
         lines.append("")
     out = "\n".join(lines).strip() + "\n"
@@ -154,7 +183,37 @@ def render(slug, store):
     return out
 
 
+def write_outputs(slug, store):
+    """Persist one operator's store + rendered context (shim) + gbrain copy."""
+    os.makedirs(IDENT, exist_ok=True)
+    json.dump(store, open(os.path.join(IDENT, f"{slug}.context.json"), "w"), indent=2)
+    md = render(slug, store)
+    ctx_path = os.path.join(IDENT, f"{slug}.context.md")
+    if not md:  # nothing learned yet: no file, so the shim injects nothing
+        if os.path.exists(ctx_path):
+            os.remove(ctx_path)
+        return
+    with open(ctx_path, "w", encoding="utf-8") as fh:
+        fh.write(md)
+    page = f"---\ntype: person\ntitle: {slug} — distilled context\n---\n\n{md}\nSee [{slug}](people/{slug}).\n"
+    pr = run(["gbrain", "put", f"people/{slug}-context", "--content", page], timeout=120)
+    if pr.returncode != 0:
+        log(f"gbrain put people/{slug}-context failed: {pr.stderr[-200:]}")
+
+
+def consolidate_only():
+    for name in sorted(os.listdir(IDENT)):
+        if name.endswith(".context.json"):
+            slug = name[: -len(".context.json")]
+            store = consolidate(slug, json.load(open(os.path.join(IDENT, name))))
+            write_outputs(slug, store)
+            log(f"{slug}: consolidated → {sum(len(v) for v in store.values())} items")
+    return 0
+
+
 def main():
+    if "--consolidate-only" in sys.argv:
+        return consolidate_only()
     dry = "--dry-run" in sys.argv
     since = ""
     if "--all" not in sys.argv and os.path.exists(WATERMARK):
@@ -217,23 +276,11 @@ def main():
             for k, v in new.items():
                 learned += [f"- [{slug}/{k}] {t}" for t in v]
         log(f"{slug}: {got} items extracted")
+        store = consolidate(slug, store)
         if dry:
             print(render(slug, store))
             continue
-        os.makedirs(IDENT, exist_ok=True)
-        json.dump(store, open(store_path, "w"), indent=2)
-        md = render(slug, store)
-        ctx_path = os.path.join(IDENT, f"{slug}.context.md")
-        if not md:  # nothing learned yet: no file, so the shim injects nothing
-            if os.path.exists(ctx_path):
-                os.remove(ctx_path)
-            continue
-        with open(ctx_path, "w", encoding="utf-8") as fh:
-            fh.write(md)
-        page = f"---\ntype: person\ntitle: {slug} — distilled context\n---\n\n{md}\nSee [{slug}](people/{slug}).\n"
-        pr = run(["gbrain", "put", f"people/{slug}-context", "--content", page], timeout=120)
-        if pr.returncode != 0:
-            log(f"gbrain put people/{slug}-context failed: {pr.stderr[-200:]}")
+        write_outputs(slug, store)
 
     if not dry:
         with open(os.path.join(WORKSPACE, "memory", f"distill-{day}.md"), "w", encoding="utf-8") as fh:

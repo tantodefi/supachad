@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Every 10 min: if the chad sandbox's ephemeral layer was wiped (recovered marker gone),
+     run `chad-ops recover`. Install: cp to ~/Library/LaunchAgents/ && launchctl load -w <that path> -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.nemoclaw.chad-autorecover</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/r/.nemoclaw/source/scripts/chad-ops.sh</string>
+    <string>autorecover</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StartInterval</key><integer>600</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/r/.nemoclaw/openwebui/chad-autorecover.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/r/.nemoclaw/openwebui/chad-autorecover.err.log</string>
+</dict>
+</plist>

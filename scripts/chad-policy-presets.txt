@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Network/filesystem policy presets the chad sandbox runs with (from the live pod,
+# 2026-10-19). `chad-ops policy-sync` adds any that are missing: a freshly
+# onboarded sandbox has almost none, so GitHub/OpenWebUI/gbrain egress is denied.
+agent-browser
+brave
+brew
+chad-bug-report
+chad-premium
+claude-code
+gbrain
+github-tools
+github
+google-workspace
+huggingface
+local-inference
+npm
+openclaw-bundled
+openwebui
+pi-agent
+proton-calendar
+pypi
+session-logs
+subagent-researcher
+subagent-reviewer
+subagent-writer
+summarize
+discord
+whatsapp
