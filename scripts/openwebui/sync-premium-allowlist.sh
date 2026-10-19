@@ -29,8 +29,10 @@ CHAD_OPS="${CHAD_OPS_BIN:-${here}/../chad-ops.sh}"
 }
 
 # Pull URL + secret from env, else from the creds file.
-URL="${PREMIUM_LIST_URL:-$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('PREMIUM_LIST_URL',''))" 2>/dev/null || true)}"
-SECRET="${PREMIUM_ADMIN_SECRET:-$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('PREMIUM_ADMIN_SECRET',''))" 2>/dev/null || true)}"
+# The Worker's ADMIN_SECRET is stored as SUPACHAD_ADMIN_SECRET (shared with the
+# OWUI credits filter), so fall back to it and to the production URL.
+URL="${PREMIUM_LIST_URL:-$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('PREMIUM_LIST_URL','') or 'https://supachad.com/api/premium/list')" 2>/dev/null || true)}"
+SECRET="${PREMIUM_ADMIN_SECRET:-$(python3 -c "import json;c=json.load(open('$HOST_CREDS'));print(c.get('PREMIUM_ADMIN_SECRET','') or c.get('SUPACHAD_ADMIN_SECRET',''))" 2>/dev/null || true)}"
 [ -n "$URL" ] && [ -n "$SECRET" ] || {
   echo "error: set PREMIUM_LIST_URL + PREMIUM_ADMIN_SECRET (env or $HOST_CREDS)" >&2
   exit 1
