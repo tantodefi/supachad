@@ -71,6 +71,7 @@ SANDBOX_MODE="${CHAD_SANDBOX_MODE:-pod}"
 SANDBOX_NAME="${CHAD_SANDBOX:-$POD}"
 GW_NAME="${CHAD_GATEWAY:-nemoclaw-8088}"
 OPENSHELL_BIN="${CHAD_OPENSHELL_BIN:-/opt/homebrew/opt/openshell/bin/openshell}"
+OPENSHELL_LEGACY_BIN="${CHAD_OPENSHELL_LEGACY_BIN:-$HOME/.local/bin/openshell}" # 0.0.36, pod gateway
 SANDBOX_CONTAINER=""
 if [ "$SANDBOX_MODE" = container ]; then
   SANDBOX_CONTAINER="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "^openshell-default--${SANDBOX_NAME}-" | head -1)"
@@ -752,6 +753,13 @@ cmd_policy_sync() {
   # A freshly onboarded sandbox has ~5 presets vs chad's 25, so restore's git
   # clone, gh and chad-webui all hit 403s (2026-10-19 rehearsal).
   local want have p n=0 fail=0
+  if [ "$SANDBOX_MODE" = container ] && docker ps --format '{{.Names}}' | grep -qx openshell-cluster-nemoclaw; then
+    # NemoClaw policy writes for a container sandbox auto-start a native gateway
+    # on 127.0.0.1:8080, which takes the live pod offline (2026-10-19, twice).
+    # Safe only once the pod cluster is stopped (cutover step).
+    bad "policy-sync refused: pod cluster still running (would shadow :8080) — run after the cutover stops it"
+    return 1
+  fi
   want=$(grep -vE '^\s*(#|$)' "$HERE/chad-policy-presets.txt")
   have=$(nemoclaw_for_sandbox policy-list 2>&1 | sed -E 's/\x1b\[[0-9;]*m//g')
   if echo "$have" | grep -q "Could not query OpenShell"; then
@@ -845,10 +853,26 @@ cmd_autorecover() {
   mkdir "$lock" 2>/dev/null || return 0
   trap 'rmdir "'"$lock"'" 2>/dev/null' RETURN
   r=$(sshp "test -f $RECOVERED_MARK && echo present || echo missing")
+  if [ "$SANDBOX_MODE" = pod ] && ! echo "$r" | grep -qE 'present|missing'; then
+    # Unreachable. Heal the two causes seen on 2026-10-19, then re-probe:
+    # a native gateway shadowing 127.0.0.1:8080 (BadSignature), and the ssh
+    # handshake secret rotating when openshell-0 is recreated (rc 255).
+    local shadow
+    shadow=$(lsof -nP -iTCP:8080 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 && $1 ~ /^openshell/ {print $2}' | head -1)
+    if [ -n "$shadow" ]; then
+      warn "autorecover: killing native gateway $shadow shadowing :8080"
+      kill "$shadow" 2>/dev/null
+      sleep 3
+    fi
+    if "$OPENSHELL_LEGACY_BIN" sandbox list 2>/dev/null | grep -q "$SANDBOX_NAME.*Ready"; then
+      sshp 'echo ok' | grep -q '^ok$' || cmd_handshake_sync
+    fi
+    r=$(sshp "test -f $RECOVERED_MARK && echo present || echo missing")
+  fi
   case "$r" in
     *present*) return 0 ;;
     *missing*) ;;
-    *) return 0 ;; # unreachable (cluster/gateway down): recover can't help yet
+    *) return 0 ;; # still unreachable (cluster/gateway down): recover can't help yet
   esac
   # Back off: a recover that leaves the marker unwritten must not bounce the
   # gateway/shim every 10 minutes.
@@ -915,8 +939,10 @@ cmd_recover() {
   cmd_cron_reload # reconcile gateway ← jobs.json (restores the durable cron set)
   cmd_gate_sync   # writes allowlist, restarts shim, verifies deny/allow
   cmd_chat_prune  # before backfill: don't embed pages we're about to delete
-  cmd_embed_backfill
+  # Mark BEFORE the backfill: it holds PGLite's lock, so `gbrain stats` reads 0
+  # pages and the marker was never written (2026-10-19, second wipe).
   mark_recovered
+  cmd_embed_backfill
   echo
   step "post-recovery doctor"
   cmd_doctor
