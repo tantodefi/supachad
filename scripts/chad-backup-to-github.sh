@@ -107,11 +107,22 @@ push_file() {
   # on the day's longest workspace/memory/*.md and on agents/main/sessions/
   # *.json. Using --input <tempfile> reads the body off disk and bypasses
   # argv entirely.
-  local body_file
+  #
+  # Two attempts. A transient failure of the sha GET above leaves sha empty,
+  # and a PUT without sha on an existing file is a 422; a concurrent writer
+  # gives a 409. Both looked like random 1-3 `fail:` lines per run
+  # (2026-10-15), so refetch the sha and retry once, and log GitHub's reason.
+  local body_file attempt err
   body_file="$(mktemp /tmp/chad-backup-body-XXXXXX)"
-  if ! SRC="$src" MSG="chore(backup): workspace snapshot ${ts}" \
-    BR="$BRANCH" SHA="$sha" \
-    python3 -c '
+  for attempt in 1 2; do
+    if [ "$attempt" -eq 2 ]; then
+      sleep 2
+      sha="$(gh api "repos/${REPO}/contents/${dst}?ref=${BRANCH}" \
+        --jq '.sha' 2>/dev/null || echo "")"
+    fi
+    if ! SRC="$src" MSG="chore(backup): workspace snapshot ${ts}" \
+      BR="$BRANCH" SHA="$sha" \
+      python3 -c '
 import base64, json, os
 with open(os.environ["SRC"], "rb") as fh:
     content = base64.b64encode(fh.read()).decode("ascii")
@@ -120,20 +131,22 @@ if os.environ.get("SHA"):
     body["sha"] = os.environ["SHA"]
 import sys; json.dump(body, sys.stdout)
 ' >"$body_file" 2>/dev/null; then
-    rm -f "$body_file"
-    errors=$((errors + 1))
-    warn "  fail: ${dst} (body-build failed)"
-    return 0
-  fi
+      rm -f "$body_file"
+      errors=$((errors + 1))
+      warn "  fail: ${dst} (body-build failed)"
+      return 0
+    fi
 
-  if gh api "repos/${REPO}/contents/${dst}" \
-    --method PUT --input "$body_file" >/dev/null 2>&1; then
-    count=$((count + 1))
-    log "  ok: ${dst}"
-  else
-    errors=$((errors + 1))
-    warn "  fail: ${dst}"
-  fi
+    if err="$(gh api "repos/${REPO}/contents/${dst}" \
+      --method PUT --input "$body_file" 2>&1 >/dev/null)"; then
+      count=$((count + 1))
+      if [ "$attempt" -eq 2 ]; then log "  ok: ${dst} (retry)"; else log "  ok: ${dst}"; fi
+      rm -f "$body_file"
+      return 0
+    fi
+  done
+  errors=$((errors + 1))
+  warn "  fail: ${dst} ($(printf '%s' "$err" | tr '\n' ' ' | cut -c1-160))"
   rm -f "$body_file"
 }
 
@@ -223,8 +236,20 @@ done
 # we stop it briefly, export, then restart it.
 GBRAIN_DATA="${GBRAIN_DATA:-/sandbox/.gbrain}"
 GBRAIN_SERVE_PID="$(pgrep -f 'gbrain.*serve' | head -1 || true)"
-if command -v gbrain >/dev/null 2>&1 && [ -d "$GBRAIN_DATA" ]; then
+# Every gbrain command loads the whole PGLite database (~740 MB RSS at 2.5k
+# pages); one such export tipped the 8 GB Docker VM into the OOM that wiped the
+# pod on 2026-10-19. The brain only changes when something writes to it (dream,
+# ingest, distill), so skip the export when no file under the database is newer
+# than the last successful export. Checked with find: no PGLite load.
+BRAIN_STAMP="${OPENCLAW_DATA}/state/brain-export.stamp"
+brain_changed=1
+if [ -f "$BRAIN_STAMP" ] && [ -z "$(find "$GBRAIN_DATA" -newer "$BRAIN_STAMP" -type f -print -quit 2>/dev/null)" ]; then
+  brain_changed=0
+  log "Brain unchanged since last export — skipped"
+fi
+if [ "$brain_changed" -eq 1 ] && command -v gbrain >/dev/null 2>&1 && [ -d "$GBRAIN_DATA" ]; then
   brain_export_dir="$(mktemp -d /tmp/brain-export-XXXXXX)"
+  errors_before=$errors
   if [ -n "$GBRAIN_SERVE_PID" ]; then
     kill "$GBRAIN_SERVE_PID" 2>/dev/null
     # give the process a moment to release the lock
@@ -241,6 +266,11 @@ if command -v gbrain >/dev/null 2>&1 && [ -d "$GBRAIN_DATA" ]; then
         rel="${md_file#"${brain_export_dir}"/}"
         push_file "$md_file" "brain/${rel}"
       done < <(find "$brain_export_dir" -name '*.md' -print0)
+    fi
+    # Stamp only a clean run, after the export (which itself touches the
+    # database files), so a failed push is retried next time.
+    if [ "$errors" -eq "$errors_before" ]; then
+      mkdir -p "$(dirname "$BRAIN_STAMP")" && touch "$BRAIN_STAMP"
     fi
   else
     warn "Brain export failed — skipped"

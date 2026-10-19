@@ -113,11 +113,15 @@ while IFS= read -r entry; do
     continue
   fi
 
+  # --no-deliver: no chat channel is configured, so the default announce→last
+  # fails every run ("Channel is required") and marks the job as error even
+  # though the wrapper succeeded. Wrappers log to files; nothing to announce.
   if openclaw cron add \
     --name "$name" \
     --cron "$expr" \
     --session "$target" \
     --message "$msg" \
+    --no-deliver \
     >/dev/null 2>&1; then
     added=$((added + 1))
     echo "[cron-reload] added: ${name}"

@@ -45,6 +45,7 @@ scripts/chad-cron-wrappers/chad-dump-logs            /usr/local/bin/chad-dump-lo
 scripts/chad-cron-wrappers/chad-email-check-cron     /usr/local/bin/chad-email-check-cron    755 kubectl
 scripts/chad-cron-wrappers/chad-ensure-today-memory  /usr/local/bin/chad-ensure-today-memory 755 kubectl
 scripts/chad-cron-wrappers/chad-gbrain-dream         /usr/local/bin/chad-gbrain-dream        755 kubectl
+scripts/chad-cron-wrappers/chad-dream-distill        /usr/local/bin/chad-dream-distill       755 kubectl
 scripts/chad-cron-wrappers/chad-gbrain-prune         /usr/local/bin/chad-gbrain-prune        755 kubectl
 scripts/chad-cron-wrappers/chad-issue-triage-cron    /usr/local/bin/chad-issue-triage-cron   755 kubectl
 scripts/chad-cron-wrappers/chad-log-event            /usr/local/bin/chad-log-event           755 kubectl
@@ -60,6 +61,14 @@ scripts/chad-cron-wrappers/chad-self-improve         /usr/local/bin/chad-self-im
 scripts/chad-cron-wrappers/chad-skill-watch          /usr/local/bin/chad-skill-watch         755 kubectl
 scripts/chad-cron-wrappers/chad-workflow-batch       /usr/local/bin/chad-workflow-batch      755 kubectl
 scripts/chad-cron-wrappers/chad-workspace-backup     /usr/local/bin/chad-workspace-backup    755 kubectl
+# Backup engine called by the wrapper above. Was image-baked only, so the
+# 8630fb37bb ARG_MAX fix never reached the pod (found 2026-10-15).
+scripts/chad-backup-to-github.sh                     /usr/local/bin/chad-backup-to-github    755 kubectl
+# Same image-baked gap: repo rename + shim-copy fixes never reached the pod.
+scripts/chad-clone-source.sh                         /usr/local/bin/chad-clone-source        755 kubectl
+scripts/chad-dump-state.sh                           /usr/local/bin/chad-dump-state          755 kubectl
+scripts/chad-report-bug.sh                           /usr/local/bin/chad-report-bug          755 kubectl
+scripts/chad-restore-from-github.sh                  /usr/local/bin/chad-restore-from-github 755 kubectl
 scripts/chad-github-worker/chad-dispatch             /usr/local/bin/chad-dispatch            755 kubectl
 
 # Orchestrator scripts (source of truth: .github/skills/chad-orchestrator/scripts/)
