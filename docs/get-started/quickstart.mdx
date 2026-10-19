@@ -71,9 +71,11 @@ Review the [Prerequisites](prerequisites) before you begin.
     Wait for the ready summary, then check the sandbox state.
     Before it prints this summary, ordinary fresh OpenClaw onboarding waits for exactly one matching local CLI operator device.
     The in-sandbox auto-pair watcher is the only component that approves this device's baseline scope upgrade.
-    The host runs one bounded warm-up only when the canonical device is pairing-only, then observes the same device without sending another approval.
+    The host runs one bounded warm-up when the verified canonical device has pairing-only or pairing/read permissions and needs write access.
+    This includes a matching CLI device whose connection metadata was refreshed by a probe.
+    The host then observes the same device without sending another approval.
     Onboarding verifies the exact paired and token scopes and confirms that no same-device request remains pending.
-    Onboarding reports whether settlement failed because of an unavailable pairing, failed warm-up, missing request, persistent pending request, stopped watcher, policy rejection, approval timeout, or approval failure.
+    Onboarding reports whether settlement failed because of an unavailable or incompatible pairing, failed warm-up, missing request, persistent pending request, stopped watcher, policy rejection, approval timeout, or approval failure.
     The failure message omits device identifiers, request identifiers, public keys, tokens, and child command output.
     If this bounded readiness check does not settle, NemoClaw keeps onboarding resumable.
     Run `nemoclaw onboard --resume` after you correct the reported condition.
@@ -380,7 +382,8 @@ Use these details when your first-run path needs more control.
   <Accordion title="Web Search Messaging and Network Policies">
     After confirmation, NemoClaw registers the selected provider with OpenShell.
     NVIDIA Endpoints and supported fixed hosted providers use native endpoints through sandbox-attached OpenShell providers.
-    Custom and local providers retain the shared `inference.local` route.
+    New Ollama, standalone vLLM, and llama.cpp selections also use sandbox-attached providers for their host-local endpoints.
+    Local NVIDIA NIM, custom endpoints, and earlier local selections without a sandbox-attached provider retain the shared `inference.local` route.
     The wizard asks whether to enable web search and offers Brave Search or Tavily Search.
     Provide `BRAVE_API_KEY` for Brave Search or `TAVILY_API_KEY` for Tavily Search when prompted.
     NemoClaw validates the selected key before it creates the sandbox, registers a sandbox-scoped OpenShell provider, and writes only an OpenShell resolver placeholder into the OpenClaw configuration.
