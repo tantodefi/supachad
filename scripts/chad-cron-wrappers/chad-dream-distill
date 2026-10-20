@@ -52,9 +52,19 @@ CATEGORIES = {
 }
 
 PROMPT = """You maintain long-term notes about one operator of an AI assistant named Chad.
+
+Who the operator is (hand-written, authoritative — never contradict it):
+{identity}
+
 Below are chat transcripts between {who} and Chad. Extract only what the transcripts
 actually show. Ignore automated/system chatter, error messages and empty replies.
 Never include passwords, API keys, tokens or other secrets.
+
+Operators often work on other people's projects (a client's business, a friend's
+articles, a product they are building). Facts about those people or projects are NOT
+facts about {who}: never put them under "profile" or "preferences". Record such work
+under "ongoing_work" phrased as what {who} is doing ("helping tjcooke draft a
+Substack issue"), naming the other party when the transcript does.
 
 Return ONLY a JSON object with these keys, each a list of short strings
 (at most 8 items each, at most 160 characters per item, [] if nothing):
@@ -128,7 +138,9 @@ def parse(text):
 
 
 CONSOLIDATE = """Below are notes an assistant keeps about the operator {who}, grouped by category,
-oldest first. Many say the same thing in different words. Merge duplicates, keep
+oldest first. Who {who} is (authoritative): {identity}
+Move any "profile"/"preferences" note that actually describes someone else's business
+or project into "ongoing_work", phrased as work {who} is doing for them. Many say the same thing in different words. Merge duplicates, keep
 the most specific wording, drop anything vague ("respond helpfully"), and when two
 notes conflict keep the newer one. Keep at most 8 per category, most important first.
 Return ONLY a JSON object with the same keys, each a list of strings.
@@ -141,7 +153,9 @@ def consolidate(slug, store):
     if not any(len(store.get(k) or []) > CONSOLIDATE_OVER for k in CATEGORIES):
         return store
     notes = json.dumps({k: [x["text"] for x in store.get(k) or []] for k in CATEGORIES}, indent=1)
-    reply = llm(CONSOLIDATE.format(who=slug, notes=notes))
+    ident_path = os.path.join(IDENT, f"{slug}.md")
+    identity = open(ident_path, encoding="utf-8").read()[:3000] if os.path.exists(ident_path) else "(unknown)"
+    reply = llm(CONSOLIDATE.format(who=slug, identity=identity, notes=notes))
     merged = parse(reply)
     if not reply or not any(merged.values()):
         log(f"{slug}: consolidation failed — keeping unconsolidated store")
@@ -265,12 +279,13 @@ def main():
             batches.append(cur)
         log(f"{slug}: {len(chats)} chats in {len(batches)} batches")
 
+        identity = open(os.path.join(IDENT, f"{slug}.md"), encoding="utf-8").read()[:3000]
         store_path = os.path.join(IDENT, f"{slug}.context.json")
         store = json.load(open(store_path)) if os.path.exists(store_path) else {}
         cats = "\n".join(f'- "{k}": {v}' for k, v in CATEGORIES.items())
         got = 0
         for b in batches:
-            reply = llm(PROMPT.format(who=slug, cats=cats, body=b))
+            reply = llm(PROMPT.format(who=slug, identity=identity, cats=cats, body=b))
             if not reply:
                 failed += 1
                 continue
