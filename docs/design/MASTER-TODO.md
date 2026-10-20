@@ -70,6 +70,19 @@ Order: test everything in Square sandbox with test users → fix → switch to p
       the sandbox account (harmless).
 - [ ] C12. Signup email + invite automation: send a confirmation and auto-mint (or queue for
       one-click approval) instead of hand-minting. Needs an email sender (Proton is down, D6).
+- [~] C13. Premium = monthly subscription ($15 CAD default; was a one-off $5 = lifetime).
+      supachad-landing PR #7 [U: merge + `cd api && wrangler deploy`]: subscription checkout,
+      subscription/invoice webhooks → premium until paid-through (+3d grace), expiry on list/tier,
+      lifetime grants untouched; e2e 37/37 incl. a real sandbox subscription. Host sync now removes
+      lapsed subscribers it added, never hand-added operators (`a528670d99`, live via launchd).
+      For production: run `api/scripts/square-subscription-plan.sh production`, set the prod
+      SQUARE_SUBSCRIPTION_PLAN_ID, and subscribe the prod webhook to subscription.created,
+      subscription.updated, invoice.payment_made (+ payment.*, refund.*).
+- [x] C14. 16 e2e test emails had premium on LIVE: Square sandbox sent real webhooks for test
+      payments to the live Worker, whose old code granted premium to any buyer (bug fixed in #5);
+      the sync copied them into the operator allowlist. Deleted from KV + allowlist, gate-synced.
+      Note: while SQUARE_ENV=sandbox, sandbox test payments reach the live Worker — after go-live,
+      point the sandbox webhook elsewhere or disable it.
 - [U] C3. Switch to Square production — now unblocked (prod token + signature key in host creds):
       after PR merge, set SQUARE_ENV=production, prod location id, secrets, and
       production webhook (`/api/square/webhook/prod`) + its signature key. Only after C7–C9 pass.
