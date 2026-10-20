@@ -23,63 +23,26 @@ imports the library and exposes useful commands.
 
 | Requirement | Notes |
 |---|---|
-| Go >= 1.26.1 | `go version` to check |
 | Proton account | With Mail + Calendar access |
 | `PROTON_USERNAME` | Set via env or `~/.nemoclaw/credentials.json` |
 | `PROTON_PASSWORD` | Set via env or `~/.nemoclaw/credentials.json` |
-| Network policy | `proton_api`, `go_modules`, `go_module_git_sources`, `go_install` |
+| Network policy | `proton_api` |
 
 ## Installation
 
-Run the install script from the skill directory:
+Nothing to install. `proton-tool` is preinstalled on PATH: a wrapper at
+`/usr/local/bin/proton-tool` that loads `PROTON_USERNAME`/`PROTON_PASSWORD`
+from `/sandbox/.nemoclaw/credentials.json` and execs
+`/usr/local/bin/proton-tool-bin`. The host operator ships new builds.
 
-```bash
-cd /sandbox/.openclaw-data/workspace/skills/proton-calendar
-bash scripts/install-go.sh    # Installs Go 1.26.1 if missing
-bash scripts/build.sh         # Builds proton-tool binary
-```
+**Do not build, copy or replace the binary yourself.** The network policy
+only lets `/usr/local/bin/proton-tool` and `/usr/local/bin/proton-tool-bin`
+reach Proton, and OpenShell fingerprints binaries when the sandbox is
+created: a replaced binary is denied with "binary integrity check failed",
+and a copy anywhere else is denied outright.
 
-After building, the binary is at `./proton-tool`.
-
-### Install Go (if needed)
-
-The sandbox may not have Go pre-installed. The `scripts/install-go.sh` script:
-
-1. Downloads Go 1.26.1 to `/sandbox/go1.26.1` (NOT `/sandbox/go` — that
-   path is fingerprinted by OpenShell and overwriting it causes binary
-   integrity violations).
-2. Sets `GOROOT`, `GOPATH`, `GOCACHE` and updates `PATH`.
-
-**Critical:** Do NOT extract Go to `/sandbox/go`. OpenShell fingerprints
-binaries at sandbox creation. Replacing `/sandbox/go/bin/go` will cause
-every network request from go to be denied with "binary integrity violation".
-
-### Build the tool
-
-```bash
-bash scripts/build.sh
-```
-
-This runs `go mod download` then `go build` in `cmd/proton-tool/`.
-
-### Stable path
-
-After building, copy the binary to `/sandbox/proton-tool` so all docs and
-cron jobs use a single stable path:
-
-```bash
-cp /sandbox/.openclaw-data/skills/proton-calendar/proton-tool /sandbox/proton-tool
-chmod +x /sandbox/proton-tool
-```
-
-**Important:** Use `cp`, not `ln -sf`. The OpenShell proxy glob
-(`/sandbox/**` in the network policy) does not match binaries under
-dotfile directories like `.openclaw-data/`. A symlink is also
-insufficient because the proxy resolves to the real path. A real copy
-at `/sandbox/proton-tool` matches the glob and is allowed through.
-
-All commands below use `/sandbox/proton-tool`. After rebuilding the skill,
-re-run the `cp` command above to deploy the new version.
+If a command fails with `422 … This web page is out of date`, Proton has
+retired the tool's app version. Report it (chad-bug-intake); don't retry.
 
 ## Usage
 
@@ -107,7 +70,7 @@ for k,v in c.items():
 ### List Calendars
 
 ```bash
-/sandbox/proton-tool calendars
+proton-tool calendars
 ```
 
 Shows all calendars (owned and shared), including type (normal/subscribed),
@@ -116,7 +79,7 @@ color, display status, and members with their email and permissions.
 ### List Calendar Events
 
 ```bash
-/sandbox/proton-tool events --calendar-id=<ID> --days=7
+proton-tool events --calendar-id=<ID> --days=7
 ```
 
 Decrypts event details (title, description, location) using the calendar's
@@ -131,7 +94,7 @@ encryption keys. Falls back to metadata-only output if decryption fails
 ### List Mail (Inbox)
 
 ```bash
-/sandbox/proton-tool mail --limit=10
+proton-tool mail --limit=10
 ```
 
 ### List Sent Messages
@@ -147,31 +110,31 @@ without pulling the entire sent history).
 ### Read a Message (decrypts body, auto-marks read)
 
 ```bash
-/sandbox/proton-tool read-mail --id=MSGID
+proton-tool read-mail --id=MSGID
 ```
 
 ### Mark Messages as Read
 
 ```bash
-/sandbox/proton-tool mark-read --id=MSGID1,MSGID2,MSGID3
+proton-tool mark-read --id=MSGID1,MSGID2,MSGID3
 ```
 
 ### Send an Email
 
 ```bash
-/sandbox/proton-tool send-mail --to=user@example.com --subject="Hello" --body="Message text"
+proton-tool send-mail --to=user@example.com --subject="Hello" --body="Message text"
 ```
 
 ### Get User Info
 
 ```bash
-/sandbox/proton-tool whoami
+proton-tool whoami
 ```
 
 ### Clear Cached Session
 
 ```bash
-/sandbox/proton-tool logout
+proton-tool logout
 ```
 
 Clears the cached auth tokens at `/sandbox/.proton-session.json`. The next
@@ -198,7 +161,7 @@ openclaw cron add \
   --name "email-check" \
   --cron "*/30 * * * *" \
   --session isolated \
-  --message "Check email now. Follow the EMAIL-POLICY.md rules strictly. STEPS: 1. First read memory/$(date -u +%Y-%m-%d).md for any Pending Follow-ups and Awaiting Responses from previous runs. Act on follow-ups first. 2. Run: /sandbox/proton-tool mail --limit=20 3. For each unread message from admin users, run: /sandbox/proton-tool read-mail --id=MSGID (this auto-marks as read). If it replies to an Awaiting Response thread, clear that entry. 4. For newsletters/spam/non-admin unread: /sandbox/proton-tool mark-read --id=MSGID1,MSGID2 to clean them up 5. Run: /sandbox/proton-tool sent --limit=15 --days=3 to scan recent sent messages. Cross-reference with inbox to find threads still awaiting a reply. Update Awaiting Responses in today's log. 6. Respond per EMAIL-POLICY.md rules. Check cooldowns and daily cap before sending. NEVER send follow-up nudges automatically. 7. Log everything to memory/$(date -u +%Y-%m-%d).md including Awaiting Responses and Pending Follow-ups sections for next run" \
+  --message "Check email now. Follow the EMAIL-POLICY.md rules strictly. STEPS: 1. First read memory/$(date -u +%Y-%m-%d).md for any Pending Follow-ups and Awaiting Responses from previous runs. Act on follow-ups first. 2. Run: proton-tool mail --limit=20 3. For each unread message from admin users, run: proton-tool read-mail --id=MSGID (this auto-marks as read). If it replies to an Awaiting Response thread, clear that entry. 4. For newsletters/spam/non-admin unread: proton-tool mark-read --id=MSGID1,MSGID2 to clean them up 5. Run: proton-tool sent --limit=15 --days=3 to scan recent sent messages. Cross-reference with inbox to find threads still awaiting a reply. Update Awaiting Responses in today's log. 6. Respond per EMAIL-POLICY.md rules. Check cooldowns and daily cap before sending. NEVER send follow-up nudges automatically. 7. Log everything to memory/$(date -u +%Y-%m-%d).md including Awaiting Responses and Pending Follow-ups sections for next run" \
   --announce \
   --channel last
 ```
@@ -290,7 +253,7 @@ opens its own TLS connections (CONNECT tunnels through the proxy).
 | SRP auth failure | Verify PROTON_USERNAME/PROTON_PASSWORD are correct |
 | HTTP 429 "Too many recent logins" | Wait 30-60 min, then `proton-tool logout` and retry. Reduce cron frequency or manual checks. See Session Caching section. |
 | `Session refresh failed` in stderr | Cached session expired or was invalidated. The tool will auto-fallback to SRP. If SRP also fails with 429, wait for cooldown. |
-| `Invalid page size parameter` (code 2021) | The go-proton-api library uses PageSize=150 but the Calendar API max is 100. The tool bypasses the library's `GetAllCalendarEvents` with a custom paginator using PageSize=100. If you see this error, the tool was built from old source — rebuild with `bash scripts/build.sh`. |
+| `Invalid page size parameter` (code 2021) | The go-proton-api library uses PageSize=150 but the Calendar API max is 100. The tool bypasses the library's `GetAllCalendarEvents` with a custom paginator using PageSize=100. If you see this error, the installed build is old — report it (chad-bug-intake). |
 | Event titles blank / no Summary | Calendar key decryption failed. Check that the user is a member with key access (not view-only shared calendar). |
 
 ## File Structure

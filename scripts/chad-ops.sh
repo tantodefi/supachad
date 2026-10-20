@@ -699,6 +699,11 @@ cmd_doctor() {
   [ "$crons" -ge 10 ] && ok "crons registered ($crons)" || warn "only ${crons:-0} crons registered (expect 10) — run: chad-ops cron-reload"
   # proton-tool wrapper (email-check cron + proton-calendar skill)
   if kx 'head -c2 /usr/local/bin/proton-tool' | grep -q '^#!'; then ok "proton-tool wrapper installed"; else bad "proton-tool is the raw binary — email/calendar broken (run: chad-ops proton-wrap)"; fi
+  # The pre-2026-10-14 build hard-codes web-mail@5.0.36, which Proton rejects (422
+  # "out of date"). Not swappable in place (OpenShell fingerprints binaries at
+  # sandbox creation), so it lands with the cutover image. No login here: SRP
+  # logins are rate-limited and can trigger a CAPTCHA.
+  if kx 'grep -a -c PROTON_APP_VERSION /usr/local/bin/proton-tool-bin' | grep -q '^[1-9]'; then ok "proton-tool-bin is a current build"; else bad "proton-tool-bin is the retired web-mail@5.0.36 build — Proton rejects it, email/calendar down (fix ships with the cutover)"; fi
   # gh auth (github/gh-issues skills shell out to gh)
   local ghw
   ghw=$(sshp 'env -u GH_TOKEN -u GITHUB_TOKEN gh api user --jq .login 2>/dev/null')
