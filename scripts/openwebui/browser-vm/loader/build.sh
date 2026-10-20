@@ -77,6 +77,7 @@ for sym in openTerminal toggleTerminal ensureDock ensureChip dropRelay; do
     || fail "vm-panel.js is missing 'function ${sym}('"
 done
 grep -qF "window.__owuiVm" "${tmp}" || fail "vm-panel.js never exports window.__owuiVm"
+grep -qF "window.__owuiMenuLinks" "${tmp}" || fail "vm-panel.js lost the user-menu links section"
 
 # 5. The interactive dock and the chat chip are the user-facing entry points;
 #    if their markup is gone the build is not the panel we think it is.

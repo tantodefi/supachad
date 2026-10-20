@@ -2298,3 +2298,74 @@
     start();
   }
 })();
+
+// ═════ OpenWebUI user-menu links (independent of the VM panel above) ═════
+// Extra entries in OpenWebUI's user menu. Lives in this file (not its own
+// .js) because the build appends only vm-panel.js and new JS files are gated.
+//
+// OpenWebUI 0.11.4 renders the "Admin Panel" item (UserMenu.svelte) only for
+// role === 'admin', as <a href="/admin">. We clone that anchor, so the entry
+// inherits the menu's exact styling and is shown to admins only, and insert
+// "Agent Runs" (runs.supachad.com, the Smithers runs dashboard) right after it.
+// Keyed on the href, not the label, so it works in every UI language.
+(function () {
+  "use strict";
+  if (window.__owuiMenuLinks) return;
+  window.__owuiMenuLinks = true;
+
+  var LINKS = [{ id: "owui-link-runs", href: "https://runs.supachad.com", label: "Agent Runs" }];
+
+  function addLinks(adminAnchor) {
+    var after = adminAnchor;
+    LINKS.forEach(function (link) {
+      if (document.getElementById(link.id)) return;
+      var a = adminAnchor.cloneNode(true);
+      a.id = link.id;
+      a.href = link.href;
+      a.target = "_blank";
+      a.rel = "noopener";
+      // The clone carries the Admin Panel label as its last text-bearing div.
+      var divs = a.querySelectorAll("div");
+      var label = divs.length ? divs[divs.length - 1] : a;
+      label.textContent = link.label;
+      after.insertAdjacentElement("afterend", a);
+      after = a;
+    });
+  }
+
+  function scan(root) {
+    var anchors = (root.querySelectorAll ? root : document).querySelectorAll('a[href="/admin"]');
+    for (var i = 0; i < anchors.length; i++) {
+      // Only the user-menu copy: in UserMenu.svelte it is draggable="false" and
+      // sits between <hr> separators. An admin link elsewhere must not grow
+      // siblings.
+      var a = anchors[i];
+      if (
+        a.getAttribute("draggable") === "false" &&
+        a.parentElement &&
+        a.parentElement.querySelector(":scope > hr")
+      ) {
+        addLinks(a);
+      }
+    }
+  }
+
+  function start() {
+    scan(document);
+    new MutationObserver(function (records) {
+      for (var i = 0; i < records.length; i++) {
+        if (records[i].addedNodes.length) {
+          scan(document);
+          return;
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  window.__owuiMenuLinks = { scan: scan, links: LINKS };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+})();
