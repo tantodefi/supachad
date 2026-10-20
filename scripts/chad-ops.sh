@@ -369,6 +369,12 @@ cfg = {"embedding": {"apiKey": k, "model": "nvidia/nemotron-3-embed-1b",
        "autoCapture": True, "autoRecall": True}
 subprocess.run(["openclaw", "config", "set", "plugins.entries.memory-lancedb.config",
                 json.dumps(cfg), "--strict-json"], capture_output=True)
+# Newer OpenClaw ships memory-lancedb as an external plugin. Enabling it uninstalled
+# makes the gateway install it at boot and then refuse to report ready ("plugin
+# migration inputs changed"), exiting the container once (chad-next, 2026-10-20).
+listed = subprocess.run(["openclaw", "plugins", "list"], capture_output=True, text=True).stdout
+if "memory-lancedb" not in listed:
+    subprocess.run(["openclaw", "plugins", "install", "@openclaw/memory-lancedb"], capture_output=True)
 subprocess.run(["openclaw", "plugins", "enable", "memory-lancedb"], capture_output=True)
 PY' >/dev/null
   ok "memory-lancedb enabled (gateway restart loads it)"
@@ -547,6 +553,12 @@ cmd_restore_runtime() {
 
 cmd_cron_reload() {
   step "cron-reload (re-register crons from restored jobs.json)"
+  if rehearsal_with_live_pod; then
+    # A rehearsal sandbox with Chad's crons is a second Chad: it ran a cron on
+    # 2026-10-20 when chad-next was restarted. Register them at the cutover.
+    warn "cron-reload skipped: live Chad still runs on the pod (rehearsal sandbox must not run crons)"
+    return 0
+  fi
   if [ "$(sshp "test -s $CRON_JOBS && echo y")" != y ]; then
     if fetch_state_file cron/jobs.json; then ok "jobs.json missing — fetched from chad-state"; else bad "jobs.json missing and fetch from chad-state failed"; fi
   fi
@@ -753,12 +765,17 @@ nemoclaw_for_sandbox() { # NemoClaw CLI aimed at this sandbox's gateway
   fi
 }
 
+# Container-mode rehearsal while live Chad still runs on the pod cluster.
+rehearsal_with_live_pod() {
+  [ "$SANDBOX_MODE" = container ] && docker ps --format '{{.Names}}' | grep -qx openshell-cluster-nemoclaw
+}
+
 cmd_policy_sync() {
   step "policy-sync (apply the presets in chad-policy-presets.txt that are missing)"
   # A freshly onboarded sandbox has ~5 presets vs chad's 25, so restore's git
   # clone, gh and chad-webui all hit 403s (2026-10-19 rehearsal).
   local want have p n=0 fail=0
-  if [ "$SANDBOX_MODE" = container ] && docker ps --format '{{.Names}}' | grep -qx openshell-cluster-nemoclaw; then
+  if rehearsal_with_live_pod; then
     # NemoClaw policy writes for a container sandbox auto-start a native gateway
     # on 127.0.0.1:8080, which takes the live pod offline (2026-10-19, twice).
     # Safe only once the pod cluster is stopped (cutover step).
