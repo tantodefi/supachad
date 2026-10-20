@@ -11,20 +11,17 @@
 
 | Command | Path |
 |---------|------|
-| List inbox | `/sandbox/proton-tool mail --limit=20` |
-| List sent | `/sandbox/proton-tool sent --limit=15 --days=3` |
-| Read message | `/sandbox/proton-tool read-mail --id=MSGID` |
-| Mark as read | `/sandbox/proton-tool mark-read --id=MSGID1,MSGID2` |
-| Send email | `/sandbox/proton-tool send-mail --to=ADDR --subject=TEXT --body=TEXT` |
-| Count messages | `/sandbox/proton-tool count-mail` |
-| List calendars | `/sandbox/proton-tool calendars` |
-| List events | `/sandbox/proton-tool events --days=7` |
+| List inbox | `proton-tool mail --limit=20` |
+| List sent | `proton-tool sent --limit=15 --days=3` |
+| Read message | `proton-tool read-mail --id=MSGID` |
+| Mark as read | `proton-tool mark-read --id=MSGID1,MSGID2` |
+| Send email | `proton-tool send-mail --to=ADDR --subject=TEXT --body=TEXT` |
+| Count messages | `proton-tool count-mail` |
+| List calendars | `proton-tool calendars` |
+| List events | `proton-tool events --days=7` |
 
-> **Stable path:** `/sandbox/proton-tool` is a copy of the latest build
-> from `/sandbox/.openclaw-data/skills/proton-calendar/proton-tool`.
-> After rebuilding (`bash scripts/build.sh`), run:
-> `cp /sandbox/.openclaw-data/skills/proton-calendar/proton-tool /sandbox/proton-tool`
-> Do **not** use a symlink — the proxy blocks binaries under `.openclaw-data/`.
+> `proton-tool` is preinstalled on PATH. Never build, copy or replace it
+> (see SKILL.md → Installation): the network policy denies any other binary.
 
 ## Admin users (respond to these)
 
@@ -63,7 +60,7 @@ Everything else is **non-admin** and subject to the anti-spam rules below.
    and unrecognised senders must be marked read in a single batch call:
 
    ```text
-   /sandbox/proton-tool mark-read --id=ID1,ID2,ID3
+   proton-tool mark-read --id=ID1,ID2,ID3
    ```
 
 5. **No draft creation** for non-admin mail. Do not start composing replies
@@ -114,7 +111,7 @@ conversations the agent is waiting on.
 
 ### How it works
 
-1. Run `/sandbox/proton-tool sent --limit=15 --days=3` to list recent
+1. Run `proton-tool sent --limit=15 --days=3` to list recent
    outbound messages.
 2. For each sent message to an admin user, check whether a reply has arrived
    in the inbox (match by subject thread — look for `Re:` prefix or same
@@ -154,13 +151,13 @@ Each **30-minute** cron execution must follow these steps in order:
 2. **List inbox:**
 
    ```text
-   /sandbox/proton-tool mail --limit=20
+   proton-tool mail --limit=20
    ```
 
 3. **For each unread message from an admin user:**
 
    ```text
-   /sandbox/proton-tool read-mail --id=MSGID
+   proton-tool read-mail --id=MSGID
    ```
 
    (This auto-marks the message as read.)
@@ -169,13 +166,13 @@ Each **30-minute** cron execution must follow these steps in order:
 4. **For newsletters / spam / non-admin unread:** batch mark-read:
 
    ```text
-   /sandbox/proton-tool mark-read --id=MSGID1,MSGID2
+   proton-tool mark-read --id=MSGID1,MSGID2
    ```
 
 5. **Scan sent messages for context recovery:**
 
    ```text
-   /sandbox/proton-tool sent --limit=15 --days=3
+   proton-tool sent --limit=15 --days=3
    ```
 
    Cross-reference with inbox to identify threads still awaiting a reply.
