@@ -37,12 +37,14 @@ bash scripts/chad-ops.sh doctor
 `doctor` is read-only. It first confirms the sandbox is reachable; if it is
 not, it prints one failure naming what to check (the gateway on `:8080`, the
 CLI mTLS certs, the handshake secret) and stops, instead of reading transport
-errors as values. Then it checks:
+errors as values. In pod mode it also flags a native `openshell-gateway` that
+shadows the cluster on `127.0.0.1:8080`. Then it checks:
 
 | Check | Healthy output |
 |---|---|
 | Shim | `shim :8901 → 200` |
-| Gateway | `gateway listening :18789` |
+| Gateway | `gateway listening :18789` (container mode: `:1879x`) |
+| Inference timeout | `inference timeout 300s` (the 60s default returns HTTP 503 on long replies) |
 | gbrain | health score, page count, and embed coverage of 90% or more |
 | Binaries | `drift=0  absent=0` against `chad-deploy-manifest.txt` |
 | Allowlist gate | `allowlist gate armed (N operators)` |
@@ -50,6 +52,8 @@ errors as values. Then it checks:
 | Proton | `proton-tool wrapper installed` |
 | GitHub CLI | `gh authenticated (Supachad)` |
 | Skills | `skills.load.extraDirs` set |
+| OpenWebUI tools | `webui MCP server registered` |
+| Long-term memory | `memory-lancedb in memory slot (auto-recall)` |
 | gbrain embed config | NVIDIA key and base URL present |
 | Agent inbox | fewer than 50 error events today |
 | Backups | last `chad-state` commit 12 hours old or newer |
@@ -67,31 +71,67 @@ bash scripts/chad-ops.sh recover
    `OPENWEBUI_API_KEY`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, and
    `CHAD_STATE_REPO`. Without the OpenWebUI and Cloudflare Access keys, every
    `chad-webui` tool fails.
-2. `gh-auth` writes `/sandbox/.config/gh/hosts.yml` from `GITHUB_TOKEN`.
+2. `runtime-bins` (container mode only) installs `gh`, `proton-tool-bin`, `bun`,
+   and the gbrain library from `~/.nemoclaw/cache/runtime-bins/`, because the
+   0.0.116 image ships none of them. `policy-sync` applies any preset from
+   `scripts/chad-policy-presets.txt` that is missing. `inference-timeout` sets
+   the gateway inference route to 300 seconds.
+3. `gh-auth` writes `/sandbox/.config/gh/hosts.yml` from `GITHUB_TOKEN`.
    `gh auth login` rejects the classic PAT because it lacks `read:org`, and the
    OpenClaw exec tool strips `GH_TOKEN` from the environment.
-3. `chown`, `gbrain-fix`, and `proton-wrap` restore ownership and the two
+4. `chown`, `gbrain-fix`, and `proton-wrap` restore ownership and the two
    credential wrappers that a restart drops.
-4. `gbrain-config` re-writes the embed config that `gbrain init` clobbers.
-5. `restore-data` restores workspace state from `chad-state`, but **only** when
+5. `gbrain-config` re-writes the embed config that `gbrain init` clobbers.
+6. `restore-data` restores workspace state from `chad-state`, but **only** when
    the brain has zero pages or identity is missing. Otherwise it skips, so a
    surviving brain is never replaced by an older snapshot. Set
-   `CHAD_FORCE_RESTORE=1` to override.
-6. `restore-runtime` restores any **missing** `[runtime]` file from
+   `CHAD_FORCE_RESTORE=1` to override. In container mode, `deploy` runs once
+   before this step so `chad-restore-from-github` exists.
+7. `restore-runtime` restores any **missing** `[runtime]` file from
    `chad-state` (the action-gate policy `auto-actions.json`, `queue/`,
-   `memory/feedback-proposals.md`) without touching files that exist. Without
-   `auto-actions.json`, every gated action falls through to `block`. It also
-   copies `workspace/` from `chad-state` with no-clobber, which brings back
-   `MEMORY.md` and the daily notes under `memory/` while leaving live files
-   (identity, today's notes) untouched. The 2026-10-14 reboot lost 285 such
-   files.
-7. `deploy` pushes every manifest file, including all five custom skills and
-   the orchestrator tools (`chad-budget`, `chad-collect`, `chad-route`, and
-   others).
-8. `cron-reload` re-registers the 10 crons. If `jobs.json` is missing, it
-   fetches `cron/jobs.json` from `chad-state` first.
-9. `bonjour-off`, `skills-register`, `mcp-register`, `restart-gateway`, `gate-sync`, and
-   `embed-backfill` finish the bring-up.
+   `memory/feedback-proposals.md`) and the operator `identities/`, without
+   touching files that exist. It also copies `workspace/` with no-clobber,
+   which brings back `MEMORY.md` and the daily notes under `memory/`.
+8. `gbrain-dims` migrates a re-initialized brain from `vector(1536)` to
+   `vector(2048)` (the size `nemotron-3-embed-1b` emits). It does nothing when
+   the column is already 2048 and refuses when chunks are already embedded.
+9. `deploy` pushes every manifest file, including all custom skills and the
+   orchestrator tools.
+10. `bonjour-off`, `skills-register`, `mcp-register`, and `memory-register`
+    fix config that a rewrite drops, then `restart-gateway` loads it.
+11. `cron-reload` re-registers the 10 crons with `--no-deliver`. It must run
+    after the gateway restart, because `cron add` talks to the gateway.
+12. `gate-sync` writes the operator allowlist, restarts the shim, and checks
+    that a non-operator is denied and an operator gets a real completion.
+13. `chat-prune` deletes brain pages for chats that no longer exist in
+    OpenWebUI. The backup never deletes, so a restore brings them back.
+14. The recovered marker is written, then `embed-backfill` starts.
+
+## Recover Automatically
+
+The launchd job `dev.nemoclaw.chad-autorecover` runs
+`chad-ops.sh autorecover` every 10 minutes. `recover` writes
+`/sandbox/.openclaw-data/state/.chad-recovered` once crons and the brain are
+back. That file lives on the ephemeral layer, so when it is missing the
+sandbox was wiped, and `autorecover` runs `recover`.
+
+When the sandbox is unreachable, `autorecover` first fixes the two causes seen
+after a Docker restart: a native gateway shadowing `127.0.0.1:8080`, and a
+rotated SSH handshake secret (`handshake-sync`). It waits an hour between
+attempts, so a recovery that keeps failing never restarts the gateway every
+10 minutes. The plist is tracked in `scripts/openwebui/launchd/`.
+
+## Container Mode
+
+Set `CHAD_SANDBOX_MODE=container CHAD_SANDBOX=<name>` to run any command
+against an OpenShell 0.0.116 docker-driver sandbox such as `chad-next`.
+
+:::{warning}
+Do not run `nemoclaw <container-sandbox> policy-add` (or other NemoClaw
+policy writes) while the pod cluster is running. The CLI starts a native
+gateway on `127.0.0.1:8080`, which takes the live pod offline.
+`chad-ops policy-sync` refuses in this case.
+:::
 
 ## Recover After a Host Reboot
 
