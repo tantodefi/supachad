@@ -19,11 +19,17 @@
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
     "@ai-sdk/openai-compatible": "latest",
-    "@smithers-orchestrator/agents": "^0.26.1",
+    "@smithers-orchestrator/agents": "0.32.0",
     "ai": "latest",
     "react": "19",
     "react-dom": "19",
-    "smithers-orchestrator": "^0.26.1",
+    "smithers-orchestrator": "0.32.0",
     "zod": "^4.4.3"
+  },
+  "overrides": {
+    "effect": "4.0.0-beta.102",
+    "@effect/platform-bun": "4.0.0-beta.102",
+    "@effect/platform-node-shared": "4.0.0-beta.102",
+    "@effect/sql-sqlite-bun": "4.0.0-beta.102"
   }
 }
