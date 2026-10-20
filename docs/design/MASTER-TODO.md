@@ -89,8 +89,12 @@ Order: test everything in Square sandbox with test users → fix → switch to p
       failed", confirmed 10-20). Cache now holds the fixed build; it must be in place BEFORE the
       sandbox is created at cutover (verify on chad-next). Then [U] solve Proton's CAPTCHA once.
       doctor now flags it; skill docs no longer tell Chad to rebuild it (`c0dbec6304`).
-- [ ] D7. chad-next exits immediately on start (phase Error since the Docker restart) — fix before
-      the cutover rehearsal resumes.
+- [x] D7. chad-next exited on start: its newer OpenClaw ships memory-lancedb as an external
+      plugin; enabled-but-uninstalled → installs at boot, refuses ready, exits once (2nd start
+      works). memory-register now installs it first (`96d753e58c`). Also: restarted, chad-next ran
+      one of its 3 rehearsal crons beside live Chad (stopped after ~30 s; Proton broken there, so no
+      email) → cron-reload now skips while the pod runs. chad-next is stopped; before restarting
+      it for rehearsal, disable its crons (`openclaw cron list` → disable).
 
 ## E. Quality + docs
 
