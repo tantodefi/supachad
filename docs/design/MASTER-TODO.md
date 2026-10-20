@@ -61,7 +61,7 @@ Last updated 2026-10-19 (evening).
 
 - [~] E1. Upstream merged into chad-dev (`23b6f0510f`, 0 regressions vs baseline+upstream).
       [U] push: the pre-push growth guardrail can't judge a fork merge (needs the user).
-- [ ] E2. #49 dependency sweep (gbrain, gstack, skills, deps).
+- [~] E2. #49 deps: gstack 1.91.27 → 1.91.158 and Smithers 0.32 done; OpenClaw 2026.4.24 → 2026.10.x rides the cutover image; gbrain fork 0.14.2 unchanged.
 - [~] E3. #46 Smithers upgraded 0.26.1 → 0.32.0 (graphs + runs UI verified; watch the next scheduled runs). #47 skill review open.
 - [x] E4. #45 "Agent Runs" (runs.supachad.com) in the OWUI user menu, admins only (`menu-links.js`).
 - [ ] E5. #52 docs refresh for the merged/migrated stack.
