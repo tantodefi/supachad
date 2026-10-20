@@ -63,6 +63,7 @@ exec-approvals.json
 # the runtime section is the single source of truth.
 queue/tasks.jsonl
 queue/budget.json
+budget.json
 # Canonical proposals file: chad-self-improve writes durable-improvement drafts here,
 # chad-budget-audit writes p95-driven timeout/budget recommendations here, and
 # chad-proposal-apply reads from here. Was previously only the workspace-side copy
