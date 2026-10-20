@@ -68,12 +68,12 @@ The patched gbrain reads these at module load. Defaults reproduce upstream behav
 |---|---|---|---|
 | `OPENAI_BASE_URL` | `openai_base_url` | `https://api.openai.com/v1` | Endpoint. Set to `https://integrate.api.nvidia.com/v1` for NIM. |
 | `OPENAI_API_KEY` | `openai_api_key` | wrapper falls back to `unused` | OpenAI SDK refuses to construct without it, even when the endpoint doesn't auth. |
-| `GBRAIN_EMBED_MODEL` | `embed_model` | `text-embedding-3-large` | NIM model id. We use `nvidia/llama-3.2-nv-embedqa-1b-v2`. |
-| `GBRAIN_EMBED_DIMENSIONS` | `embed_dimensions` | `1536` | Must match what the model returns. **Schema column is sized at `gbrain init` time** — changing this post-init requires a fresh brain. |
+| `GBRAIN_EMBED_MODEL` | `embed_model` | `text-embedding-3-large` | NIM model id. We use `nvidia/nemotron-3-embed-1b`. |
+| `GBRAIN_EMBED_DIMENSIONS` | `embed_dimensions` | `1536` | Must match what the model returns. We use `2048`. **Schema column is sized at `gbrain init` time** (always `vector(1536)`); `chad-ops gbrain-dims` migrates it to 2048 (see below). |
 | `GBRAIN_EMBED_INPUT_TYPE` | `embed_input_type` | (unset) | NIM-only. `passage` for indexing, `query` for retrieval. We set `passage`; gbrain's embed signature doesn't yet distinguish. |
 | `GBRAIN_EMBED_PASS_DIMENSIONS` | (none) | `true` | Set `false` for fixed-dim NIM models that reject the `dimensions` param. |
 
-The default NemoClaw setup configures NVIDIA NIM with `nvidia/llama-3.2-nv-embedqa-1b-v2` at 1024 dimensions — see `scripts/chad-setup.sh` step 3b.
+The NemoClaw setup configures NVIDIA NIM with `nvidia/nemotron-3-embed-1b` at 2048 dimensions — see `scripts/chad-setup.sh` step 3b. pgvector's HNSW index caps at 2000 dimensions, so the 2048 column has no HNSW index.
 
 ## Sandbox layout
 

@@ -184,7 +184,7 @@ When something looks wrong, the file you want is usually one of:
 | `/sandbox/.openclaw-data/auto-actions.json` | Action-gate state | ✅ `[runtime]` |
 | `/sandbox/.openclaw-data/exec-approvals.json` | Approved-exec list | ✅ `[runtime]` |
 | `/sandbox/.openclaw-data/queue/tasks.jsonl` | Sub-agent task ledger | ✅ `[runtime]` |
-| `/sandbox/.openclaw-data/queue/budget.json` | Token budget across cron tasks | ✅ `[runtime]` |
+| `/sandbox/.openclaw-data/budget.json` | Daily token budget for sub-agent spawns and cron tasks | ✅ `[runtime]` |
 | `/sandbox/.openclaw-data/agents/` | Custom agent registrations | ✅ `[runtime-dirs]` |
 | `/sandbox/.openclaw-data/identity/` | Device keypair + operator tokens | ❌ excluded (regenerable, sensitive) |
 | `/sandbox/.openclaw-data/credentials/` | Bearer token cache | ❌ excluded |

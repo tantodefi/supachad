@@ -26,7 +26,7 @@ The Chad agent persists additional orchestration state under `/sandbox/.openclaw
 | `auto-actions.json` | Action-gate state: per-channel daily counters and the kill-switch. |
 | `exec-approvals.json` | Approved-exec list — decisions made by `chad-action-gate` that persist across restarts. |
 | `queue/tasks.jsonl` | Sub-agent task ledger. |
-| `queue/budget.json` | Token budget across cron tasks. |
+| `budget.json` | Daily token budget for sub-agent spawns and cron tasks. |
 | `agents/`, `flows/`, `hooks/` | Custom agent registrations, workflow definitions, and hook configs added at runtime. |
 | `identities/<slug>.md` | Per-operator persona files prepended by `chad-shim` to user messages from open-webui (since 2026-05-13). One file per operator slug (email local-part), plus `default.md` for unknown senders. See `scripts/openwebui/chad-shim.py`. |
 | `bin/` | Sandbox-writable patched copies of chad CLI tools (`chad-issue-triage`, `chad-issue-triage-cron`, `chad-mail-check`, `chad-email-check-cron`, `chad-webui`, `chad-webui-mcp`, `chad-experiment`). Lets fixes deploy without touching root-RO `/usr/local/bin/` in the image. |
