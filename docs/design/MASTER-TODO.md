@@ -49,17 +49,11 @@ Order: test everything in Square sandbox with test users → fix → switch to p
 - [x] C1. Schedule the premium allowlist bridge (`sync-premium-allowlist.sh`, every 15 min,
       launchd). Today paid users never become premium.
 - [x] C2. Atomic credit consume — already D1 (`a06787d`).
-- [~] C6. supachad-landing (10-20). supachad.com is the Workers static-assets Worker
-      `supachad-landing` (Workers Builds), not Pages.
-      - [x] #3 `.assetsignore` merged + live: `/README.md`, `/wrangler.toml`, `/.github/...` now return the SPA page.
-      - [x] #2 Worker source under `api/` merged; deployed 05:40Z from main.
-      - [ ] #4 merged into `chore/api-on-main` AFTER #2 had merged → webhook fixes never reached
-            main; the 05:40 deploy is still the old buggy code and D1 has no square_payments.
-            Re-landed as PR #5 [U: merge, then `git pull` and
-            `cd api && wrangler d1 migrations apply supachad --remote && wrangler deploy`].
-      - [ ] PR #6 removes the dead deploy-landing workflow + fixes README [U: merge].
-      - [x] #1 closed. Branches deleted (archive/* tags for the 2 with unique commits);
-            Oct-6 stash dropped. Delete `fix/square-webhook-hardening` after #5 merges.
+- [x] C6. supachad-landing cleaned up (10-20). supachad.com is the Workers static-assets
+      Worker `supachad-landing` (Workers Builds); the API is `supachad-landing-api`, source in
+      `api/` on main. Merged #2, #3 (`.assetsignore`), #5 (webhook fixes; #4 had landed on a
+      dead branch), #6 (dead Pages workflow removed). Deployed 06:10Z; D1 has square_payments
+      (0001+0002 applied); live smoke tests pass. Only `main` remains (archive/* tags kept).
 - [x] C7. Signup + invite tested (local Worker): signup recorded, admin-only mint, single-use
       redeem. Gap: signup sends NO email and nothing mints invites automatically — an admin
       mints each one by hand (C12).
@@ -76,7 +70,7 @@ Order: test everything in Square sandbox with test users → fix → switch to p
       the sandbox account (harmless).
 - [ ] C12. Signup email + invite automation: send a confirmation and auto-mint (or queue for
       one-click approval) instead of hand-minting. Needs an email sender (Proton is down, D6).
-- [U] C3. Switch to Square production (prod token + signature key are already in host creds):
+- [U] C3. Switch to Square production — now unblocked (prod token + signature key in host creds):
       after PR merge, set SQUARE_ENV=production, prod location id, secrets, and
       production webhook (`/api/square/webhook/prod`) + its signature key. Only after C7–C9 pass.
 - [ ] C11. Live smoke test after C3: one real small payment end to end, then refund it [U: your card].
