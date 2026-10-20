@@ -49,7 +49,15 @@ Order: test everything in Square sandbox with test users → fix → switch to p
 - [x] C1. Schedule the premium allowlist bridge (`sync-premium-allowlist.sh`, every 15 min,
       launchd). Today paid users never become premium.
 - [x] C2. Atomic credit consume — already D1 (`a06787d`).
-- [~] C6. Worker source onto main under `api/` — supachad-landing PR #2 [U: review + merge].
+- [~] C6. supachad-landing branches (audited 10-20). Merge in this order [U]:
+      1. `fix/deploy-site-only` (local, `226458a`): supachad.com serves every repo file
+         (README.md, wrangler.toml, the workflow → 200); deploy only index.html + assets/.
+      2. PR #2 `chore/api-on-main`: the Worker source under `api/` with real KV/D1 ids.
+      3. `fix/square-webhook-hardening` (local, on top of #2): webhook fixes; then
+         `wrangler d1 migrations apply supachad --remote` + `cd api && wrangler deploy`.
+      4. Delete `feat/paywall-invite-api` (8 behind main; same worker.js as #2). The live Worker
+         was hand-deployed from it with the ids in an uncommitted Oct-6 stash.
+      5. Close PR #1 (Cloudflare bot, May): would move the site off Pages; unused.
 - [x] C7. Signup + invite tested (local Worker): signup recorded, admin-only mint, single-use
       redeem. Gap: signup sends NO email and nothing mints invites automatically — an admin
       mints each one by hand (C12).
