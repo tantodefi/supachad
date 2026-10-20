@@ -41,7 +41,7 @@ Last updated 2026-10-19 (evening).
 - [x] C1. Schedule the premium allowlist bridge (`sync-premium-allowlist.sh`, every 15 min,
       launchd). Today paid users never become premium.
 - [x] C2. Atomic credit consume — already D1 (`a06787d`).
-- [ ] C6. Move the Worker source from branch `feat/paywall-invite-api` onto main under `api/`.
+- [~] C6. Worker source onto main under `api/` — supachad-landing PR #2 [U: review + merge].
 - [U] C3. Square production webhook (`/api/square/webhook/prod`) + production keys live.
 - [U] C4. Cloudflare token with Access:Edit for invite auto-grant (`CF_ACCESS_READY=1`).
 - [U] C5. tjcooke OpenWebUI API key.
@@ -63,6 +63,6 @@ Last updated 2026-10-19 (evening).
       [U] push: the pre-push growth guardrail can't judge a fork merge (needs the user).
 - [ ] E2. #49 dependency sweep (gbrain, gstack, skills, deps).
 - [ ] E3. #47 skill review; #46 Smithers upgrade from 0.26.1.
-- [ ] E4. #45 runs.supachad.com link in the OWUI user menu.
+- [x] E4. #45 "Agent Runs" (runs.supachad.com) in the OWUI user menu, admins only (`menu-links.js`).
 - [ ] E5. #52 docs refresh for the merged/migrated stack.
 - [U] E6. supachad-docs: allow Actions to create PRs (repo setting).
