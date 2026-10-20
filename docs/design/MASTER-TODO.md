@@ -49,19 +49,17 @@ Order: test everything in Square sandbox with test users → fix → switch to p
 - [x] C1. Schedule the premium allowlist bridge (`sync-premium-allowlist.sh`, every 15 min,
       launchd). Today paid users never become premium.
 - [x] C2. Atomic credit consume — already D1 (`a06787d`).
-- [~] C6. supachad-landing branches (audited 10-20). supachad.com is the Workers static-assets
-      Worker `supachad-landing` (Workers Builds, root wrangler.toml, assets "."), NOT Pages: the
-      GitHub deploy-landing workflow targets a nonexistent Pages project and skips (no token).
-      Merge in this order [U — merges/deploys need you]:
-      1. PR #3 `.assetsignore` allowlist: every repo file is public (README.md, wrangler.toml,
-         workflow → 200). Tested with wrangler dev. Verify on supachad.com after merge.
-      2. PR #2 Worker source under `api/` (identical to the live hand-deployed bundle; settings
-         and bindings match).
-      3. PR #4 webhook fixes (stacked on #2), then
-         `cd api && wrangler d1 migrations apply supachad --remote && wrangler deploy`.
-      4. Delete `feat/paywall-invite-api` after #2 merges; drop the Oct-6 stash (ids now in #2).
-      - [x] PR #1 (Cloudflare bot wrangler.jsonc) closed with a note.
-      - [ ] Delete or fix the dead deploy-landing workflow.
+- [~] C6. supachad-landing (10-20). supachad.com is the Workers static-assets Worker
+      `supachad-landing` (Workers Builds), not Pages.
+      - [x] #3 `.assetsignore` merged + live: `/README.md`, `/wrangler.toml`, `/.github/...` now return the SPA page.
+      - [x] #2 Worker source under `api/` merged; deployed 05:40Z from main.
+      - [ ] #4 merged into `chore/api-on-main` AFTER #2 had merged → webhook fixes never reached
+            main; the 05:40 deploy is still the old buggy code and D1 has no square_payments.
+            Re-landed as PR #5 [U: merge, then `git pull` and
+            `cd api && wrangler d1 migrations apply supachad --remote && wrangler deploy`].
+      - [ ] PR #6 removes the dead deploy-landing workflow + fixes README [U: merge].
+      - [x] #1 closed. Branches deleted (archive/* tags for the 2 with unique commits);
+            Oct-6 stash dropped. Delete `fix/square-webhook-hardening` after #5 merges.
 - [x] C7. Signup + invite tested (local Worker): signup recorded, admin-only mint, single-use
       redeem. Gap: signup sends NO email and nothing mints invites automatically — an admin
       mints each one by hand (C12).
