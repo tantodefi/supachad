@@ -58,6 +58,10 @@ Who the operator is (hand-written, authoritative — never contradict it):
 
 Below are chat transcripts between {who} and Chad. Extract only what the transcripts
 actually show. Ignore automated/system chatter, error messages and empty replies.
+
+Facts about {who} come ONLY from the "User" turns — what {who} actually wrote. Chad's
+turns are shortened context: Chad often guesses wrongly who it is talking to, so never
+take a profile fact, preference or project from a Chad turn that {who} did not state.
 Never include passwords, API keys, tokens or other secrets.
 
 Operators often work on other people's projects (a client's business, a friend's
@@ -80,6 +84,24 @@ def log(msg):
 
 def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
+
+
+ASSISTANT_KEEP = 300
+
+
+def trim_assistant(body):
+    """Shorten Chad's turns: they are context, not evidence about the operator."""
+    parts = re.split(r"(?m)^(## \d+\. (?:User|Assistant)\b.*)$", body)
+    out = [parts[0]]
+    for head, text in zip(parts[1::2], parts[2::2]):
+        if " Assistant" in head:
+            text = text.strip()
+            if len(text) > ASSISTANT_KEEP:
+                text = text[:ASSISTANT_KEEP].rstrip() + " …"
+            head = head.replace("Assistant", "Chad (context only)", 1)
+            text = "\n" + text + "\n\n"
+        out += [head, text]
+    return "".join(out)
 
 
 def frontmatter(text):
@@ -140,7 +162,8 @@ def parse(text):
 CONSOLIDATE = """Below are notes an assistant keeps about the operator {who}, grouped by category,
 oldest first. Who {who} is (authoritative): {identity}
 Move any "profile"/"preferences" note that actually describes someone else's business
-or project into "ongoing_work", phrased as work {who} is doing for them. Many say the same thing in different words. Merge duplicates, keep
+or project into "ongoing_work", phrased as work {who} is doing for them. Drop any
+profile note that contradicts the authoritative description above. Many say the same thing in different words. Merge duplicates, keep
 the most specific wording, drop anything vague ("respond helpfully"), and when two
 notes conflict keep the newer one. Keep at most 8 per category, most important first.
 Return ONLY a JSON object with the same keys, each a list of strings.
@@ -253,7 +276,8 @@ def main():
         op = (meta.get("operator") or "").lower()
         if "@" not in op or (since and meta.get("updated_at", "") <= since):
             continue
-        body = re.sub(r"\n{3,}", "\n\n", body.replace("_(empty)_", "")).strip()
+        body = trim_assistant(body.replace("_(empty)_", ""))
+        body = re.sub(r"\n{3,}", "\n\n", body).strip()
         by_op.setdefault(op, []).append(f"### {meta.get('title', 'chat')} ({meta.get('updated_at', '')[:10]})\n{body[:PER_CHAT_CHARS]}")
 
     if not by_op:
