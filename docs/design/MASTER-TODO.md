@@ -49,15 +49,19 @@ Order: test everything in Square sandbox with test users → fix → switch to p
 - [x] C1. Schedule the premium allowlist bridge (`sync-premium-allowlist.sh`, every 15 min,
       launchd). Today paid users never become premium.
 - [x] C2. Atomic credit consume — already D1 (`a06787d`).
-- [~] C6. supachad-landing branches (audited 10-20). Merge in this order [U]:
-      1. `fix/deploy-site-only` (local, `226458a`): supachad.com serves every repo file
-         (README.md, wrangler.toml, the workflow → 200); deploy only index.html + assets/.
-      2. PR #2 `chore/api-on-main`: the Worker source under `api/` with real KV/D1 ids.
-      3. `fix/square-webhook-hardening` (local, on top of #2): webhook fixes; then
-         `wrangler d1 migrations apply supachad --remote` + `cd api && wrangler deploy`.
-      4. Delete `feat/paywall-invite-api` (8 behind main; same worker.js as #2). The live Worker
-         was hand-deployed from it with the ids in an uncommitted Oct-6 stash.
-      5. Close PR #1 (Cloudflare bot, May): would move the site off Pages; unused.
+- [~] C6. supachad-landing branches (audited 10-20). supachad.com is the Workers static-assets
+      Worker `supachad-landing` (Workers Builds, root wrangler.toml, assets "."), NOT Pages: the
+      GitHub deploy-landing workflow targets a nonexistent Pages project and skips (no token).
+      Merge in this order [U — merges/deploys need you]:
+      1. PR #3 `.assetsignore` allowlist: every repo file is public (README.md, wrangler.toml,
+         workflow → 200). Tested with wrangler dev. Verify on supachad.com after merge.
+      2. PR #2 Worker source under `api/` (identical to the live hand-deployed bundle; settings
+         and bindings match).
+      3. PR #4 webhook fixes (stacked on #2), then
+         `cd api && wrangler d1 migrations apply supachad --remote && wrangler deploy`.
+      4. Delete `feat/paywall-invite-api` after #2 merges; drop the Oct-6 stash (ids now in #2).
+      - [x] PR #1 (Cloudflare bot wrangler.jsonc) closed with a note.
+      - [ ] Delete or fix the dead deploy-landing workflow.
 - [x] C7. Signup + invite tested (local Worker): signup recorded, admin-only mint, single-use
       redeem. Gap: signup sends NO email and nothing mints invites automatically — an admin
       mints each one by hand (C12).
