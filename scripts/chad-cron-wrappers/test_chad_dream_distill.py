@@ -89,3 +89,15 @@ def _main():
 
 if __name__ == "__main__":
     raise SystemExit(_main())
+
+
+def test_trim_assistant_keeps_user_and_shortens_chad():
+    body = (
+        "# t\n\n## 1. User — 2026-05-13T03:32:10Z\n\nso what is the best way to launch a substack\n\n"
+        "## 2. Assistant — 2026-05-13T03:32:10Z\n\n" + "your Skool community " * 50 + "\n"
+    )
+    out = d.trim_assistant(body)
+    assert "so what is the best way to launch a substack" in out
+    assert "## 2. Chad (context only)" in out
+    assert "Assistant" not in out
+    assert len(out) < len(body) - 500
