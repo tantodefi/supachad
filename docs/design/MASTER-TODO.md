@@ -3,133 +3,88 @@
 
 # Chad master todo
 
-Single list of everything open on Chad/supachad. Ordered by what unblocks what.
-Status: `[ ]` open · `[~]` in progress · `[x]` done · `[U]` needs the user.
-Last updated 2026-10-20 (morning).
+Single list of everything open on Chad/supachad, consolidated 2026-10-24.
+Status: `[ ]` open (Claude) · `[~]` in progress · `[U]` needs the user · `[x]` done.
+Finished work is in "Done" at the bottom and in git history.
 
-## A. Memory + gbrain
+## 1. Needs the user (blocking, in order)
 
-- [x] A1. Re-apply vector(2048) migration after the 10-19 wipe (`~/fix-gbrain-dims.sh`).
-- [x] A2. Re-embed; 100% coverage (re-done after the second wipe).
-- [x] A3. Durable dims fix (`gbrain-dims` in recover): a fresh `gbrain init` must create vector(2048) with no HNSW, so a
-      wipe never needs a manual migration. Patch gbrain's schema in the image + a `chad-ops
-      gbrain-dims` self-heal step in `recover`.
-- [x] A4. Dream distillation (`chad-dream-distill`, shim injects `<slug>.context.md`): nightly dream only lists changed slugs. Add an LLM step that
-      turns the day's chats/notes into actionable work-memories + per-operator context
-      (tantodefi, tjcooke) as gbrain pages.
-- [x] A5. Re-enable memory-lancedb (auto-recall + autoCapture) with the NVIDIA embedder and
-      memory-wiki. active-memory stays off: it is a blocking sub-agent before every reply.
-- [U] A6. The `-0313` "Starting Strength" series is really *Ferocious Fitness*: re-imported
-      under the right name; run `~/fix-ff-mislabel.sh` to delete the mislabeled originals.
-- [x] A7. Stale chat pages resurrected by restore → `chad-ops chat-prune` (now in recover).
-- [x] A8. Distilled context mixed operators. Cause: the chats were from tantodefi's account, but
-      Chad's *replies* assumed he was the coach ("your Skool community") and the distiller took
-      those guesses as facts. Fixed (`84ad6c43c0`): facts only from the user's own turns; Chad's
-      turns trimmed and context-only. Re-distilled 10-20: profile correct, coaching facts gone.
-- [ ] A9. "Open requests" in the distilled context lists finished one-off asks (trivia, kids' art).
-      Tighten the prompt: only asks Chad hasn't completed.
+- [U] U1. Push `chad-dev` (~107 local commits incl. the Oct-19 upstream merge) and the tag
+      `pin/pi-qualification-2be64a15`. The pre-push growth guardrail can't judge a fork merge;
+      Claude is not allowed to skip it. Blocks: CI on chad-dev, and the weekly upstream sync
+      (it builds on `origin/chad-dev` and runs the pushed version of its own fixes).
+      `git push --no-verify origin chad-dev` ·
+      `git push --no-verify origin 2be64a15ee2e3afd769b7a5dacccab893eba3aed:refs/tags/pin/pi-qualification-2be64a15`
+- [U] U2. supachad-landing PR #7 (premium = $15 CAD/month subscription): merge, then
+      `git pull && cd api && wrangler deploy`. Claude then adds subscription events to the
+      sandbox webhook and runs a live sandbox subscription.
+- [U] U3. Run `~/fix-ff-mislabel.sh` (deletes the 313 mislabeled "Starting Strength" pages).
+- [U] U4. supachad-docs PR #2 (daily docs sync, open since 10-15): review + merge; its preview
+      deploy waits on "Approve and run" every day because a bot opened the PR.
+- [U] U5. Production cutover #44, with you present. Bundle: raise Docker VM memory (8 GB,
+      shared with WordPress/OWUI; a Docker restart wipes the pod anyway); Proton CAPTCHA once
+      (email is down until then — U5 is the only fix); fixed proton-tool-bin must be in the
+      image before the sandbox is created.
+- [U] U6. Square production: after U2 — `api/scripts/square-subscription-plan.sh production`,
+      prod `SQUARE_SUBSCRIPTION_PLAN_ID` + location id, `SQUARE_ENV=production`, secrets;
+      prod webhook with payment.*, refund.*, subscription.created/updated,
+      invoice.payment_made. Then one real small payment + refund (your card). Then point the
+      sandbox webhook away from the live Worker.
+- [U] U7. Signup email: pick an email sender for the Worker (Resend / Postmark / CF Email) —
+      Proton is down and isn't a transactional sender. Unblocks C12.
+- [U] U8. Cloudflare API token with Access:Edit (`CF_ACCESS_READY=1`) so paid/invited users are
+      let through Cloudflare Access automatically.
+- [U] U9. Decisions: (a) retire or enable the shadow Smithers workflows (bug-report files
+      issues, self-improve tunes crons, skill-improve files enhancements) — today they only
+      log "would do"; (b) E8: delete the 13 stale generated `nemoclaw-*` skills + adopt
+      upstream's CLAUDE.md; (c) D5 chad-state repo owner (tantodefi vs Supachad);
+      (d) tjcooke's OpenWebUI API key.
 
-## B. Reliability (the 10-19 wipe)
+## 2. Claude — now (in order)
 
-- [ ] B1. OOM headroom: Docker VM is 8 GB shared with WordPress + chad-next + OWUI. Stop the
-      idle chad-next staging container; raise Docker VM memory at the next planned Docker
-      restart [U: a Docker restart restarts the cluster → pod wipe; do it with the cutover].
-- [x] B2. Backup skips the brain export when the database is unchanged.
-- [x] B7. Inference route timeout 60s → 300s (long calls returned 503); enforced in recover.
-- [x] B8. `autorecover` launchd job (10 min); heals shadow :8080 gateway + rotated handshake.
-- [x] B3. recover: cron-reload after gateway restart; crons `--no-deliver`.
-- [x] B4. Backup engine + 4 scripts were never deployed (not in manifest) → added.
-- [x] B5. Backup PUT retry with sha refetch + GitHub error text.
-- [x] B6. Docker image cleanup (84.5 → 22.1 GB).
+- [~] N1. Upstream: merge upstream/main (49 commits, clean) into local chad-dev and run the
+      baseline-vs-merge test comparison, as on 10-19. Ships with U1.
+- [ ] N2. Catch up memory after the 4-day model outage: run the distill + embed chain once.
+- [ ] N3. E5 docs refresh: runbooks for today's changes (model, upstream sync worktree,
+      Smithers gates, premium subscription, premium sync removal).
+- [ ] N4. D2 serving path chad-shim → container gateway, prepared on chad-next with its crons
+      disabled (cron-reload now skips while the pod runs). Cutover prep for U5.
+- [ ] N5. D1 leftovers: the 4 presets rejected on chad-next (agent-browser, github-tools,
+      openclaw-bundled, session-logs) — only appliable after the pod cluster stops (U5).
+- [ ] C12. Signup → confirmation email + invite (auto-mint or one-click approve). After U7/U8.
 
-## C. Paywall / onboarding
+## 3. Watch
 
-Order: test everything in Square sandbox with test users → fix → switch to production → re-test live.
+- New doctor check sends a real completion (the 10-20 model withdrawal went unnoticed 4 days).
+- Weekly upstream sync, Mondays 09:00, now in `~/.nemoclaw/worktrees/upstream-sync`.
+- NemoClaw `main` "Check cloudflared Release Pin" fails until upstream bumps 2026.10.1
+  (upstream's automation; comes with the sync).
 
-- [x] C1. Schedule the premium allowlist bridge (`sync-premium-allowlist.sh`, every 15 min,
-      launchd). Today paid users never become premium.
-- [x] C2. Atomic credit consume — already D1 (`a06787d`).
-- [x] C6. supachad-landing cleaned up (10-20). supachad.com is the Workers static-assets
-      Worker `supachad-landing` (Workers Builds); the API is `supachad-landing-api`, source in
-      `api/` on main. Merged #2, #3 (`.assetsignore`), #5 (webhook fixes; #4 had landed on a
-      dead branch), #6 (dead Pages workflow removed). Deployed 06:10Z; D1 has square_payments
-      (0001+0002 applied); live smoke tests pass. Only `main` remains (archive/* tags kept).
-- [x] C7. Signup + invite tested (local Worker): signup recorded, admin-only mint, single-use
-      redeem. Gap: signup sends NO email and nothing mints invites automatically — an admin
-      mints each one by hand (C12).
-- [x] C8. Free tier tested (live OWUI filter source vs local Worker): daily cap blocks with the
-      upgrade CTA, admins/premium model exempt, credit users count down then fall back to the
-      cap. There are no starter credits by design (free = 50 msgs/day). Free users on the `chad`
-      model are stopped by the shim operator gate.
-- [x] C9. Square sandbox tested end to end (`api/test/run-sandbox-e2e.sh`, 32 checks). Found and
-      fixed 4 bugs (supachad-landing `1f9ca8e`, branch `fix/square-webhook-hardening` on PR #2):
-      duplicate webhooks doubled credits; ANY payment at the location granted premium; amount
-      never checked; refunds ignored. Old code fails 11 checks. [U: review + merge, then
-      `wrangler d1 migrations apply supachad --remote` + deploy.]
-- [x] C10. Test data was local only (throwaway D1/KV, deleted); Square sandbox objects remain in
-      the sandbox account (harmless).
-- [ ] C12. Signup email + invite automation: send a confirmation and auto-mint (or queue for
-      one-click approval) instead of hand-minting. Needs an email sender (Proton is down, D6).
-- [~] C13. Premium = monthly subscription ($15 CAD default; was a one-off $5 = lifetime).
-      supachad-landing PR #7 [U: merge + `cd api && wrangler deploy`]: subscription checkout,
-      subscription/invoice webhooks → premium until paid-through (+3d grace), expiry on list/tier,
-      lifetime grants untouched; e2e 37/37 incl. a real sandbox subscription. Host sync now removes
-      lapsed subscribers it added, never hand-added operators (`a528670d99`, live via launchd).
-      For production: run `api/scripts/square-subscription-plan.sh production`, set the prod
-      SQUARE_SUBSCRIPTION_PLAN_ID, and subscribe the prod webhook to subscription.created,
-      subscription.updated, invoice.payment_made (+ payment.*, refund.*).
-- [x] C14. 16 e2e test emails had premium on LIVE: Square sandbox sent real webhooks for test
-      payments to the live Worker, whose old code granted premium to any buyer (bug fixed in #5);
-      the sync copied them into the operator allowlist. Deleted from KV + allowlist, gate-synced.
-      Note: while SQUARE_ENV=sandbox, sandbox test payments reach the live Worker — after go-live,
-      point the sandbox webhook elsewhere or disable it.
-- [U] C3. Switch to Square production — now unblocked (prod token + signature key in host creds):
-      after PR merge, set SQUARE_ENV=production, prod location id, secrets, and
-      production webhook (`/api/square/webhook/prod`) + its signature key. Only after C7–C9 pass.
-- [ ] C11. Live smoke test after C3: one real small payment end to end, then refund it [U: your card].
-- [U] C4. Cloudflare token with Access:Edit for invite auto-grant (`CF_ACCESS_READY=1`).
-- [U] C5. tjcooke OpenWebUI API key.
+## 4. Done
 
-## D. Migration to OpenShell 0.0.116 (container model)
+### 2026-10-24
 
-- [~] D1. #42 container-mode recover: runtime-bins, deploy-before-restore, shim relaunch,
-      honest doctor/gate-check done. Open: 4 presets rejected on chad-next (agent-browser,
-      github-tools, openclaw-bundled, session-logs); policy-sync only after the pod cluster stops.
-- [ ] D2. #43 serving path chad-shim → container gateway.
-- [U] D3. #44 production cutover (needs user present). Then: Proton re-login; re-check
-      OpenClaw operator identity → MCP/exec; lift the chad-webui fail-closed gate.
-- [x] D4. Pin tags pushed (`pin/v1-config-consumer-42a26d90`; `pin/pi-qualification-2be64a15` [U]).
-- [U] D5. #37 chad-state repo ownership (tantodefi vs Supachad).
-- [ ] D6. Proton email is DOWN: the pod's proton-tool-bin sends web-mail@5.0.36, Proton returns
-      422 "out of date". The fixed build (`79de3f0215`, PROTON_APP_VERSION override) can't be
-      swapped in: OpenShell fingerprints binaries at sandbox creation ("binary integrity check
-      failed", confirmed 10-20). Cache now holds the fixed build; it must be in place BEFORE the
-      sandbox is created at cutover (verify on chad-next). Then [U] solve Proton's CAPTCHA once.
-      doctor now flags it; skill docs no longer tell Chad to rebuild it (`c0dbec6304`).
-- [x] D7. chad-next exited on start: its newer OpenClaw ships memory-lancedb as an external
-      plugin; enabled-but-uninstalled → installs at boot, refuses ready, exits once (2nd start
-      works). memory-register now installs it first (`96d753e58c`). Also: restarted, chad-next ran
-      one of its 3 rehearsal crons beside live Chad (stopped after ~30 s; Proton broken there, so no
-      email) → cron-reload now skips while the pod runs. chad-next is stopped; before restarting
-      it for rehearsal, disable its crons (`openclaw cron list` → disable).
+- [x] NVIDIA withdrew `nemotron-3-super-120b-a12b` (~10-20): every reply + all 10 crons failed
+      for 4 days, no backup since 10-20. Route → `nemotron-3.5-super-vl-120b-a12b`; Chad's
+      defaults updated; doctor tests a real reply (`b46a07241b`). Backup current; crons verified.
+- [x] Token-optimize audit: 259 runs, 344 proposals, 0 applied; could not save anything (the
+      sandbox route forces one model; NVIDIA hosted isn't billed per token). Off the schedule.
+      Shadow workflows no longer raise approval gates; 17 pending gates cleared (`196cd82b3b`).
+- [x] Upstream sync job: runs in a dedicated worktree; clean merges no longer reported as
+      conflicts (`73ed9e41ef`; live after U1).
+- [x] Premium sync removes lapsed subscribers it added, never hand-added operators (`a528670d99`).
+- [x] 16 e2e test emails had premium on live (Square sandbox webhooks hit the old Worker code) —
+      removed from KV + allowlist.
 
-## E. Quality + docs
+### 2026-10-19 → 10-20
 
-- [~] E1. Upstream merged into chad-dev (`23b6f0510f`, 0 regressions vs baseline+upstream).
-      [U] push: the pre-push growth guardrail can't judge a fork merge (needs the user).
-- [~] E2. #49 deps: gstack 1.91.27 → 1.91.158 and Smithers 0.32 done; OpenClaw 2026.4.24 → 2026.10.x rides the cutover image; gbrain fork 0.14.2 unchanged.
-- [x] E3. #46 Smithers 0.26.1 → 0.32.0: scheduled experiments, mcp-health and fail-report runs
-      all green on 0.32 (errors in logs were the wipe window).
-- [x] E7. #47 skill review: every path/command in Chad's 5 skills checked against the pod.
-      proton-calendar told Chad to rebuild the tool at a path the policy denies → rewritten (D6).
-      budget.json was never backed up (wrong path in the backup list) → fixed (`33eb7b756d`).
-      The experiments ledger is created on first use and backed up. openwebui skill's 4
-      "not yet built" cron wrappers are labelled as suggestions.
-- [x] E4. #45 "Agent Runs" (runs.supachad.com) in the OWUI user menu, admins only (in `vm-panel.js`).
-- [~] E5. #52 docs refresh: runbooks fixed for the embed model/dims and budget path
-      (`72628e503d`). Design docs (MASTER-REVIEW, migration plan) are dated snapshots, left as-is.
-- [U] E8. Upstream #5699 retired docs-to-skills and the generated user skills; this fork still
-      carries 13 stale generated `nemoclaw-*` skills (already drifting from docs) and a CLAUDE.md
-      that tells agents to run the deleted generator (upstream's CLAUDE.md is now a link to
-      AGENTS.md). Decide: delete the 13 + adopt upstream's CLAUDE.md, or keep them hand-maintained.
-- [U] E6. supachad-docs: allow Actions to create PRs (repo setting).
+- Memory: gbrain vector(2048) + self-heal in recover; distiller (identity-anchored, user turns
+  only, open-requests = pending work); memory-lancedb on; chat-prune; FF re-import.
+- Reliability: autorecover (10 min) incl. shadow-:8080 + handshake heal; cron-reload order +
+  `--no-deliver`; backup manifest/retry/skip-unchanged; inference timeout 300 s; Docker images
+  84.5 → 22.1 GB; rehearsal sandbox runs no crons; memory-lancedb external-plugin install.
+- Paywall: premium-sync every 15 min; webhook hardening (once per payment, own checkout only,
+  amount check, refunds) live with D1 `square_payments`; site serves only index.html + assets
+  (`.assetsignore`); dead Pages workflow removed; landing branches cleaned (archive/* tags).
+- Skills/docs: proton skill fixed; budget.json backed up; runbooks (embed model, budget path).
+- Smithers 0.32; gstack 1.91.158; "Agent Runs" link in OWUI; chad-next startup cause found.
