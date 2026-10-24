@@ -45,11 +45,13 @@ shadows the cluster on `127.0.0.1:8080`. Then it checks:
 | Shim | `shim :8901 → 200` |
 | Gateway | `gateway listening :18789` (container mode: `:1879x`) |
 | Inference timeout | `inference timeout 300s` (the 60s default returns HTTP 503 on long replies) |
+| Inference | `inference answers (model route OK)`: a real completion through `inference.local`. A failure such as HTTP 404 `Function … Not found for account` means NVIDIA withdrew the configured model; check `openshell inference get` and switch with `openshell inference update --model <id>` |
 | gbrain | health score, page count, and embed coverage of 90% or more |
 | Binaries | `drift=0  absent=0` against `chad-deploy-manifest.txt` |
 | Allowlist gate | `allowlist gate armed (N operators)` |
 | Crons | 10 registered |
 | Proton | `proton-tool wrapper installed` |
+| Proton build | `proton-tool-bin is a current build` (the retired `web-mail@5.0.36` build is rejected by Proton and ships fixed only with a fresh sandbox) |
 | GitHub CLI | `gh authenticated (Supachad)` |
 | Skills | `skills.load.extraDirs` set |
 | OpenWebUI tools | `webui MCP server registered` |
