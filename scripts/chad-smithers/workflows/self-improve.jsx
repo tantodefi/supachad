@@ -130,7 +130,7 @@ export const workflow = smithers((ctx) => {
         <Task
           id="apply"
           output={outputs.apply}
-          needsApproval={!allSafe}
+          needsApproval={APPLY && !allSafe}
           sideEffect
           idempotencyKey={`selfimprove-apply-${new Date().toISOString().slice(0, 10)}`}
         >

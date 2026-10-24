@@ -120,7 +120,7 @@ export default smithers((ctx) => {
         <Task
           id="file"
           output={outputs.filed}
-          needsApproval={props.length > 0}
+          needsApproval={POST && props.length > 0}
           sideEffect
           idempotencyKey={`skillimprove-${new Date().toISOString().slice(0, 10)}`}
         >

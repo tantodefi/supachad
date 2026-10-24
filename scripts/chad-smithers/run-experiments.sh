@@ -110,25 +110,29 @@ else
   echo "run-experiments: no report at $REPORT to post" >&2
 fi
 
-# Model benchmark (tokenmaxxing): produces the per-(task-kind, model) scores that
-# feed the runs-IDE "Model × Task" matrix. SHADOW — never applies here
-# (CHAD_TOKENOPT_APPLY stays unset); any downgrade it proposes waits for operator
-# approval in the dashboard. Best-effort: a failure must not mask the run's rc.
-echo "run-experiments: running model benchmark (token-optimize, shadow)…" >&2
-# Smithers exit 3 = the run paused at its Approval gate (the expected outcome for
-# a shadow workflow — see `smithers up` "exit 3 = awaiting a decision, not a
-# failure"). Only a genuine non-zero-non-3 rc is a real failure worth logging.
-CHAD_TOKENOPT_APPLY='' "$SMITHERS" up workflows/token-optimize.jsx >/dev/null 2>&1
-trc=$?
-if [ "$trc" -ne 0 ] && [ "$trc" -ne 3 ]; then
-  echo "run-experiments: token-optimize benchmark non-fatal failure (rc=$trc)" >&2
+# Model benchmark (token-optimize) — OFF by default since 2026-10-24 (audit): in
+# 259 runs it proposed 344 downgrades and applied none, and it could not save
+# anything if it did. Chad's NVIDIA calls go through the sandbox inference route,
+# which rewrites every request to ONE configured model, so per-task model choices
+# never reach NVIDIA; NVIDIA-hosted inference is not billed per token; and its
+# candidate models have since been withdrawn. CHAD_RUN_TOKENOPT=1 runs it.
+if [ "${CHAD_RUN_TOKENOPT:-}" = "1" ]; then
+  echo "run-experiments: running model benchmark (token-optimize, shadow)…" >&2
+  CHAD_TOKENOPT_APPLY='' "$SMITHERS" up workflows/token-optimize.jsx >/dev/null 2>&1
+  trc=$?
+  # Smithers exit 3 = paused at its Approval gate, not a failure.
+  if [ "$trc" -ne 0 ] && [ "$trc" -ne 3 ]; then
+    echo "run-experiments: token-optimize benchmark non-fatal failure (rc=$trc)" >&2
+  fi
 fi
 
 # Reporting loop — ONCE daily (the 05:00 invocation only) so the benchmark loop
 # above can run 3x/day without spamming the approval queue. bug-report (own
 # failures → issues), self-improve (cron telemetry → tunings; needs
 # CHAD_SIGNAL_SSH for real signal), skill-improve (workflow enhancements). All
-# shadow + Approval-gated; each waits for operator sign-off before acting.
+# shadow: they only ask for approval (Moshi) when their apply/post flag is on,
+# because approving a shadow run changes nothing (164+57×3 unanswered gates by
+# 2026-10-24). Their "would do" results are in the runs UI.
 if [ "$(date +%H)" = "05" ]; then
   for wf in bug-report self-improve skill-improve; do
     echo "run-experiments: running $wf (shadow)…" >&2
