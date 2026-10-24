@@ -2,22 +2,23 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Sub-agent kind: fitness
-# Answers questions about strength training and mobility using two
+# Answers questions about strength training and mobility using three
 # reference books ingested into gbrain:
 #   - Starting Strength (Mark Rippetoe, 3rd ed.) — barbell fundamentals
 #   - Supple Leopard (Kelly Starrett) — mobility, movement prep, tissue care
+#   - Ferocious Fitness (Phil Ross & Marty Gallagher) — fighter strength and conditioning
 #
-# One-time setup: run chad-ingest-fitness-books.sh to load both books
-# into gbrain. After that, answers are free (no inference needed for
+# One-time setup: run chad-ingest-fitness-books.sh to load Starting Strength
+# and Supple Leopard into gbrain (Ferocious Fitness was imported separately, 2026-10-19). After that, answers are free (no inference needed for
 # pure recall). Falls back to fetching from archive.org if gbrain is empty.
 #
 # Routing heuristics (chad-route):
 #   squat, deadlift, bench, press, barbell, mobility, stretch, warmup,
-#   starting strength, supple leopard, rippetoe, starrett, lift, form,
+#   starting strength, supple leopard, ferocious fitness, rippetoe, starrett, gallagher, lift, form,
 #   programming, novice linear progression, hip hinge, brace, thoracic
 
 kind: fitness
-description: "Answer strength training and mobility questions using Starting Strength (Rippetoe) and Supple Leopard (Starrett) ingested into gbrain. Brain-first recall; falls back to archive.org if brain is empty."
+description: "Answer strength training and mobility questions using Starting Strength (Rippetoe), Supple Leopard (Starrett) and Ferocious Fitness (Ross & Gallagher) ingested into gbrain. Brain-first recall; falls back to archive.org if brain is empty."
 
 binary: /usr/local/bin/claude
 invocation: openclaw-agent
@@ -28,9 +29,11 @@ default_timeout: 300
 default_budget_tokens: 15000
 
 prompt_template: |
-  You are a fitness reference sub-agent. Your gbrain knowledge base holds two books ingested as chunks:
-    - Starting Strength (Rippetoe, 3rd ed.) → chunks titled "Starting Strength — chunk NNNN/0313"
+  You are a fitness reference sub-agent. Your gbrain knowledge base holds three books ingested as chunks:
+    - Starting Strength (Rippetoe, 3rd ed.) → chunks titled "Starting Strength — chunk NNNN/1030"
     - Supple Leopard (Starrett) → chunks titled "Supple Leopard — chunk NNNN/0677"
+    - Ferocious Fitness (Ross & Gallagher) → chunks titled "Ferocious Fitness (Ross & Gallagher) — chunk NNNN/0313"
+  Only these three books are available. Name the book you quote; never attribute a chunk to a different book than its title says.
 
   ## MANDATORY STEPS — follow in order, no skipping
 
@@ -51,7 +54,7 @@ prompt_template: |
 
   ## FINAL LINE — must be the very last line of your output, valid JSON, nothing after it
 
-  {"status":"done","summary":"ONE_SENTENCE_SUMMARY","source":"supple-leopard|starting-strength|both"}
+  {"status":"done","summary":"ONE_SENTENCE_SUMMARY","source":"starting-strength|supple-leopard|ferocious-fitness|multiple"}
 
   ## TASK
 

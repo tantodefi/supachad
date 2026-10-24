@@ -56,7 +56,7 @@ export const ROUTE_PATTERNS = [
     "fitness",
     [
       /\b(squat|deadlift|bench press|overhead press|barbell|powerlifting|novice linear progression)\b/i,
-      /\b(starting strength|supple leopard|rippetoe|starrett|hip hinge|brace|thoracic)\b/i,
+      /\b(starting strength|supple leopard|ferocious fitness|rippetoe|starrett|gallagher|hip hinge|brace|thoracic)\b/i,
       /\b(mobility|stretch|warmup|warm.?up|tissue|fascia|foam roll|lacrosse ball)\b/i,
       /\b(lift|lifting|form check|technique|cue|programming|sets?|reps?|load)\b/i,
     ],

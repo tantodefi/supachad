@@ -80,7 +80,7 @@ patterns = [
     ]),
     ("fitness", [
         r"\b(squat|deadlift|bench press|overhead press|barbell|powerlifting|novice linear progression)\b",
-        r"\b(starting strength|supple leopard|rippetoe|starrett|hip hinge|brace|thoracic)\b",
+        r"\b(starting strength|supple leopard|ferocious fitness|rippetoe|starrett|gallagher|hip hinge|brace|thoracic)\b",
         r"\b(mobility|stretch|warmup|warm.?up|tissue|fascia|foam roll|lacrosse ball)\b",
         r"\b(lift|lifting|form check|technique|cue|programming|sets?|reps?|load)\b",
     ]),
