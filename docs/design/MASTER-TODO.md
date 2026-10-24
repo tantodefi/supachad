@@ -9,7 +9,7 @@ Finished work is in "Done" at the bottom and in git history.
 
 ## 1. Needs the user (blocking, in order)
 
-- [U] U1. Push `chad-dev` (~115 local commits incl. the 10-19 and 10-24 upstream merges) and
+- [U] U1. Push `chad-dev` (161 commits ahead of origin, incl. the 10-19 and 10-24 upstream merges) and
       the tags `pin/pi-qualification-2be64a15` and `pin/pi-qualification-798f8f2c` (new pinned
       revision from upstream; repo checks need it reachable). The pre-push growth guardrail can't judge a fork merge;
       Claude is not allowed to skip it. Blocks: CI on chad-dev, and the weekly upstream sync
