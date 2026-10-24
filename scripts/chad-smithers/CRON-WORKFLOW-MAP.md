@@ -37,8 +37,8 @@ but a different job: watches spend vs proposes downgrades), `workspace-backup`
 
 `chad-mcphealth` → `mcp-health-probe.jsx` (hourly), `chad-logdigest` →
 `log-digest.jsx` (6h), `chad-failreport` → `fail-only-report.jsx` (hourly),
-`bug-report.jsx` (via run-experiments @05:00), `token-optimize.jsx` (nightly
-shadow), plus pure infra with no workflow: `chad-runs-ui`, `chad-models-refresh`,
+`bug-report.jsx` (via run-experiments @05:00), `token-optimize.jsx` (off since
+2026-10-24, see `docs/design/SMITHERS-GATES-AUDIT-2026-10.md`), plus pure infra with no workflow: `chad-runs-ui`, `chad-models-refresh`,
 `chad-gateway-watchdog`, `chad-tunnel`(+watchdog), `chad-shim-watchdog`,
 `chad-inbox-prune`, `chad-spawn-poll`, `chad-webui-ingest`.
 
