@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Cutover #44: replaces dev.nemoclaw.chad-tunnel (ssh -L into the k3s pod). Forwards
+     127.0.0.1:8901 (chad-shim) and :18789 (gateway) to the container sandbox over the
+     OpenShell gateway. Install only after the pod cluster is stopped:
+       launchctl unload -w ~/Library/LaunchAgents/dev.nemoclaw.chad-tunnel.plist
+       cp this file to ~/Library/LaunchAgents/ && launchctl load -w <that path> -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.nemoclaw.chad-tunnel-container</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/r/.nemoclaw/source/scripts/openwebui/chad-tunnel-container.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>CHAD_SANDBOX</key><string>chad</string>
+  </dict>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/r/.nemoclaw/openwebui/chad-tunnel-container.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/r/.nemoclaw/openwebui/chad-tunnel-container.err.log</string>
+</dict>
+</plist>
