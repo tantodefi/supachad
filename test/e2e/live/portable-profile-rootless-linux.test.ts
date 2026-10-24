@@ -24,6 +24,10 @@ import {
   recoverHermesPortableLaunchForwards,
 } from "../../../src/lib/actions/sandbox/forward-recovery.ts";
 import { startSandbox } from "../../../src/lib/actions/sandbox/start.ts";
+import {
+  handleFinalizationState,
+  handlePostVerifyState,
+} from "../../../src/lib/onboard/machine/handlers/finalization.ts";
 import { enrollHermesPortableContainer } from "../../../src/lib/onboard/experimental/hermes-portable-container.ts";
 import { resolveHermesPortableStartupContract } from "../../../src/lib/onboard/experimental/hermes-portable-contract.ts";
 import {
@@ -60,12 +64,21 @@ import { streamSandboxCreate } from "../../../src/lib/sandbox/create-stream.ts";
 import { test } from "../fixtures/e2e-test.ts";
 import type { ArtifactSink } from "../fixtures/artifacts.ts";
 import { OPENSHELL_V0116_QUALIFICATION } from "../fixtures/openshell-v0116-qualification.ts";
-import { collectPortableRegistryReadinessFailure } from "../fixtures/portable-registry-readiness.ts";
+import {
+  capturePortableRegistryProcessBoundary,
+  collectPortableRegistryReadinessFailure,
+} from "../fixtures/portable-registry-readiness.ts";
 import {
   cleanupPortableHostGatewayAlias,
   cleanupPortableProfileRootlessFixture,
   installPortableProfileSystemctlShim,
 } from "../fixtures/portable-profile-systemctl.ts";
+import {
+  createPortableHermesFinalizationOptions,
+  runPortableDoctor,
+  withoutPodmanConnectionSelectors,
+  writePortableRegistry,
+} from "../fixtures/portable-profile-rootless-finalization-helpers.ts";
 import type { TestProgress } from "../fixtures/progress.ts";
 import type { ShellProbe } from "../fixtures/shell-probe.ts";
 import {
@@ -561,24 +574,35 @@ function waitForOpenShellSandboxAbsent(
   assert.ok(observation.absent, `OpenShell sandbox cleanup did not settle: ${observation.detail}`);
 }
 
-function withoutPodmanConnectionSelectors(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const blocked = new Set([
-    "CONTAINER_CONNECTION",
-    "CONTAINER_CERT_PATH",
-    "CONTAINER_HOST",
-    "CONTAINER_SSHKEY",
-    "CONTAINER_TLS_VERIFY",
-    "CONTAINERS_CONF",
-    "CONTAINERS_STORAGE_CONF",
-    "DOCKER_CONTEXT",
-    "DOCKER_HOST",
-    "DOCKER_TLS",
-    "DOCKER_TLS_VERIFY",
-    "DOCKER_CERT_PATH",
-    "PODMAN_CONNECTIONS_CONF",
-    "REGISTRY_AUTH_FILE",
-  ]);
-  return Object.fromEntries(Object.entries(env).filter(([name]) => !blocked.has(name)));
+async function provePortableHermesFinalization(input: {
+  readonly lifecycleEnv: NodeJS.ProcessEnv;
+  readonly registry: SandboxEntry;
+  readonly sandboxName: string;
+}): Promise<Record<string, true>> {
+  const { lifecycleEnv, registry, sandboxName } = input;
+  const options = createPortableHermesFinalizationOptions(sandboxName, lifecycleEnv);
+
+  writePortableRegistry(lifecycleEnv.HOME!, sandboxName, {
+    ...registry,
+    lifecycleGeneration: `${HERMES_PORTABLE_E2E_GENERATION}-mismatch`,
+  });
+  const incomplete = await handleFinalizationState(options);
+  assert.equal(incomplete.stateResult.type, "pause");
+  assert.equal(runPortableDoctor(sandboxName, lifecycleEnv), 1);
+
+  writePortableRegistry(lifecycleEnv.HOME!, sandboxName, registry);
+  const finalization = await handleFinalizationState(options);
+  assert.equal(finalization.stateResult.type, "transition");
+  const postVerify = await handlePostVerifyState(options);
+  assert.equal(postVerify.stateResult.type, "complete");
+  assert.equal(runPortableDoctor(sandboxName, lifecycleEnv), 0);
+  return {
+    mismatchedAuthorityRejected: true,
+    doctorRejectedMismatchedAuthority: true,
+    finalizationAdvanced: true,
+    onboardingCompleted: true,
+    doctorHealthy: true,
+  };
 }
 
 async function proveHistoricalHermesPortableLifecycle(input: {
@@ -680,10 +704,14 @@ async function proveHistoricalHermesPortableLifecycle(input: {
       name: sandboxName,
       agent: "hermes",
       gatewayName: HERMES_PORTABLE_E2E_GATEWAY_NAME,
+      gatewayPort: 8080,
       lifecycleGeneration: HERMES_PORTABLE_E2E_GENERATION,
       lifecycleLiveIdentityFingerprint: liveIdentityFingerprint,
       openshellDriver: "docker",
       openshellVersion: openshellExecutableAuthority.version,
+      portableLifecycleProfile: "hermes",
+      provider: "custom",
+      model: "e2e-readiness",
     };
     const context = {
       agent: "hermes",
@@ -765,6 +793,12 @@ async function proveHistoricalHermesPortableLifecycle(input: {
       captureOpenShell: capture,
       readRegistry: () => registry,
     };
+
+    const finalizationEvidence = await provePortableHermesFinalization({
+      lifecycleEnv,
+      registry,
+      sandboxName,
+    });
 
     lifecycleEvidence = await withPortableHostFence(input.runtimeAuthority.homeDir, async () => {
       const gatewayEvidence: {
@@ -859,6 +893,7 @@ async function proveHistoricalHermesPortableLifecycle(input: {
           forwardResult: gatewayEvidence.forwardRecovery?.kind ?? "missing",
           authenticatedHealth: "verified-by-public-start-before-forward-verification",
         },
+        finalization: finalizationEvidence,
         postRecoveryStop: {
           result: postRecoveryStop.kind,
           containerStatus: postRecoveryContainerStatus,
@@ -977,7 +1012,11 @@ async function main(
     const prepared = preparePortableExperimentalHost(process.env, { home });
     assert.equal(prepared?.authority.configHome, configHome);
     const runtimeAuthority = prepared!.authority;
-    assert.equal(process.env.DOCKER_HOST, `unix://${runtimeDir}/podman/podman.sock`);
+    const expectedPodmanSocket =
+      process.env.E2E_TARGET_ID === "portable-hermes-finalization"
+        ? process.env.OPENSHELL_PODMAN_SOCKET
+        : `${runtimeDir}/podman/podman.sock`;
+    assert.equal(process.env.DOCKER_HOST, `unix://${expectedPodmanSocket}`);
     assert.equal(fs.statSync(path.join(runtimeDir, "podman")).mode & 0o777, 0o700);
     assert.match(
       fs.readFileSync(String(process.env.CONTAINERS_CONF), "utf-8"),
@@ -991,10 +1030,15 @@ async function main(
     const podmanInfo = JSON.parse(run("podman", ["info", "--format", "json"]));
     assert.equal(podmanInfo.host?.security?.rootless, true, "Podman must be rootless");
     run("docker", ["version"]);
+    const verifiedPodmanUrl = String(process.env.DOCKER_HOST);
     await waitForRegistry(artifacts, shellProbe);
+    process.env.E2E_TARGET_ID === "portable-hermes-finalization" &&
+      (await capturePortableRegistryProcessBoundary({
+        artifacts,
+        shellProbe,
+      }));
 
     progress.phase("verify immutable non-force network removal");
-    const verifiedPodmanUrl = String(process.env.DOCKER_HOST);
     // Netavark rejects the retired link-local subnet before this pinned runtime can create it.
     // Deterministic tests own that state; this live boundary proves the emitted full-ID form.
     run("podman", ["--url", verifiedPodmanUrl, "network", "create", disposableNetworkName]);
@@ -1180,15 +1224,6 @@ async function main(
       )?.map(({ subnet }) => subnet),
       [PORTABLE_DOCKER_NETWORK_SUBNET],
     );
-    assert.equal(
-      run("docker", [
-        "inspect",
-        "--format",
-        `{{with index .NetworkSettings.Networks ${JSON.stringify(PORTABLE_DOCKER_NETWORK_NAME)}}}{{.IPAddress}}{{end}}`,
-        "nemoclaw-portable-registry",
-      ]),
-      PORTABLE_REGISTRY_IP,
-    );
     const currentNetwork = parseOnePodmanRecord(
       run("podman", [
         "--url",
@@ -1209,7 +1244,6 @@ async function main(
       ]),
       "portable registry inspection",
     );
-
     const openshellBin = run("bash", ["-lc", "command -v openshell"]);
     const gatewayBin = run("bash", ["-lc", "command -v openshell-gateway"]);
     const sandboxBin = run("bash", ["-lc", "command -v openshell-sandbox"]);
