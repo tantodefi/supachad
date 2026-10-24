@@ -9,12 +9,14 @@ Finished work is in "Done" at the bottom and in git history.
 
 ## 1. Needs the user (blocking, in order)
 
-- [U] U1. Push `chad-dev` (~107 local commits incl. the Oct-19 upstream merge) and the tag
-      `pin/pi-qualification-2be64a15`. The pre-push growth guardrail can't judge a fork merge;
+- [U] U1. Push `chad-dev` (~115 local commits incl. the 10-19 and 10-24 upstream merges) and
+      the tags `pin/pi-qualification-2be64a15` and `pin/pi-qualification-798f8f2c` (new pinned
+      revision from upstream; repo checks need it reachable). The pre-push growth guardrail can't judge a fork merge;
       Claude is not allowed to skip it. Blocks: CI on chad-dev, and the weekly upstream sync
       (it builds on `origin/chad-dev` and runs the pushed version of its own fixes).
       `git push --no-verify origin chad-dev` ·
       `git push --no-verify origin 2be64a15ee2e3afd769b7a5dacccab893eba3aed:refs/tags/pin/pi-qualification-2be64a15`
+      `git push --no-verify origin pin/pi-qualification-798f8f2c`
 - [U] U2. supachad-landing PR #7 (premium = $15 CAD/month subscription): merge, then
       `git pull && cd api && wrangler deploy`. Claude then adds subscription events to the
       sandbox webhook and runs a live sandbox subscription.
@@ -42,13 +44,10 @@ Finished work is in "Done" at the bottom and in git history.
 
 ## 2. Claude — now (in order)
 
-- [~] N1. Upstream: merge upstream/main (49 commits, clean) into local chad-dev and run the
-      baseline-vs-merge test comparison, as on 10-19. Ships with U1.
 - [ ] N2. Catch up memory after the 4-day model outage: run the distill + embed chain once.
-- [ ] N3. E5 docs refresh: runbooks for today's changes (model, upstream sync worktree,
-      Smithers gates, premium subscription, premium sync removal).
-- [ ] N4. D2 serving path chad-shim → container gateway, prepared on chad-next with its crons
-      disabled (cron-reload now skips while the pod runs). Cutover prep for U5.
+- [~] N4. D2 serving path: `chad-tunnel-container.sh` + plist (OpenShell `forward service` for
+      8901 and 18789→18791) written, not installed (`05bcf99f61`). Test at the cutover: starting
+      chad-next runs its missed crons at boot, so it isn't started beforehand.
 - [ ] N5. D1 leftovers: the 4 presets rejected on chad-next (agent-browser, github-tools,
       openclaw-bundled, session-logs) — only appliable after the pod cluster stops (U5).
 - [ ] C12. Signup → confirmation email + invite (auto-mint or one-click approve). After U7/U8.
@@ -63,6 +62,12 @@ Finished work is in "Done" at the bottom and in git history.
 ## 4. Done
 
 ### 2026-10-24
+
+- [x] N1. upstream/main (49 commits) merged into local chad-dev (`068948d748`): clean; tests
+      29,454 (+328), 17 failing before and after, 0 new (all 17 in upstream code and
+      environment-bound: ghcr base-image lookups, live gateway state in /tmp).
+- [x] N3. Docs: `docs/design/SMITHERS-GATES-AUDIT-2026-10.md`; chad-ops runbook lists the
+      inference and Proton-build doctor checks.
 
 - [x] NVIDIA withdrew `nemotron-3-super-120b-a12b` (~10-20): every reply + all 10 crons failed
       for 4 days, no backup since 10-20. Route → `nemotron-3.5-super-vl-120b-a12b`; Chad's
