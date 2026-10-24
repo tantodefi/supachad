@@ -160,7 +160,7 @@ cat <<'NEXT'
 
   # Optional NVIDIA fallback overrides:
   gh secret set NVIDIA_BASE_URL       --repo tantodefi/chad-state --body "https://integrate.api.nvidia.com/v1"
-  gh secret set NVIDIA_DEFAULT_MODEL  --repo tantodefi/chad-state --body "nvidia/nemotron-3-super-120b-a12b"
+  gh secret set NVIDIA_DEFAULT_MODEL  --repo tantodefi/chad-state --body "nvidia/nemotron-3.5-super-vl-120b-a12b"
 
   # Verify the workflow exists:
   gh workflow list --repo tantodefi/chad-state | grep agent-job

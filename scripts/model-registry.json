@@ -16,7 +16,7 @@
       "modality": ["text"],
       "_deprecated": "Removed from NVIDIA Endpoints catalog 2026-04-29 (returns 410 GONE on inference). Upstream NemoClaw PR #2735 dropped it from CLOUD_MODEL_OPTIONS. Entry retained for historical task-profiles inheritance comments."
     },
-    "nvidia/nemotron-3-super-120b-a12b": {
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": {
       "displayName": "Nemotron 3 Super 120B",
       "contextWindow": 262144,
       "maxOutputTokens": 32768,
@@ -127,7 +127,7 @@
     }
   },
   "defaults": {
-    "primary": "nvidia/nemotron-3-super-120b-a12b",
+    "primary": "nvidia/nemotron-3.5-super-vl-120b-a12b",
     "fallback": "google/gemma-3-4b",
     "outsource": "claude-opus-4-7",
     "unknownModel": { "contextWindow": 131072, "maxOutputTokens": 8192, "_note": "Conservative fallback for any model not explicitly listed — preflight/clamp use this so an unknown id is still bounded." }

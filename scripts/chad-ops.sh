@@ -679,6 +679,15 @@ cmd_doctor() {
   # shellcheck disable=SC2046
   itmo=$($(inference_gw_args) inference get 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk '/Gateway inference/{g=1} g && /Timeout:/{print $2; exit}' | tr -dc '0-9')
   [ "${itmo:-0}" -ge "$INFERENCE_TIMEOUT" ] && ok "inference timeout ${itmo}s" || warn "inference timeout ${itmo:-?}s < ${INFERENCE_TIMEOUT}s — long replies 503 (run: chad-ops inference-timeout)"
+  # A real completion through the sandbox route. NVIDIA withdrew the configured
+  # model on ~2026-10-20 (404 "Function … Not found for account"): every reply and
+  # cron failed for 4 days while the shim check above stayed green.
+  local inf
+  inf=$(sshp 'curl -s -m 120 https://inference.local/v1/chat/completions -H "content-type: application/json" -d "{\"model\":\"x\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the word ok.\"}],\"max_tokens\":4000}" -o /tmp/doctor-inf.json -w "%{http_code}"; grep -o "\"detail\":\"[^\"]\{0,80\}" /tmp/doctor-inf.json')
+  case "$inf" in
+    200*) ok "inference answers (model route OK)" ;;
+    *) bad "inference failing: HTTP ${inf} — model withdrawn? (openshell inference get; list: https://inference.local/v1/models)" ;;
+  esac
   # gbrain
   local gh
   # Health score alone passes an EMPTY brain (8/10 with 0 pages, 2026-10-14) —

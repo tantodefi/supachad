@@ -25,7 +25,7 @@
 #   NVIDIA_API_KEY     — codex / opencode fallback; reuses Chad's nvapi-* key
 #   ANTHROPIC_API_KEY  — claude (no fallback; Anthropic-only)
 #   NVIDIA_BASE_URL    — override (default: https://integrate.api.nvidia.com/v1)
-#   NVIDIA_DEFAULT_MODEL — override (default: nvidia/nemotron-3-super-120b-a12b)
+#   NVIDIA_DEFAULT_MODEL — override (default: nvidia/nemotron-3.5-super-vl-120b-a12b)
 #
 # Add via:
 #   gh secret set OPENAI_API_KEY     --repo tantodefi/chad-state --body "$KEY"
@@ -125,7 +125,7 @@ jobs:
           binary="${{ steps.manifest.outputs.binary }}"
           # Defaults for the NVIDIA fallback path
           nv_base="${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}"
-          nv_model="${NVIDIA_DEFAULT_MODEL:-nvidia/nemotron-3-super-120b-a12b}"
+          nv_model="${NVIDIA_DEFAULT_MODEL:-nvidia/nemotron-3.5-super-vl-120b-a12b}"
 
           provider=""; reason=""
           case "$binary" in

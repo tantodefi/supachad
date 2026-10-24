@@ -10,7 +10,7 @@
 //
 // ── The cost/capability reality (verified 2026-06-13) ───────────────────────
 //   • The "free Nemotron" is NVIDIA's HOSTED Nemotron 3 Super 120B
-//     (nvidia/nemotron-3-super-120b-a12b) at integrate.api.nvidia.com via
+//     (nvidia/nemotron-3.5-super-vl-120b-a12b) at integrate.api.nvidia.com via
 //     NVIDIA_API_KEY — a frontier-tier 120B MoE, reasoningSafe=true. The local
 //     chad-shim :8901 is just an OpenAI-compatible proxy in front of it.
 //   • The only truly LOCAL model is google/gemma-3-4b via lmstudio — offline
@@ -64,7 +64,7 @@
 //                             if present AND credits restored — API is 402 today).
 //
 // ── Model ids (NVIDIA hosted, OpenAI-compatible, free with NVIDIA_API_KEY) ──
-//   Super 120B  nvidia/nemotron-3-super-120b-a12b  (March 2026; cheap-tier default)
+//   Super 120B  nvidia/nemotron-3.5-super-vl-120b-a12b  (March 2026; cheap-tier default)
 //   Ultra 550B  nvidia/nemotron-3-ultra-550b-a55b  (Jun 4 2026; 55B active, hybrid
 //               Mamba-Transformer MoE, built for long-running agentic/tool-loop
 //               work — capable-tier default). Adopted 2026-06-13.
@@ -263,7 +263,7 @@ const backends = {
     const modelId =
       opts.model ||
       (opts.cheap
-        ? env.CHAD_NEMOTRON_MODEL || "nvidia/nemotron-3-super-120b-a12b"
+        ? env.CHAD_NEMOTRON_MODEL || "nvidia/nemotron-3.5-super-vl-120b-a12b"
         : env.CHAD_NEMOTRON_CAPABLE_MODEL || "nvidia/nemotron-3-ultra-550b-a55b");
     // Tier-aware reasoning. CHEAP → OFF (fast; leaves the whole token budget for
     // the answer — reasoning-on previously ate the 2048 cap → EMPTY answers).
