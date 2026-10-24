@@ -24,4 +24,22 @@ if [ -z "$tok" ]; then
 fi
 export GH_TOKEN="$tok"
 
-exec "$here/chad-upstream-sync.sh" "$@"
+# Run in a dedicated worktree, never in the working checkout: the sync script
+# refuses a dirty tree (it skipped 2026-10-19 because a session had edits open)
+# and `git checkout -b`s its sync branch, which would switch branches under
+# whoever is working there. The worktree is reset to origin/chad-dev each run.
+repo="$(cd "$here/.." && pwd)"
+wt="${CHAD_UPSTREAM_SYNC_WORKTREE:-$HOME/.nemoclaw/worktrees/upstream-sync}"
+git -C "$repo" fetch --quiet origin
+if [ ! -e "$wt/.git" ]; then
+  mkdir -p "$(dirname "$wt")"
+  git -C "$repo" worktree add --quiet --detach "$wt" origin/chad-dev
+fi
+git -C "$wt" checkout --quiet --detach --force origin/chad-dev
+git -C "$wt" clean -fdq -e node_modules
+# Let the gate (make check) use the main checkout's installed dependencies.
+[ -e "$wt/node_modules" ] || ln -s "$repo/node_modules" "$wt/node_modules"
+# .gitignore's `node_modules/` only matches a directory; the symlink is a file.
+ex="$(git -C "$wt" rev-parse --git-path info/exclude)"
+grep -qx '/node_modules' "$ex" 2>/dev/null || echo '/node_modules' >>"$ex"
+exec "$wt/scripts/chad-upstream-sync.sh" "$@"

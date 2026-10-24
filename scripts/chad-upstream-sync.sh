@@ -70,7 +70,10 @@ log "${UPSTREAM_REF} is ${behind} commit(s) ahead of origin/${BASE_BRANCH}"
 git checkout --quiet -b "${SYNC_BRANCH}" "origin/${BASE_BRANCH}"
 
 conflict=0
-if git merge --no-edit --no-ff "${UPSTREAM_REF}"; then
+# --no-verify: only for this automatic merge commit. prek's commit-msg hook can't
+# find COMMIT_EDITMSG inside a worktree (the cron runs in one), which made every
+# clean merge look like a conflict (2026-10-24). The PR still runs CI.
+if git merge --no-verify --no-edit --no-ff "${UPSTREAM_REF}"; then
   log "clean merge"
 else
   conflict=1
