@@ -211,7 +211,7 @@ export default smithers((ctx) => {
         <Task
           id="apply"
           output={outputs.apply}
-          needsApproval={proposeCount > 0}
+          needsApproval={APPLY && proposeCount > 0}
           sideEffect
           idempotencyKey={`tokenopt-apply-${new Date().toISOString().slice(0, 10)}`}
         >

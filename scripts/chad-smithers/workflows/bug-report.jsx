@@ -242,7 +242,7 @@ export default smithers((ctx) => {
         <Task
           id="post"
           skipIf={!hasSignal}
-          needsApproval={fresh.length > 0}
+          needsApproval={POST && fresh.length > 0}
           output={outputs.report}
           sideEffect
           idempotencyKey={`bugpost-${new Date().toISOString().slice(0, 10)}`}
