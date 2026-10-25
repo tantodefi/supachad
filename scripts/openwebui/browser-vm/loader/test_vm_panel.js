@@ -20,7 +20,7 @@ const { spawnSync } = require("child_process");
 // ── Parent: fan out one child per mode so global stubs never leak between ──
 if (!process.env.BV_TEST_CHILD) {
   let bad = 0;
-  for (const mode of ["mock", "cheerpx", "nocheerpx"]) {
+  for (const mode of ["mock", "cheerpx", "nocheerpx", "gate-deny", "gate-allow"]) {
     console.log("\n═══ mode: " + mode + " ═══");
     const r = spawnSync(process.execPath, [__filename, mode, ...process.argv.slice(2)], {
       env: { ...process.env, BV_TEST_CHILD: "1" },
@@ -41,7 +41,7 @@ if (!process.env.BV_TEST_CHILD) {
 // full suite with the mock escape hatch set — so a typo in the fan-out list
 // would have quietly tested the wrong adapter and reported green.
 const MODE = process.argv[2];
-if (!["mock", "cheerpx", "nocheerpx"].includes(MODE)) {
+if (!["mock", "cheerpx", "nocheerpx", "gate-deny", "gate-allow"].includes(MODE)) {
   console.error("unknown mode: " + JSON.stringify(MODE));
   process.exit(2);
 }
@@ -366,6 +366,7 @@ global.MutationObserver = class {
   }
 };
 global.window = {
+  __BROWSER_VM_SKIP_GATE: true, // the operator gate is covered by test_vm_panel_gate.js
   innerWidth: 1280,
   innerHeight: 800,
   matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
@@ -844,6 +845,11 @@ async function main() {
   // mode runs its own suite and stops here.
   if (MODE === "nocheerpx") {
     await noCheerpXMode();
+    report();
+    return;
+  }
+  if (MODE === "gate-deny" || MODE === "gate-allow") {
+    await gateMode(MODE === "gate-allow");
     report();
     return;
   }
@@ -1762,6 +1768,36 @@ async function main() {
 
   // ── Report ──────────────────────────────────────────────────────────────────
   report();
+}
+
+// Operator gate: the real IIFE with the gate ON. /api/v1/terminals/ returns []
+// (no terminal grant) or one terminal; only the latter may start the panel.
+async function gateMode(allowed) {
+  delete global.window.__BROWSER_VM_SKIP_GATE;
+  global.window.__BROWSER_VM_FORCE_MOCK = true;
+  localStorage.setItem("token", "jwt-test");
+  const realFetch = global.fetch;
+  global.fetch = async (url, opts) => {
+    if (String(url).endsWith("/api/v1/terminals/")) {
+      global.fetchCalls.push({ url: String(url), opts });
+      const list = allowed ? [{ id: "docker-term", name: "Docker Terminal" }] : [];
+      return { ok: true, status: 200, async json() { return list; }, async text() { return ""; } };
+    }
+    return realFetch(url, opts);
+  };
+  new Function(src)();
+  await drain(50);
+  const asked = global.fetchCalls.find((c) => c.url.endsWith("/api/v1/terminals/"));
+  check("gate asks the server which terminals this user may use", !!asked);
+  check("gate sends the session token", asked && asked.opts.headers.Authorization === "Bearer jwt-test");
+  const bar = body.querySelector("#bv-vmbar");
+  if (allowed) {
+    check("operator: the terminal bar is shown", !!bar);
+    check("operator: the relay socket connects", sockets.length > 0, "sockets=" + sockets.length);
+  } else {
+    check("non-operator: no terminal bar", !bar);
+    check("non-operator: no relay socket opened", sockets.length === 0, "sockets=" + sockets.length);
+  }
 }
 
 // Shared exit path, so the nocheerpx mode reports exactly like the others.

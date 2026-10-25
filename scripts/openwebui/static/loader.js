@@ -3047,10 +3047,41 @@
     window.__owuiVm.reconnect = connectRelay;
   }
 
+  // ── Access gate ────────────────────────────────────────────────────────
+  // The terminal (bar, dock, VM, relay socket) is for the operators only. The
+  // server decides: start only when /api/v1/terminals/ lists a terminal this
+  // user may use (the terminal access grants in OpenWebUI's admin settings).
+  // Everyone else gets nothing: no bar, no dock, no relay connection. Waits up
+  // to 30 s for OpenWebUI to store the session token after the SSO sign-in.
+  async function terminalAllowed() {
+    for (let i = 0; i < 30; i++) {
+      const token = localStorage.getItem("token");
+      if (token) {
+        try {
+          const r = await fetch("/api/v1/terminals/", { headers: { Authorization: "Bearer " + token } });
+          if (!r.ok) return false;
+          const list = await r.json();
+          return Array.isArray(list) && list.length > 0;
+        } catch (e) {
+          return false;
+        }
+      }
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    return false;
+  }
+
+  function gatedStart() {
+    if (window.__BROWSER_VM_SKIP_GATE) return start(); // headless smoke test: stay synchronous
+    terminalAllowed().then((ok) => {
+      if (ok) start();
+    });
+  }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start);
+    document.addEventListener("DOMContentLoaded", gatedStart);
   } else {
-    start();
+    gatedStart();
   }
 })();
 

@@ -12,6 +12,10 @@
 #              model, with OpenWebUI per-user memory (each account's memories are
 #              its own). Free and paid signups both land here.
 #   others     the curated open models: public.
+#   terminals  the Docker Terminal + Browser VM (a root shell on the internal
+#              network that can reach the chad shim) — operators only. The
+#              injected terminal UI (vm-panel.js) shows only when the server
+#              lists a terminal for the user, so this also hides the hover bar.
 #
 # Model visibility needs BYPASS_MODEL_ACCESS_CONTROL=False on the container (see
 # docker-compose.yml). Grants are applied first, so flipping it never hides
@@ -124,6 +128,21 @@ class Tiers:
             self.change(f"config {key} -> {value!r}", "INSERT INTO config (key, value, updated_at) VALUES (?,?,?)",
                         (key, json.dumps(value), now()))
 
+    def terminals(self, op_ids: list[str]) -> None:
+        row = self.con.execute("SELECT value FROM config WHERE key = 'terminal_server.connections'").fetchone()
+        conns = json.loads(row[0]) if row else []
+        want = [{"permission": "read", "principal_type": "user", "principal_id": u} for u in sorted(op_ids)]
+        changed = False
+        for c in conns:
+            cur = sorted(((g.get("principal_type"), g.get("principal_id")) for g in (c.get("config") or {}).get("access_grants") or []))
+            if cur != sorted(("user", u) for u in op_ids):
+                c.setdefault("config", {})["access_grants"] = want
+                changed = True
+                self.drift.append(f"terminal {c.get('id')} -> operators only")
+        if changed and not self.check:
+            self.con.execute("UPDATE config SET value=?, updated_at=? WHERE key='terminal_server.connections'",
+                             (json.dumps(conns), now()))
+
     def operator_pins(self, op_ids: list[str]) -> None:
         # Operators keep Chad as their pinned/default model; the site default is chad-lite.
         for uid in op_ids:
@@ -155,6 +174,7 @@ def main() -> int:
         t.config("ui.default_pinned_models", LITE)
         t.config("memories.background_review.enable", True)
         t.operator_pins(op_ids)
+        t.terminals(op_ids)
     if not check:
         con.commit()
     con.close()
