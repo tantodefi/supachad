@@ -27,7 +27,11 @@ from pathlib import Path
 OWUI = os.environ.get("OWUI_URL", "http://127.0.0.1:3000") + "/api/v1"
 COMFY = os.environ.get("COMFYUI_URL", "http://host.docker.internal:8000")
 CREDS = json.loads(Path(os.environ.get("CHAD_HOST_CREDS", Path.home() / ".nemoclaw/credentials.json")).read_text())
-WORKFLOW = Path(__file__).with_name("z-image-turbo.api.json").read_text()
+# --gguf: the ~7.5 GB quantized pair (needs the ComfyUI-GGUF custom node). The
+# default bf16 pair (~20 GB) does not fit next to Docker on a 24 GB Mac.
+GGUF = "--gguf" in sys.argv
+WORKFLOW = Path(__file__).with_name("z-image-turbo-gguf.api.json" if GGUF else "z-image-turbo.api.json").read_text()
+UNET = "z-image-turbo-Q4_K_M.gguf" if GGUF else "z_image_turbo_bf16.safetensors"
 NODES = [
     {"type": "prompt", "key": "text", "node_ids": ["67"]},
     {"type": "negative_prompt", "key": "text", "node_ids": ["71"]},
@@ -82,7 +86,7 @@ def main() -> int:
     cfg.update({
         "ENABLE_IMAGE_GENERATION": True,
         "IMAGE_GENERATION_ENGINE": "comfyui",
-        "IMAGE_GENERATION_MODEL": "z_image_turbo_bf16.safetensors",
+        "IMAGE_GENERATION_MODEL": UNET,
         "IMAGE_SIZE": "1024x1024",
         "IMAGE_STEPS": 8,
         "COMFYUI_BASE_URL": COMFY,

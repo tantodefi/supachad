@@ -53,7 +53,9 @@ LITE_SYSTEM = (
     "or anyone else's data or chats. You do remember what this user chooses to share "
     "with you across chats (their personal memory, which only they can see and edit "
     "under Settings > Personalization). Use web search when a question needs current "
-    "facts, and cite what you use. Be direct, honest and useful."
+    "facts, and cite what you use. When a request matches one of your skills (writing, "
+    "summarizing, research, planning, tutoring, workouts), open that skill first and follow "
+    "it. Be direct, honest and useful."
 )
 LITE_DESCRIPTION = (
     "Your own assistant — NVIDIA Nemotron 3.5 Lightning with web search and a "
