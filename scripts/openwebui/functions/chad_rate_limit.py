@@ -1,7 +1,7 @@
 """
 title: Chad Lite Rate Limit
 author: chad
-version: 0.3.0
+version: 0.3.1
 required_open_webui_version: 0.5.0
 description: Per-user metering for the free tier. Premium subscribers are unlimited; credit-metered users (who bought credits via Square) consume 1 credit/message and skip the daily cap while in balance; everyone else gets the free daily message cap. The operators' chad model and admins are exempt.
 """
@@ -56,6 +56,10 @@ _CREDITS_API = os.environ.get("CHAD_CREDITS_API", "https://supachad.com/api/cred
 _CREDITS_SECRET = os.environ.get("CHAD_CREDITS_ADMIN_SECRET", "")
 
 
+# Cloudflare blocks Python's default "Python-urllib" user agent (HTTP 403), which
+# silently turned every credit/premium check into a fall-through to the free cap.
+_UA = {"User-Agent": "chad-rate-limit/0.3 (+https://supachad.com)"}
+
 _TIER_TTL_S = 600
 _tier_cache: dict = {}
 
@@ -75,7 +79,7 @@ def _is_premium(email: str) -> bool:
         return hit[0]
     url = _CREDITS_API.rstrip("/").rsplit("/", 1)[0] + "/tier/" + urllib.parse.quote(email)
     try:
-        req = urllib.request.Request(url, headers={"X-Admin-Secret": _CREDITS_SECRET})
+        req = urllib.request.Request(url, headers={**_UA, "X-Admin-Secret": _CREDITS_SECRET})
         with urllib.request.urlopen(req, timeout=3) as resp:
             premium = json.loads(resp.read() or b"{}").get("tier") == "premium"
     except Exception:
@@ -99,7 +103,7 @@ def _consume_credit(email: str, amount: int = 1):
     req = urllib.request.Request(
         _CREDITS_API.rstrip("/") + "/consume",
         data=body,
-        headers={"content-type": "application/json", "X-Admin-Secret": _CREDITS_SECRET},
+        headers={**_UA, "content-type": "application/json", "X-Admin-Secret": _CREDITS_SECRET},
         method="POST",
     )
     try:

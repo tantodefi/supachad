@@ -189,6 +189,30 @@ def test_worker_outage_never_hard_blocks():
         assert _run(f.inlet({"model": "nemotron"}, __user__={"id": "u1", "email": "a@b.co"})) == {"model": "nemotron"}
 
 
+def test_worker_requests_send_a_user_agent():
+    """Cloudflare 403s Python's default UA; both Worker calls must set their own."""
+    import urllib.request
+    with tempfile.TemporaryDirectory() as d:
+        spec = importlib.util.spec_from_file_location("crl_ua", _MOD_PATH)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._CREDITS_SECRET = "secret"
+        seen = []
+
+        def fake_urlopen(req, timeout=0):
+            seen.append(req.get_header("User-agent"))
+            raise OSError("offline")
+
+        real = urllib.request.urlopen
+        urllib.request.urlopen = fake_urlopen
+        try:
+            mod._consume_credit("a@b.co")
+            mod._is_premium("a@b.co")
+        finally:
+            urllib.request.urlopen = real
+        assert len(seen) == 2 and all(ua and "chad-rate-limit" in ua for ua in seen), seen
+
+
 def test_consume_credit_unconfigured_without_secret():
     with tempfile.TemporaryDirectory() as d:
         mod = _fresh_module(os.path.join(d, "s.json"))
