@@ -33,6 +33,7 @@ def _fresh_module(state_path: str):
     spec.loader.exec_module(mod)
     mod._STATE_PATH = state_path
     mod._CREDITS_SECRET = ""  # default: credits disabled (free-cap only)
+    mod._is_premium = lambda email: False  # no network in tests
     return mod
 
 
@@ -138,6 +139,28 @@ def test_credit_balance_skips_daily_cap():
         f.valves.free_daily_limit = 0  # free cap would block everyone...
         # ...but a credit-metered user in balance sails past it.
         assert _run(f.inlet({"model": "nemotron"}, __user__={"id": "u1", "email": "a@b.co"})) == {"model": "nemotron"}
+
+
+def test_premium_subscriber_is_unlimited_and_never_consumes_credits():
+    with tempfile.TemporaryDirectory() as d:
+        mod = _fresh_module(os.path.join(d, "s.json"))
+        mod._CREDITS_SECRET = "secret"
+        mod._is_premium = lambda email: email == "p@b.co"
+        spent = []
+        mod._consume_credit = lambda email, amount=1: spent.append(email) or ("ok", 1)
+        f = mod.Filter()
+        f.valves.free_daily_limit = 0
+        assert _run(f.inlet({"model": "chad-lite"}, __user__={"id": "u1", "email": "p@b.co"})) == {"model": "chad-lite"}
+        assert spent == [], "premium must not burn credits"
+
+
+def test_is_premium_needs_secret_and_email():
+    with tempfile.TemporaryDirectory() as d:
+        spec = importlib.util.spec_from_file_location("crl_raw", _MOD_PATH)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._CREDITS_SECRET = ""
+        assert mod._is_premium("a@b.co") is False  # no network without a secret
 
 
 def test_insufficient_credits_falls_through_to_free_cap():

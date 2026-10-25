@@ -29,6 +29,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 import time
 import tomllib
@@ -116,9 +117,30 @@ def curated_base_ids() -> set[str]:
             "SELECT DISTINCT base_model_id FROM model "
             "WHERE base_model_id IS NOT NULL AND base_model_id != '' AND is_active = 1"
         ).fetchall()
-        return {r[0] for r in rows if r[0] and "/" in r[0]}
+        local = non_nvidia_model_ids(con)
+        return {r[0] for r in rows if r[0] and "/" in r[0] and r[0] not in local}
     finally:
         con.close()
+
+
+def non_nvidia_model_ids(con: sqlite3.Connection) -> set[str]:
+    # Models served by the other OpenAI-compatible connections (LM Studio, the
+    # chad shim) can look like NVIDIA ids — chad-lite's base is
+    # "nvidia/nemotron-3-nano-4b" on LM Studio — but NVIDIA doesn't serve them,
+    # so probing them there marks them dead and switches the model off. Skip
+    # every id listed in a non-NVIDIA connection's model_ids filter.
+    def cfg(key, default):
+        row = con.execute("SELECT value FROM config WHERE key = ?", (key,)).fetchone()
+        return json.loads(row[0]) if row else default
+
+    urls = cfg("openai.api_base_urls", [])
+    configs = cfg("openai.api_configs", {})
+    out = set()
+    for i, url in enumerate(urls):
+        if "integrate.api.nvidia.com" in str(url):
+            continue
+        out.update((configs.get(str(i)) or {}).get("model_ids") or [])
+    return out
 
 
 def probe(model_id: str, api_key: str) -> tuple[str, str, float, int]:
@@ -361,6 +383,12 @@ def main() -> None:
     disabled = disable_dead_curated_models(dead_ids)
     if disabled:
         log(f"disabled {disabled} curated rows (dead across 2 consecutive sweeps)")
+
+    # Newly curated rows need a public grant or non-admins can't see them
+    # (BYPASS_MODEL_ACCESS_CONTROL=False). Never let this fail the sweep.
+    tiers = Path(__file__).with_name("chad-tiers-apply.py")
+    r = subprocess.run([sys.executable, str(tiers), "--grants"], capture_output=True, text=True)
+    log(f"tiers grants: rc={r.returncode} {(r.stdout or r.stderr).strip().splitlines()[-1:]}")
 
 
 if __name__ == "__main__":

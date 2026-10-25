@@ -26,6 +26,15 @@
 
 set -euo pipefail
 
+# DISABLED 2026-10-25: paid users get Chad Lite (unlimited), NOT the shared chad
+# agent, which stays limited to the two operators (see chad-tiers-apply.py).
+# Promoting subscribers into CHAD_OPERATOR_ALLOWLIST would hand strangers the
+# operators' shared memory. Kept for a future isolated-agent tier (Tier 1).
+if [ "${CHAD_PREMIUM_GRANTS_AGENT:-0}" != "1" ]; then
+  echo "[premium-sync] disabled: premium = unlimited Chad Lite, not the shared agent (set CHAD_PREMIUM_GRANTS_AGENT=1 to override)"
+  exit 0
+fi
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOST_CREDS="${CHAD_HOST_CREDS:-${HOME}/.nemoclaw/credentials.json}"
 MANAGED="${CHAD_PREMIUM_MANAGED:-${HOME}/.nemoclaw/state/premium-managed.json}"

@@ -1,9 +1,9 @@
 """
 title: Chad Lite Rate Limit
 author: chad
-version: 0.2.0
+version: 0.3.0
 required_open_webui_version: 0.5.0
-description: Per-user metering for the free tier. Credit-metered users (who bought credits via Square) consume 1 credit/message and skip the daily cap while in balance; everyone else gets the free daily message cap. Premium models (chad) and admins are exempt.
+description: Per-user metering for the free tier. Premium subscribers are unlimited; credit-metered users (who bought credits via Square) consume 1 credit/message and skip the daily cap while in balance; everyone else gets the free daily message cap. The operators' chad model and admins are exempt.
 """
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -54,6 +54,34 @@ def _save(state: dict) -> None:
 # (free-cap only) before the Worker is wired.
 _CREDITS_API = os.environ.get("CHAD_CREDITS_API", "https://supachad.com/api/credits")
 _CREDITS_SECRET = os.environ.get("CHAD_CREDITS_ADMIN_SECRET", "")
+
+
+_TIER_TTL_S = 600
+_tier_cache: dict = {}
+
+
+def _is_premium(email: str) -> bool:
+    """True when the Worker reports an active premium subscription for `email`.
+    Cached for 10 min per email so it's not a Worker call per message. Any error
+    reads as not-premium (the user falls through to credits / the free cap)."""
+    if not _CREDITS_SECRET or not email or "@" not in email:
+        return False
+    import time
+    import urllib.parse
+    import urllib.request
+
+    hit = _tier_cache.get(email)
+    if hit and time.time() - hit[1] < _TIER_TTL_S:
+        return hit[0]
+    url = _CREDITS_API.rstrip("/").rsplit("/", 1)[0] + "/tier/" + urllib.parse.quote(email)
+    try:
+        req = urllib.request.Request(url, headers={"X-Admin-Secret": _CREDITS_SECRET})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            premium = json.loads(resp.read() or b"{}").get("tier") == "premium"
+    except Exception:
+        return False
+    _tier_cache[email] = (premium, time.time())
+    return premium
 
 
 def _consume_credit(email: str, amount: int = 1):
@@ -107,7 +135,7 @@ class Filter:
                 "It resets at 00:00 UTC.\n\n"
                 "**Two ways to keep going:**\n"
                 "- **Buy credits** (pay-as-you-go) — each credit = 1 message, no daily cap while in balance.\n"
-                "- **Upgrade to premium Chad** — the full agent, memory, automations, unlimited.\n\n"
+                "- **Go premium** — unlimited messages, $15/month.\n\n"
                 "Get both at https://supachad.com."
             ),
             description="Shown when the free cap is hit. {limit} and {model} are substituted.",
@@ -130,6 +158,10 @@ class Filter:
             return body
         email = user.get("email") or ""
         uid = user.get("id") or email or "anon"
+
+        # Premium subscribers: unlimited, and they never burn credits.
+        if _is_premium(email):
+            return body
 
         # Credit-metered users (bought credits via Square) pay per message and
         # skip the free daily cap while they have a balance. Any non-"ok" result

@@ -41,7 +41,9 @@ services:
       WEBUI_AUTH_TRUSTED_EMAIL_HEADER: "${WEBUI_AUTH_TRUSTED_EMAIL_HEADER:-}"
       WEBUI_AUTH_TRUSTED_NAME_HEADER: "${WEBUI_AUTH_TRUSTED_EMAIL_HEADER:-}"
       DEFAULT_USER_ROLE: "user"
-      BYPASS_MODEL_ACCESS_CONTROL: "True"
+      # False: model visibility follows access grants — chad only for the operators,
+      # everything else public (scripts/openwebui/chad-tiers-apply.py keeps them in sync).
+      BYPASS_MODEL_ACCESS_CONTROL: "False"
       JWT_EXPIRES_IN: "24h"
       ENABLE_COMMUNITY_SHARING: "False"
       ENABLE_MESSAGE_RATING: "False"
