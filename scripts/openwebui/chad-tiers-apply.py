@@ -42,6 +42,11 @@ CREDS = Path(os.environ.get("CHAD_HOST_CREDS", Path.home() / ".nemoclaw/credenti
 
 AGENT = "chad"
 LITE = "chad-lite"
+# NVIDIA-hosted (OWUI's NVIDIA connection uses the separate public key, so
+# signups never spend Chad's quota). Lightning is a reasoning model; the
+# template kwarg keeps its thinking out of the reply.
+LITE_BASE = "nvidia/nemotron-3.5-lightning-30b-a3b"
+LITE_CUSTOM_PARAMS = {"chat_template_kwargs": {"enable_thinking": False}}
 LITE_SYSTEM = (
     "You are Chad Lite, this user's own assistant on supachad. You are separate from "
     "the operators' Chad agent: you have no access to private files, calendars, email, "
@@ -51,8 +56,8 @@ LITE_SYSTEM = (
     "facts, and cite what you use. Be direct, honest and useful."
 )
 LITE_DESCRIPTION = (
-    "Your own assistant — NVIDIA Nemotron 3 Nano with web search and a personal "
-    "memory only you can see. Separate from the operators' Chad agent."
+    "Your own assistant — NVIDIA Nemotron 3.5 Lightning with web search and a "
+    "personal memory only you can see. Separate from the operators' Chad agent."
 )
 
 
@@ -97,12 +102,16 @@ class Tiers:
                             (str(uuid.uuid4()), "model", AGENT, "user", uid, "read", now()))
 
     def model(self, mid: str, active: int | None = None, memory: bool | None = None,
-              system: str | None = None, description: str | None = None) -> None:
-        row = self.con.execute("SELECT is_active, meta, params FROM model WHERE id = ?", (mid,)).fetchone()
+              system: str | None = None, description: str | None = None,
+              base: str | None = None, custom_params: dict | None = None) -> None:
+        row = self.con.execute("SELECT is_active, meta, params, base_model_id FROM model WHERE id = ?", (mid,)).fetchone()
         if not row:
             self.drift.append(f"model {mid} missing (run chad-provision-tier0.sh)")
             return
         is_active, meta, params = row[0], json.loads(row[1] or "{}"), json.loads(row[2] or "{}")
+        if base is not None and row[3] != base:
+            self.change(f"{mid} base -> {base}", "UPDATE model SET base_model_id=?, updated_at=? WHERE id=?",
+                        (base, now(), mid))
         if active is not None and is_active != active:
             self.change(f"{mid} is_active -> {active}", "UPDATE model SET is_active=?, updated_at=? WHERE id=?",
                         (active, now(), mid))
@@ -113,6 +122,8 @@ class Tiers:
             new_meta["description"] = description
         if system is not None:
             new_params["system"] = system
+        if custom_params is not None:
+            new_params["custom_params"] = custom_params
         if new_meta != meta or new_params != params:
             self.change(f"{mid} meta/params", "UPDATE model SET meta=?, params=?, updated_at=? WHERE id=?",
                         (json.dumps(new_meta), json.dumps(new_params), now(), mid))
@@ -169,7 +180,8 @@ def main() -> int:
     t.grants(op_ids)
     if not grants_only:
         t.model(AGENT, memory=False)
-        t.model(LITE, active=1, memory=True, system=LITE_SYSTEM, description=LITE_DESCRIPTION)
+        t.model(LITE, active=1, memory=True, system=LITE_SYSTEM, description=LITE_DESCRIPTION,
+                base=LITE_BASE, custom_params=LITE_CUSTOM_PARAMS)
         t.config("ui.default_models", LITE)
         t.config("ui.default_pinned_models", LITE)
         t.config("memories.background_review.enable", True)
