@@ -14,6 +14,9 @@
   <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
   <key>StartInterval</key><integer>120</integer>
   <key>RunAtLoad</key><true/>
+  <!-- Each pass detaches a moshi-hook ask that waits up to 24h; without this launchd
+       kills it the moment the 2-second pass exits. -->
+  <key>AbandonProcessGroup</key><true/>
   <key>StandardOutPath</key><string>/Users/r/.nemoclaw/openwebui/chad-signup-watch.log</string>
   <key>StandardErrorPath</key><string>/Users/r/.nemoclaw/openwebui/chad-signup-watch.err.log</string>
 </dict>
