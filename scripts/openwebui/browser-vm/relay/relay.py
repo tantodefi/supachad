@@ -1883,7 +1883,10 @@ async def _keepalive_loop(loop: asyncio.AbstractEventLoop) -> None:
 
 
 @app.get("/api/debug/registry")
-async def debug_registry():
+async def debug_registry(request: Request):
+    # Lists live chat ids, which are what the /vm-bridge/vm browser leg trusts;
+    # every Docker container can reach this port, so it needs the relay key.
+    _require_bearer(request)
     async with state.lock:
         return {
             chat: {
