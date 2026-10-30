@@ -104,11 +104,12 @@ while [ "$i" -lt "$ITEM_COUNT" ]; do
   BODY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["body"])' "$WORK" "$i")"
 
   # Extract a stable email address from the From: header for the gate target.
+  # parseaddr, not the first <...>: a display name like "<operator-1@example.com>"
+  # would otherwise pass the reply gate as an admin.
   ADDR="$(python3 -c '
-import sys, re
-s = sys.argv[1]
-m = re.search(r"<([^>]+)>", s)
-print((m.group(1) if m else s).strip().lower())
+import sys
+from email.utils import parseaddr
+print(parseaddr(sys.argv[1])[1].strip().lower())
 ' "$FROM")"
 
   # Capture the gate's REAL exit code. `$(... || true)` + `RC=$?` always read 0,

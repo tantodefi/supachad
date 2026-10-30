@@ -97,6 +97,7 @@ PARSE_INBOX="$INBOX" \
   PARSE_MAX_PARK_AGE_DAYS="${MAX_PARK_AGE_DAYS:-7}" \
   python3 - >"$CLASSIFIED" <<'PY'
 import json, os, re, datetime
+from email.utils import parseaddr
 
 admin_re = re.compile(os.environ["PARSE_ADMINS"], re.IGNORECASE)
 premium_re = re.compile(os.environ["PARSE_PREMIUM"], re.IGNORECASE)
@@ -170,8 +171,12 @@ if cur:
 
 mark_read, park, stale = [], [], []
 for e in entries:
-    sender_admin = bool(admin_re.search(e["from"]))
-    e["premium_eligible"] = bool(premium_re.search(e["from"]))
+    # Match the ADDRESS only, whole: `"operator-1@example.com" <x@evil.com>` must
+    # not count as an admin (the old search() matched the display name).
+    addr = parseaddr(e["from"])[1].strip().lower()
+    e["from_addr"] = addr
+    sender_admin = bool(addr) and bool(admin_re.fullmatch(addr))
+    e["premium_eligible"] = bool(addr) and bool(premium_re.fullmatch(addr))
     replied_flag = "replied" in e["flags"]
     recently_handled = e["id"] in recent_replied
     parsed = parse_email_date(e.get("date"))
@@ -228,7 +233,7 @@ for e in park:
     with open(out, "w") as f:
         json.dump({
             "source": "email",
-            "verifiedIdentity": e["from"],
+            "verifiedIdentity": e["from_addr"],
             "allowsPremium": True,
             "createdAt": ts,
             "createdBy": "chad-email-check-cron",
