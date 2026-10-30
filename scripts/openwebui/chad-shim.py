@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -104,6 +105,30 @@ def _load_operator_allowlist() -> set:
 
 
 OPERATOR_ALLOWLIST = _load_operator_allowlist()
+
+
+# Shared key between OpenWebUI's `chad` connection and this shim. The email
+# headers above are only trustworthy when the caller IS OpenWebUI: every Docker
+# Desktop container can reach the host's loopback :8901 tunnel via
+# host.docker.internal, so without a key any of them could forge
+# X-OpenWebUI-User-Email and drive the operators' agent. When set, chat requests
+# must carry `Authorization: Bearer <key>` (the connection's API key); GET
+# /v1/models and /healthz stay open for the watchdog probes.
+#   1. CHAD_SHIM_API_KEY env (the watchdog passes it from host creds), else
+#   2. CHAD_SHIM_API_KEY_FILE (default /sandbox/.openclaw-data/state/shim-api-key).
+# Unset in both = no key check (backward-compatible).
+def _load_shim_api_key() -> str:
+    key = os.environ.get("CHAD_SHIM_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        with open(os.environ.get("CHAD_SHIM_API_KEY_FILE", "/sandbox/.openclaw-data/state/shim-api-key")) as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
+SHIM_API_KEY = _load_shim_api_key()
 # When an allowlist is set, anonymous (header-less) callers are denied the
 # premium agent by default. Opt in to allowing them only for trusted
 # local/dev direct-API testing.
@@ -363,6 +388,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         if self.path not in ("/v1/chat/completions", "/chat/completions"):
             self._send_json(404, {"error": {"message": "not found"}})
+            return
+        if SHIM_API_KEY and not hmac.compare_digest(
+            (self.headers.get("Authorization") or "").encode(), f"Bearer {SHIM_API_KEY}".encode()
+        ):
+            self._send_json(401, {"error": {"message": "unauthorized"}})
             return
         length = int(self.headers.get("Content-Length") or 0)
         try:

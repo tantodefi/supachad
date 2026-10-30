@@ -274,7 +274,7 @@ const backends = {
     const model = openaiCompatModel(
       p.shimUrl,
       modelId,
-      env.NVIDIA_API_KEY || env.OPENAI_API_KEY,
+      env.CHAD_SHIM_API_KEY || env.NVIDIA_API_KEY || env.OPENAI_API_KEY,
       "chad-nemotron",
       !reasoning,
     );

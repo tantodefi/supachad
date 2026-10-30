@@ -269,9 +269,10 @@ cmd_restart_shim() {
     # in-container shim; host serving/forward is managed separately (not here).
     # No launchd watchdog relaunches it here (2026-10-19 rehearsal: bounced shim
     # stayed dead), so relaunch it ourselves with the pod watchdog's env.
-    local list up
+    local list key up
     list="$(python3 -c "import json;v=json.load(open('$HOST_CREDS')).get('CHAD_OPERATOR_ALLOWLIST','');print(','.join(v) if isinstance(v,list) else v)" 2>/dev/null || true)"
-    sshp "pkill -9 -f chad-shim.py 2>/dev/null; s=/sandbox/.openclaw-data/bin/chad-shim.py; [ -x \$s ] || s=/usr/local/bin/chad-shim.py; HOME=/sandbox CHAD_OPERATOR_ALLOWLIST='$list' setsid nohup \$s >/tmp/chad-shim.log 2>&1 </dev/null & true" >/dev/null
+    key="$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('CHAD_SHIM_API_KEY',''))" 2>/dev/null || true)"
+    sshp "pkill -9 -f chad-shim.py 2>/dev/null; s=/sandbox/.openclaw-data/bin/chad-shim.py; [ -x \$s ] || s=/usr/local/bin/chad-shim.py; HOME=/sandbox CHAD_OPERATOR_ALLOWLIST='$list' CHAD_SHIM_API_KEY='$key' setsid nohup \$s >/tmp/chad-shim.log 2>&1 </dev/null & true" >/dev/null
     for _ in $(seq 1 15); do
       up=$(sshp "curl -s -o /dev/null -w '%{http_code}' -m 4 http://127.0.0.1:$SHIM_PORT/v1/models 2>/dev/null")
       [ "$up" = 200 ] && break

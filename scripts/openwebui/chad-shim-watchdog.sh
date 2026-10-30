@@ -47,6 +47,15 @@ if [ -z "$SHIM_ALLOWLIST" ] && [ -f "$CHAD_HOST_CREDS" ]; then
   SHIM_ALLOWLIST="$(python3 -c "import json;v=json.load(open('$CHAD_HOST_CREDS')).get('CHAD_OPERATOR_ALLOWLIST','');print(','.join(v) if isinstance(v,list) else v)" 2>/dev/null || true)"
 fi
 
+# Shared key OpenWebUI's `chad` connection sends as its Bearer token; the shim
+# rejects chat requests without it (forged operator headers from other
+# containers). Written to a pod-side file too so every launch path enforces it.
+SHIM_API_KEY_FILE="${CHAD_SHIM_API_KEY_FILE:-/sandbox/.openclaw-data/state/shim-api-key}"
+SHIM_API_KEY="${CHAD_SHIM_API_KEY:-}"
+if [ -z "$SHIM_API_KEY" ] && [ -f "$CHAD_HOST_CREDS" ]; then
+  SHIM_API_KEY="$(python3 -c "import json;print(json.load(open('$CHAD_HOST_CREDS')).get('CHAD_SHIM_API_KEY',''))" 2>/dev/null || true)"
+fi
+
 mkdir -p "$(dirname "$LOG")"
 ts() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 log() { printf '[%s] %s\n' "$(ts)" "$*" >>"$LOG"; }
@@ -132,12 +141,16 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" "
     mkdir -p \$(dirname '${SHIM_ALLOWLIST_FILE}')
     printf '%s\n' '${SHIM_ALLOWLIST}' | tr ',' '\n' > '${SHIM_ALLOWLIST_FILE}'
   fi
+  if [ -n '${SHIM_API_KEY}' ]; then
+    mkdir -p \$(dirname '${SHIM_API_KEY_FILE}')
+    (umask 077; printf '%s\n' '${SHIM_API_KEY}' > '${SHIM_API_KEY_FILE}')
+  fi
   if [ -x '${SHIM_PATCHED}' ]; then
-    HOME=/sandbox CHAD_OPERATOR_ALLOWLIST='${SHIM_ALLOWLIST}' nohup '${SHIM_PATCHED}' > /tmp/chad-shim.log 2>&1 < /dev/null &
+    HOME=/sandbox CHAD_OPERATOR_ALLOWLIST='${SHIM_ALLOWLIST}' CHAD_SHIM_API_KEY='${SHIM_API_KEY}' nohup '${SHIM_PATCHED}' > /tmp/chad-shim.log 2>&1 < /dev/null &
     disown 2>/dev/null || true
     echo started_patched
   elif [ -x '${SHIM_FALLBACK}' ]; then
-    HOME=/sandbox CHAD_OPERATOR_ALLOWLIST='${SHIM_ALLOWLIST}' nohup '${SHIM_FALLBACK}' > /tmp/chad-shim.log 2>&1 < /dev/null &
+    HOME=/sandbox CHAD_OPERATOR_ALLOWLIST='${SHIM_ALLOWLIST}' CHAD_SHIM_API_KEY='${SHIM_API_KEY}' nohup '${SHIM_FALLBACK}' > /tmp/chad-shim.log 2>&1 < /dev/null &
     disown 2>/dev/null || true
     echo started_fallback
   else
