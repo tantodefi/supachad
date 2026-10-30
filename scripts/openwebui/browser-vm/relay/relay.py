@@ -42,6 +42,7 @@
 import asyncio
 import base64
 import datetime
+import hmac
 import json
 import logging
 import mimetypes
@@ -72,6 +73,10 @@ log = logging.getLogger("browser_vm_relay")
 RELAY_PORT = int(os.getenv("RELAY_PORT", "8787"))
 RELAY_API_KEY = os.getenv("RELAY_API_KEY", "").strip()
 RELAY_WS_KEY = os.getenv("RELAY_WS_KEY", "").strip() or RELAY_API_KEY
+# Attached by scripts/openwebui/access-guard only after it verified the Cloudflare
+# Access JWT of an operator. The /vm-bridge/vm browser leg used to trust Access
+# alone (every approved user) and was reachable by any local container.
+RELAY_BROWSER_KEY = os.getenv("RELAY_BROWSER_KEY", "").strip()
 RELAY_LOG_VERBOSE = os.getenv("RELAY_LOG_VERBOSE", "").strip().lower() in ("1", "true", "yes")
 BOOT_WAIT_SECONDS = float(os.getenv("RELAY_BOOT_WAIT_SECONDS", "120"))
 EXEC_TIMEOUT_GRACE_SECONDS = float(os.getenv("RELAY_EXEC_GRACE_SECONDS", "5"))
@@ -1839,12 +1844,18 @@ async def ws_vm(ws: WebSocket, chat_id: str = "", token: str = ""):
     # it into page JS — so the browser sends no token and, with RELAY_WS_KEY
     # set, every connect was closed 4001 and reconnected in a tight loop
     # (registry stayed empty → the agent saw "no_browser"). Enforce the WS key
-    # only on the direct `/vm` leg (server-to-server); trust CF Access on the
-    # browser leg, which is the same trust boundary as the app itself.
+    # only on the direct `/vm` leg (server-to-server). The browser leg instead
+    # needs RELAY_BROWSER_KEY, which only access-guard attaches (verified operator).
     try:
         browser_leg = ws.url.path.endswith("/vm-bridge/vm")
     except Exception:
         browser_leg = False
+    if browser_leg and RELAY_BROWSER_KEY and not hmac.compare_digest(
+        (ws.headers.get("x-relay-browser-key") or "").encode(), RELAY_BROWSER_KEY.encode()
+    ):
+        await ws.accept()
+        await ws.close(code=4001, reason="unauthorized")
+        return
     if RELAY_WS_KEY and not browser_leg:
         auth = ws.headers.get("authorization", "") or ""
         ok = token == RELAY_WS_KEY or auth == f"Bearer {RELAY_WS_KEY}"

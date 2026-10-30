@@ -1,0 +1,2 @@
+aiohttp==3.10.10
+PyJWT[crypto]==2.9.0

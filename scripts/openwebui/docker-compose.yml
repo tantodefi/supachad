@@ -25,8 +25,8 @@ services:
     restart: unless-stopped
     expose:
       - "8080"
-    ports:
-      - "127.0.0.1:${WEBUI_HOST_PORT:-3000}:8080"
+    # No host port: access-guard publishes 127.0.0.1:3000 and is the only way in
+    # (it verifies the Cloudflare Access JWT before setting the trusted header).
     volumes:
       - ${WEBUI_DATA_DIR:-${HOME}/.nemoclaw/openwebui/data}:/app/backend/data
       - ./static/loader.js:/app/build/static/loader.js:ro
@@ -38,8 +38,10 @@ services:
       WEBUI_AUTH: "True"
       WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:?WEBUI_SECRET_KEY is required — generate with: openssl rand -hex 32}"
       ENABLE_SIGNUP: "${ENABLE_SIGNUP:-False}"
-      WEBUI_AUTH_TRUSTED_EMAIL_HEADER: "${WEBUI_AUTH_TRUSTED_EMAIL_HEADER:-}"
-      WEBUI_AUTH_TRUSTED_NAME_HEADER: "${WEBUI_AUTH_TRUSTED_EMAIL_HEADER:-}"
+      # The secret header access-guard sets from a verified Access JWT — never the
+      # plain Cf-Access email header, which any container could send.
+      WEBUI_AUTH_TRUSTED_EMAIL_HEADER: "${GUARD_EMAIL_HEADER:?GUARD_EMAIL_HEADER is required (access-guard)}"
+      WEBUI_AUTH_TRUSTED_NAME_HEADER: "${GUARD_EMAIL_HEADER}"
       DEFAULT_USER_ROLE: "user"
       # False: model visibility follows access grants — chad only for the operators,
       # everything else public (scripts/openwebui/chad-tiers-apply.py keeps them in sync).
@@ -94,6 +96,43 @@ services:
   # Set DOCKER_TARGET to run the shell inside a specific container
   # (`docker exec -i -t`); with it empty the shell runs in the relay's own
   # container. Either way the socket is only reachable on the compose network.
+  access-guard:
+    build:
+      context: ./access-guard
+    image: nemoclaw-access-guard:local
+    container_name: nemoclaw-access-guard
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GUARD_HOST_PORT:-3000}:8080"
+    environment:
+      CF_ACCESS_TEAM_DOMAIN: "${CF_ACCESS_TEAM_DOMAIN:?CF_ACCESS_TEAM_DOMAIN is required}"
+      CF_ACCESS_AUD: "${CF_ACCESS_AUD:?CF_ACCESS_AUD is required}"
+      GUARD_EMAIL_HEADER: "${GUARD_EMAIL_HEADER:?GUARD_EMAIL_HEADER is required}"
+      RELAY_BROWSER_KEY: "${RELAY_BROWSER_KEY:?RELAY_BROWSER_KEY is required}"
+      CHAD_OPERATOR_ALLOWLIST: "${CHAD_OPERATOR_ALLOWLIST:?CHAD_OPERATOR_ALLOWLIST is required}"
+      GUARD_UPSTREAM: "http://open-webui:8080"
+      GUARD_RELAY_UPSTREAM: "http://browser-vm-relay:8787"
+    networks:
+      - openwebui_openwebui-net
+
+  # In-browser WebVM bridge (the /vm-bridge/* route, via access-guard). No host
+  # port: OpenWebUI and the guard reach it on the compose network.
+  browser-vm-relay:
+    build:
+      context: ./browser-vm
+      dockerfile: deploy/relay.Dockerfile
+    image: openwebui-browser-vm-relay
+    container_name: nemoclaw-browser-vm-relay
+    restart: unless-stopped
+    environment:
+      RELAY_PORT: "8787"
+      RELAY_API_KEY: "${BROWSER_VM_RELAY_KEY:?BROWSER_VM_RELAY_KEY is required}"
+      RELAY_WS_KEY: "${BROWSER_VM_RELAY_KEY}"
+      RELAY_BROWSER_KEY: "${RELAY_BROWSER_KEY:?RELAY_BROWSER_KEY is required}"
+      RELAY_LOG_VERBOSE: "${BROWSER_VM_LOG_VERBOSE:-0}"
+    networks:
+      - openwebui_openwebui-net
+
   docker-vm-relay:
     build:
       context: ./browser-vm

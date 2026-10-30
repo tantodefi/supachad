@@ -38,6 +38,7 @@ RELAY_PY = ROOT / "relay" / "relay.py"
 PORT = int(os.environ.get("BV_TEST_PORT", "18787"))
 API_KEY = "test-key"
 WS_TOKEN = "ws-token"
+BROWSER_KEY = "browser-key"
 
 HTTP = f"http://127.0.0.1:{PORT}"
 WS = f"ws://127.0.0.1:{PORT}"
@@ -643,6 +644,41 @@ async def scenario_log_redaction() -> None:
     check("access-log unrelated lines untouched", True)
 
 
+async def _ws_rejected(url: str, headers: dict | None = None) -> bool:
+    try:
+        ws = await websockets.connect(url, additional_headers=headers or {})
+    except (websockets.ConnectionClosed, websockets.InvalidStatus):
+        return True
+    try:
+        await ws.send(json.dumps({"type": "status"}))
+        await asyncio.wait_for(ws.recv(), timeout=1.5)
+    except websockets.ConnectionClosed:
+        return True
+    except asyncio.TimeoutError:
+        return False  # still open: accepted
+    finally:
+        try:
+            await ws.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return False
+
+
+async def scenario_browser_leg_guard() -> None:
+    """The /vm-bridge/vm browser leg needs the key access-guard attaches; the debug
+    registry (lists chat ids) needs the relay bearer."""
+    print("browser leg + registry auth")
+    check("vm-bridge leg without browser key rejected", await _ws_rejected(f"{WS}/vm-bridge/vm?chat_id=bl1"))
+    check("vm-bridge leg with wrong browser key rejected",
+          await _ws_rejected(f"{WS}/vm-bridge/vm?chat_id=bl2", {"X-Relay-Browser-Key": "nope"}))
+    check("vm-bridge leg with browser key accepted",
+          not await _ws_rejected(f"{WS}/vm-bridge/vm?chat_id=bl3", {"X-Relay-Browser-Key": BROWSER_KEY}))
+    st, _ = await asyncio.to_thread(http_json_sync, "/api/debug/registry")
+    check("debug registry without bearer is 401", st == 401, f"status={st}")
+    st, _ = await asyncio.to_thread(http_json_sync, "/api/debug/registry", key=API_KEY)
+    check("debug registry with bearer is 200", st == 200, f"status={st}")
+
+
 async def main() -> None:
     env = os.environ.copy()
     env.update(
@@ -650,6 +686,7 @@ async def main() -> None:
             "RELAY_PORT": str(PORT),
             "RELAY_API_KEY": API_KEY,
             "RELAY_WS_KEY": WS_TOKEN,
+            "RELAY_BROWSER_KEY": BROWSER_KEY,
             "RELAY_LOG_VERBOSE": "0",
         }
     )
@@ -680,6 +717,7 @@ async def main() -> None:
         await scenario_execute_ports()
         await scenario_trailing_slash()
         await scenario_log_redaction()
+        await scenario_browser_leg_guard()
     finally:
         proc.terminate()
         try:
