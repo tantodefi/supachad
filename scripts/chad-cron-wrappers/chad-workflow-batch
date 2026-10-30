@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # chad-workflow-batch — replays the named workflow scenarios catalogued in
-# docs/operations/chad-workflows.md as a (fixture × variant × model × sample)
+# `operations/chad-workflows.md` (private ops repo) as a (fixture × variant × model × sample)
 # matrix, with bounded parallelism. Each cell becomes one sub-agent Chad
 # (a fresh `openclaw agent --local --session-id …` run inside chad-drafter)
 # that produces one captured draft. Outputs land under a nested directory

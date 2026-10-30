@@ -105,7 +105,7 @@ state/experiments/
 # (chad-spawn-poll-watchdog, chad-shim-watchdog, future watchdogs).
 # Cron agent turns can `tail` this at startup to surface non-trivial
 # events that happened between turns. Schema: one JSON line per event
-# with ts/source/kind/severity/data. See docs/operations/chad-devflow.md
+# with ts/source/kind/severity/data. See `operations/chad-devflow.md` (private ops repo)
 # for the schema.
 state/agent-inbox.jsonl
 

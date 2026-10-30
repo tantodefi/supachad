@@ -108,7 +108,7 @@ descriptions under 50 lines don't need gstack overhead. The prompt
 templates say "optional" and leave the call to the agent's judgment.
 
 For the full 40-skill catalog see
-[docs/operations/chad-skills.md](../../../docs/operations/chad-skills.md).
+`chad-skills.md` (private ops repo: `operations/chad-skills.md`).
 
 ## Fan-Out Pattern (Multiple Similar Items)
 

@@ -88,7 +88,7 @@ Anything that's a one-line summary, a classification, or a deterministic transfo
 2. `chad-premium-client` refuses to call Anthropic unless `$CHAD_AUTH_CONTEXT_PATH` resolves to a blob with `allowsPremium: true`.
 3. Every premium call appends one JSON line to `/tmp/chad-premium.jsonl` recording timestamp, model, in/out tokens, source, and verifiedIdentity.
 
-Cron ticks with no inbound trigger have no AuthContext, so premium calls fail closed. See [Log Locations — Premium ledger](../operations/log-locations.md#premium-anthropic-ledger) for where the audit trail lives.
+Cron ticks with no inbound trigger have no AuthContext, so premium calls fail closed. See Log Locations — Premium ledger (private ops repo: `operations/log-locations.md`) for where the audit trail lives.
 
 ## Two ways to invoke premium
 

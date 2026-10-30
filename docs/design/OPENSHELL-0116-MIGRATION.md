@@ -82,13 +82,13 @@ Attempt 1 ran steps 1–10 on real chad (`ONBOARD_EXIT=0`, "Deployment verified"
 - New steps run by `recover`: `gh-auth`, `proton-wrap`. `cron-reload` fetches `jobs.json` from
   chad-state when missing.
 - **Step 10 is now `chad-ops gbrain-dims`** (vector(2048), no hnsw) after importing `brain/` from
-  chad-state — see `docs/operations/gbrain.md`. A fresh init creates vector(1536)+hnsw.
+  chad-state — see `operations/gbrain.md` (private ops repo). A fresh init creates vector(1536)+hnsw.
 - **A fresh container is also the fix for Proton**: OpenShell's binary-integrity cache pinned the old
   `proton-tool` hash on 0.0.20, so the rebuilt binary (app version `web-mail@5.0.136.4`, CAPTCHA
   handoff) only works in a sandbox that sees it first. Expect one CAPTCHA URL from
   `proton-tool whoami` after the cutover; solve it, re-run once.
 
-Runbook for host-reboot recovery on 0.0.20 (until the cutover): `docs/operations/chad-ops.md`.
+Runbook for host-reboot recovery on 0.0.20 (until the cutover): `operations/chad-ops.md` (private ops repo).
 
 ### Still TODO before/around the cutover
 

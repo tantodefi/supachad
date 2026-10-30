@@ -1071,9 +1071,9 @@ A `docker restart nemoclaw-openwebui` does **not** revert the loader
 
 ### Local docs (in this repo)
 
-- `docs/operations/openwebui.md` — host-side deployment guide
-- `docs/operations/chad-devflow.md` — full chad-* wrapper catalog
-- `docs/operations/wrapper-bugs.md` — tracked bugs + shim workarounds
+- `operations/openwebui.md` (private ops repo) — host-side deployment guide
+- `operations/chad-devflow.md` (private ops repo) — full chad-* wrapper catalog
+- `operations/wrapper-bugs.md` (private ops repo) — tracked bugs + shim workarounds
 
 ### Source
 

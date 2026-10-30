@@ -102,7 +102,7 @@ manifests, orchestrator helpers — belongs in the top `Dockerfile`.
 
 For a **restart or host reboot of an existing sandbox**, use
 `bash scripts/chad-ops.sh doctor` and then `chad-ops recover` instead; see
-[docs/operations/chad-ops.md](docs/operations/chad-ops.md) for the reboot
+`chad-ops.md` (private ops repo: `operations/chad-ops.md`) for the reboot
 runbook (gateway shadowing on `:8080`, CLI certs, SSH handshake secret).
 `chad-setup.sh` below is for a blank sandbox.
 
@@ -229,7 +229,7 @@ describing how to invoke a sub-agent. Today we ship seven:
 
 Per-spawn override: `chad-spawn --substrate gha` (or `--substrate local`).
 Per-spawn binary swap: `chad-spawn --binary-override /usr/local/bin/codex --kind writer ...` (the kind's L7 policy still applies, so the override binary must be in its allowlist).
-Async (gha-only): `chad-spawn --async --substrate gha ...` returns task_id immediately; the `chad-spawn-poll-watchdog` launchd job (host-side, 5 min) reconciles when the runner commits result.json back. (Was an openclaw cron until 2026-05-14 — moved out for cost: ~12.7M tokens/day saved. See `docs/operations/chad-devflow.md` § Host-side watchdogs.)
+Async (gha-only): `chad-spawn --async --substrate gha ...` returns task_id immediately; the `chad-spawn-poll-watchdog` launchd job (host-side, 5 min) reconciles when the runner commits result.json back. (Was an openclaw cron until 2026-05-14 — moved out for cost: ~12.7M tokens/day saved. See `operations/chad-devflow.md` (private ops repo) § Host-side watchdogs.)
 
 The manifest shape:
 
@@ -415,7 +415,7 @@ the canonical `gstack-<verb>` shape (e.g. `gstack-investigate`,
 `gstack-context-save`/`-restore`, `gstack-freeze`/`-unfreeze`,
 `gstack-document-release`, `gstack-make-pdf`, `gstack-codex`, …). The
 full list is enumerated in
-[docs/operations/chad-skills.md](docs/operations/chad-skills.md).
+`chad-skills.md` (private ops repo: `operations/chad-skills.md`).
 
 `chad-setup.sh` syncs these from `~/.claude/skills/gstack/.openclaw/skills/`
 (note the dot-prefix — that's the canonical host-adapter dir, alongside
@@ -562,7 +562,7 @@ rule is: fewer, cheaper runs + a budget guard at the top of each one.
 | `chad-skill-watch` | daily 09:00 UTC | n/a (diff only) | Diffs `openclaw skills list --json` against `state/skills-snapshot.json`, surfaces added/removed/changed skills under `## Skill catalog diff` in today's memory. |
 | `memory-curator` | weekly Sat 04:00 UTC | inactivity-gated (≥7d since last + ≥1h idle) + budget guard | `chad-memory-curator` — Hermes-style consolidation pass over memory-lancedb captures + workspace MEMORY.md. **Draft-only**: writes proposals to `curator-runs/<utc>/proposals.json`. |
 | `spawn-gc` | weekly Mon 02:30 UTC | n/a (gh API only) | `chad-spawn-gc` — phase 1 reconciles orphaned ledger entries (queued/running >24h → failed/done); phase 2 prunes `chad-spawn/*` branches on chad-state (done=7d, failed=30d, in-flight kept; skips itself if gh is unauthenticated). |
-| `nightly-experiments` | nightly 02:00 UTC | skip if `remaining_tokens < 20000` (in-wrapper) | **(v2 2026-06-10)** `chad-experiment-cron` — deterministic observe → evaluate → design driver; experiment verdicts and new designs come from single-turn no-tools LLM calls, never a multi-turn cron loop. Per-operator concurrent budget + regression auto-retire. See `docs/operations/chad-experiments.md`. |
+| `nightly-experiments` | nightly 02:00 UTC | skip if `remaining_tokens < 20000` (in-wrapper) | **(v2 2026-06-10)** `chad-experiment-cron` — deterministic observe → evaluate → design driver; experiment verdicts and new designs come from single-turn no-tools LLM calls, never a multi-turn cron loop. Per-operator concurrent budget + regression auto-retire. See `operations/chad-experiments.md` (private ops repo). |
 | `gbrain-prune` | weekly Sun 02:00 UTC | n/a (no model call) | `chad-gbrain-prune 0` — drops stale gbrain pages older than retention windows (cron passes `0` = DRY_RUN off; bare invocations still default to dry-run). |
 
 **Plus three host-side launchd watchdogs** (no agent overhead, run every 5 min via SSH):
@@ -571,7 +571,7 @@ rule is: fewer, cheaper runs + a budget guard at the top of each one.
 |---|---|---|
 | `dev.nemoclaw.chad-gateway-watchdog` | `openclaw gateway run` on port 18789 | OOM recovery with 4 GB heap |
 | `dev.nemoclaw.chad-shim-watchdog` | `chad-shim.py` on port 8901 (the `chad` model bridge) | Restart on death (BrokenPipeError etc.) |
-| `dev.nemoclaw.chad-spawn-poll` | Runs `chad-spawn-poll` itself, instead of via an openclaw cron | Reclaimed ~12.7M tokens/day vs. the prior agent-turn cron. See `docs/operations/chad-devflow.md` § Host-side watchdogs. |
+| `dev.nemoclaw.chad-spawn-poll` | Runs `chad-spawn-poll` itself, instead of via an openclaw cron | Reclaimed ~12.7M tokens/day vs. the prior agent-turn cron. See `operations/chad-devflow.md` (private ops repo) § Host-side watchdogs. |
 
 **What changed from the prior schedule:**
 
@@ -708,7 +708,7 @@ Chad's state lives in three places, in order of criticality:
 
 | Tier | Location | Contents | Restored by |
 |---|---|---|---|
-| **1. GitHub** | `tantodefi/chad-state` (private) | `workspace/` including MEMORY.md, memory/, subagents/, queue/, budget.json; `brain/` (every gbrain page as Markdown); `cron/jobs.json` | `chad-restore-from-github`; brain-only and cron-only restores in [docs/operations/gbrain.md](docs/operations/gbrain.md) and `chad-ops cron-reload` |
+| **1. GitHub** | `tantodefi/chad-state` (private) | `workspace/` including MEMORY.md, memory/, subagents/, queue/, budget.json; `brain/` (every gbrain page as Markdown); `cron/jobs.json` | `chad-restore-from-github`; brain-only and cron-only restores in `gbrain.md` (private ops repo: `operations/gbrain.md`) and `chad-ops cron-reload` |
 | **2. Host tarball** | `~/.nemoclaw/backups/sandbox-state-*.tar.gz` | Full `/sandbox` snapshot streamed via SSH tar | `tar -xzf` + `kubectl cp` |
 | **3. Pod ephemeral fs** | container writable layer (NOT a PVC) | Live filesystem | **NOTHING — see warning below** |
 
@@ -816,7 +816,7 @@ The backup set also grew on this branch:
   docker-compose stack exposing open-webui via a Cloudflare Tunnel. Two
   modes: `--mode=quick` (ephemeral `*.trycloudflare.com`, email/password
   auth, MVP) and tunnel mode (managed tunnel + Cloudflare Access on a
-  real domain, header-trusted SSO). See [`docs/operations/openwebui.md`](docs/operations/openwebui.md).
+  real domain, header-trusted SSO). See `openwebui.md` (private ops repo: `operations/openwebui.md`).
 - **Chad-as-a-model.** `scripts/openwebui/chad-shim.py` is a stdlib-only
   HTTP shim listening on `127.0.0.1:8901` inside the sandbox. It exposes
   an OpenAI-compat `/v1/chat/completions` endpoint and translates each
@@ -947,9 +947,9 @@ other cron-error hypotheses.
 - **SKILL.md** — [`/.github/skills/chad-orchestrator/SKILL.md`](.github/skills/chad-orchestrator/SKILL.md) is the operator-facing doc Chad reads at invocation time.
 - **Spawner** — [`/.github/skills/chad-orchestrator/scripts/chad-spawn.sh`](.github/skills/chad-orchestrator/scripts/chad-spawn.sh) is the canonical implementation of the contract.
 - **Setup script** — [`/scripts/chad-setup.sh`](scripts/chad-setup.sh) is the one-command-recovery path.
-- **Devflow catalog** — [`/docs/operations/chad-devflow.md`](docs/operations/chad-devflow.md) lists every wrapper, its schedule, and which symptoms point at it.
-- **Workflow scenarios** — [`/docs/operations/chad-workflows.md`](docs/operations/chad-workflows.md) names the 10 expected inbound email scenarios and how each flows through the pipeline.
-- **Open WebUI front-end** — [`/docs/operations/openwebui.md`](docs/operations/openwebui.md) covers the chat UI, dual-provider setup, and chad-as-a-model persistence.
+- **Devflow catalog** — `chad-devflow.md` (private ops repo: `operations/chad-devflow.md`) lists every wrapper, its schedule, and which symptoms point at it.
+- **Workflow scenarios** — `chad-workflows.md` (private ops repo: `operations/chad-workflows.md`) names the 10 expected inbound email scenarios and how each flows through the pipeline.
+- **Open WebUI front-end** — `openwebui.md` (private ops repo: `operations/openwebui.md`) covers the chat UI, dual-provider setup, and chad-as-a-model persistence.
 - **Policies** — [`/nemoclaw-blueprint/policies/presets/subagent-*.yaml`](nemoclaw-blueprint/policies/presets/) are the kind-specific L7 rules.
 - **Dockerfile** — [`/Dockerfile`](Dockerfile) lines ~115–133 wire the orchestrator helpers into the image.
 

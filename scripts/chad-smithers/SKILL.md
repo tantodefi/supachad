@@ -350,4 +350,4 @@ unit-tested in `lib/spawn.test.js` (`bun test lib/spawn.test.js`).
 
 Full design, decisions, and the next-steps/TODO list:
 `docs/design/smithers-moshi-integration.md`. Operator runbook:
-`docs/operations/chad-experiments.md`.
+`operations/chad-experiments.md` (private ops repo).

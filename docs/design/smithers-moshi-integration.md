@@ -743,7 +743,7 @@ Reviewed 2026-06-12 (~100 examples). Direct fits, by phase:
   self-improvement loop with fixture-scored evidence.
 - **`runbook-executor.jsx`** → classify steps safe/risky, auto-run safe,
   Approval on risky — action-gate philosophy applied to the cold-start
-  and ops runbooks in docs/operations/.
+  and ops runbooks in the private ops repo (`operations/`).
 - **`alert-suppressor.jsx`** → the missing half of the Phase 1 notify
   bridge: dedupe + expiring noise rules so moshi-hook pushes only
   novel/high-risk events (the tunnel watchdog would otherwise spam).
