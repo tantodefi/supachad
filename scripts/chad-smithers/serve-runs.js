@@ -16,8 +16,10 @@
 //
 // Env:
 //   CHAD_RUNS_PORT       listen port (default 7331)
-//   CHAD_RUNS_HOST       bind host (default 0.0.0.0 — needed so the cloudflared
-//                        container can reach it via host.docker.internal)
+//   CHAD_RUNS_HOST       bind host (default 127.0.0.1). Docker Desktop's
+//                        host.docker.internal reaches loopback, so cloudflared
+//                        still gets in. Never 0.0.0.0: writes trust the
+//                        Cf-Access email header, which anyone on the LAN can forge.
 //   CHAD_RUNS_DB_DIR     dir to scan for *.db (default: this workspace)
 //   CHAD_POPULATION      experiments population.json (default ./state/population.json)
 //   CHAD_EXPERIMENT_REPORT  last leaderboard md (default ./state/last-report.md)
@@ -49,7 +51,7 @@ import { canonicalModelId, isKnownModel, rosterSet } from "./lib/models.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.CHAD_RUNS_PORT || 7331);
-const HOST = process.env.CHAD_RUNS_HOST || "0.0.0.0";
+const HOST = process.env.CHAD_RUNS_HOST || "127.0.0.1";
 const DB_DIR = process.env.CHAD_RUNS_DB_DIR || HERE;
 const POP_PATH = process.env.CHAD_POPULATION || join(HERE, "state/population.json");
 const REPORT_PATH = process.env.CHAD_EXPERIMENT_REPORT || join(HERE, "state/last-report.md");

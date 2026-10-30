@@ -13,7 +13,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>/Users/r/.bun/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
-    <key>CHAD_RUNS_HOST</key><string>0.0.0.0</string>
+    <key>CHAD_RUNS_HOST</key><string>127.0.0.1</string>
     <key>CHAD_RUNS_PORT</key><string>7331</string>
   </dict>
   <!-- It's a service: keep it alive, start at load. -->
