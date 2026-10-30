@@ -15,7 +15,8 @@
 # ── Situations this codifies ────────────────────────────────────────────────
 #   chad-ops doctor         Read-only: is anything broken right now?
 #   chad-ops recover        Pod restarted / cold start — bring Chad fully back.
-#   chad-ops gate-sync      Operators changed — push allowlist + restart shim.
+#   chad-ops gate-sync      Operators changed — push allowlist + senders + restart shim.
+#   chad-ops senders-sync   Push email sender lists + per-sender auto-action rules (no restart).
 #
 # ── Atomic building blocks ──────────────────────────────────────────────────
 #   chad-ops deploy [--all] chad-deploy push (binaries/config → pod)
@@ -59,6 +60,8 @@ SHIM_PORT="${CHAD_SHIM_PORT:-8901}"
 GW_PORT="${CHAD_GATEWAY_PORT:-18789}"
 HOST_CREDS="${CHAD_HOST_CREDS:-${HOME}/.nemoclaw/credentials.json}"
 ALLOWLIST_FILE="/sandbox/.openclaw-data/state/operator-allowlist"
+SENDERS_FILE="/sandbox/.openclaw-data/state/email-senders.json"
+AUTO_ACTIONS_FILE="/sandbox/.openclaw-data/auto-actions.json"
 INBOX="/sandbox/.openclaw-data/state/agent-inbox.jsonl"
 CRON_JOBS="/sandbox/.openclaw-data/cron/jobs.json"
 GUI="gui/$(id -u)"
@@ -601,8 +604,44 @@ cmd_embed_backfill() {
   dim "progress: ssh $SSH_HOST 'tail -f /tmp/gbrain-embed.log'"
 }
 
+# Email sender lists + per-sender auto-action rules (host creds CHAD_EMAIL_SENDERS)
+# → pod state file, merged into the live auto-actions.json. Keeps operator
+# addresses out of the public repo (email-check, EMAIL-POLICY.md and the
+# auto-actions template all read them from here).
+cmd_senders_sync() {
+  step "senders-sync (email senders + per-sender auto-action rules → pod, from host creds)"
+  local b64 out
+  b64="$(python3 -c "import json,base64;v=json.load(open('$HOST_CREDS')).get('CHAD_EMAIL_SENDERS') or {};print(base64.b64encode(json.dumps(v).encode()).decode() if v.get('admin') else '')" 2>/dev/null || true)"
+  if [ -z "$b64" ]; then
+    bad "no CHAD_EMAIL_SENDERS.admin in $HOST_CREDS — email-check would leave the inbox untouched"
+    return 1
+  fi
+  local py='import json,os
+sf,af=os.environ["SF"],os.environ["AF"]
+s=json.load(open(sf))
+if not os.path.exists(af):
+    print("senders written; no auto-actions.json yet"); raise SystemExit
+p=json.load(open(af)); n=0
+for sec,rules in (s.get("auto_actions") or {}).items():
+    tgt=p.setdefault(sec,{"_default":"block"})
+    for k,v in rules.items():
+        if tgt.get(k)!=v:
+            tgt[k]=v; n+=1
+json.dump(p,open(af+".tmp","w"),indent=2); os.replace(af+".tmp",af)
+print("senders written; auto-actions rules changed:",n)'
+  out="$(sshp "mkdir -p \$(dirname '$SENDERS_FILE') && echo '$b64' | base64 -d > '$SENDERS_FILE.tmp' && mv '$SENDERS_FILE.tmp' '$SENDERS_FILE' && SF='$SENDERS_FILE' AF='$AUTO_ACTIONS_FILE' python3 -c '$py'")"
+  case "$out" in
+    *"senders written"*) ok "$out" ;;
+    *)
+      bad "senders-sync failed: $(echo "$out" | tail -2)"
+      return 1
+      ;;
+  esac
+}
+
 cmd_gate_sync() {
   step "gate-sync (push operator allowlist from host creds → pod file, restart shim)"
+  cmd_senders_sync || true
   local list
   list="$(python3 -c "import json;v=json.load(open('$HOST_CREDS')).get('CHAD_OPERATOR_ALLOWLIST','');print(','.join(v) if isinstance(v,list) else v)" 2>/dev/null || true)"
   if [ -z "$list" ]; then
@@ -1016,6 +1055,7 @@ main() {
     skills-register) cmd_skills_register ;;
     mcp-register) cmd_mcp_register ;;
     gate-sync) cmd_gate_sync ;;
+    senders-sync) cmd_senders_sync ;;
     gate-check) cmd_gate_check ;;
     inbox-prune) cmd_inbox_prune ;;
     "" | -h | --help) usage ;;

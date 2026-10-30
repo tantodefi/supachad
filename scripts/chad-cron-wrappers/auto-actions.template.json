@@ -63,11 +63,7 @@
 
   "email_reply": {
     "_default": "block",
-    "operator-2@example.com": "auto",
-    "operator-2b@example.com":          "auto",
-    "operator-1@example.com":    "auto",
-    "_comment_supachad":      "supachad@proton.me is Chad's own outbound address. Auto-replying to Chad's own emails would create a feedback loop (verified live 2026-05-03). Block self-replies.",
-    "supachad@proton.me":     "block"
+    "_comment_senders": "Per-sender rules (operators: auto; Chad's own address: block, or self-replies loop — verified 2026-05-03) are merged in from the host's private CHAD_EMAIL_SENDERS.auto_actions by `chad-ops gate-sync`, so no addresses live in this public template."
   },
   "email_send_new":            { "_default": "block" },
   "email_forward":             { "_default": "block" },
@@ -102,7 +98,7 @@
   "external_upload":           { "_default": "block" },
 
   "spawn_subagent":            { "_default": "auto" },
-  "spawn_premium":             { "_default": "block", "operator-1@example.com": "auto" },
+  "spawn_premium":             { "_default": "block", "_comment": "operator overrides merged by chad-ops gate-sync" },
   "gbrain_write":              { "_default": "auto" },
   "gbrain_delete":             { "_default": "block" },
 

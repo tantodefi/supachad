@@ -27,10 +27,32 @@
 
 set -uo pipefail
 
-ADMIN_SENDERS_RE='tjcooke@protonmail\.com|tjcooke@pm\.me|tantodefi@proton\.me|supachad@proton\.me'
-# Subset of admins whose inbound mail authorizes a premium (Anthropic) call
-# downstream. See scripts/chad-cron-wrappers/chad-auth-context.
-PREMIUM_SENDERS_RE='tantodefi@proton\.me|supachad@proton\.me'
+# Sender lists live in a pod state file written from the host's private creds
+# (`chad-ops gate-sync`, CHAD_EMAIL_SENDERS), not in this public repo:
+#   {"admin": [...], "premium": [...], "auto_actions": {...}}
+# premium = the subset of admins whose inbound mail authorizes a premium
+# (Anthropic) call downstream (see chad-auth-context).
+SENDERS_FILE="${CHAD_EMAIL_SENDERS_FILE:-/sandbox/.openclaw-data/state/email-senders.json}"
+senders_re() {
+  python3 - "$SENDERS_FILE" "$1" <<'PY' 2>/dev/null
+import json, re, sys
+try:
+    emails = json.load(open(sys.argv[1])).get(sys.argv[2]) or []
+except (OSError, ValueError):
+    emails = []
+print("|".join(re.escape(str(e).strip().lower()) for e in emails if "@" in str(e)))
+PY
+}
+ADMIN_SENDERS_RE="${ADMIN_SENDERS_RE:-$(senders_re admin)}"
+PREMIUM_SENDERS_RE="${PREMIUM_SENDERS_RE:-$(senders_re premium)}"
+if [ -z "$ADMIN_SENDERS_RE" ]; then
+  # Without the list every message would look non-admin and be marked read.
+  # Leave the inbox untouched instead.
+  echo "chad-email-check-cron: no admin senders in ${SENDERS_FILE} — run \`chad-ops gate-sync\` on the host; inbox left untouched"
+  exit 0
+fi
+# Never-matching pattern when no premium senders are configured.
+[ -n "$PREMIUM_SENDERS_RE" ] || PREMIUM_SENDERS_RE='(?!)'
 DEDUP_HOURS=24
 
 WORKSPACE_STATE="/sandbox/.openclaw/workspace/state"
@@ -171,7 +193,7 @@ if cur:
 
 mark_read, park, stale = [], [], []
 for e in entries:
-    # Match the ADDRESS only, whole: `"operator-1@example.com" <x@evil.com>` must
+    # Match the ADDRESS only, whole: `"admin@example.com" <x@evil.com>` must
     # not count as an admin (the old search() matched the display name).
     addr = parseaddr(e["from"])[1].strip().lower()
     e["from_addr"] = addr
@@ -355,7 +377,7 @@ DRAFT_COUNT=0
 # "not-configured" used to be the default but was misleading because
 # the drafter IS configured in task-profiles.json; it just had nothing
 # to draft. Misled an audit on 2026-05-17 into thinking the loop was
-# broken when it was healthy. See docs/operations/wrapper-bugs.md.
+# broken when it was healthy. See `operations/wrapper-bugs.md` (private ops repo).
 DRAFTER_STATUS="not-invoked"
 
 if [ "$PARK_COUNT" -gt 0 ]; then
