@@ -15,7 +15,7 @@
   </array>
   <key>RunAtLoad</key><true/>
   <key>StartInterval</key><integer>60</integer>
-  <key>StandardOutPath</key><string>/tmp/chad-tunnel-watchdog.out.log</string>
-  <key>StandardErrorPath</key><string>/tmp/chad-tunnel-watchdog.err.log</string>
+  <key>StandardOutPath</key><string>/Users/r/.nemoclaw/openwebui/chad-tunnel-watchdog.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/r/.nemoclaw/openwebui/chad-tunnel-watchdog.err.log</string>
 </dict>
 </plist>

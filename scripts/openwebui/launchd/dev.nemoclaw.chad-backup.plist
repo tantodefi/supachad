@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Chad workspace → GitHub chad-state backup from the host, every 6h (replaces the
+     in-pod LLM workspace-backup cron, which stopped running the wrapper).
+     Install: cp to ~/Library/LaunchAgents/ && launchctl load -w <that path> -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.nemoclaw.chad-backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/r/.nemoclaw/source/scripts/openwebui/chad-backup-cron.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StartInterval</key><integer>21600</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/r/.nemoclaw/openwebui/chad-backup.log</string>
+  <key>StandardErrorPath</key><string>/Users/r/.nemoclaw/openwebui/chad-backup.log</string>
+</dict>
+</plist>

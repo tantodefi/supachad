@@ -123,8 +123,8 @@ case "$ACTION" in
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
-  <key>StandardOutPath</key><string>/tmp/chad-tunnel.out.log</string>
-  <key>StandardErrorPath</key><string>/tmp/chad-tunnel.err.log</string>
+  <key>StandardOutPath</key><string>$HOME/.nemoclaw/openwebui/chad-tunnel.out.log</string>
+  <key>StandardErrorPath</key><string>$HOME/.nemoclaw/openwebui/chad-tunnel.err.log</string>
 </dict>
 </plist>
 EOF
@@ -141,7 +141,7 @@ EOF
     if is_running; then
       echo "${ok}    ✓${color_off} launchd agent installed and tunnel running (${PLIST_PATH})"
     else
-      echo "${err}    ✗${color_off} launchd agent installed but ssh did not start — check /tmp/chad-tunnel.err.log" >&2
+      echo "${err}    ✗${color_off} launchd agent installed but ssh did not start — check $HOME/.nemoclaw/openwebui/chad-tunnel.err.log" >&2
       exit 1
     fi
     ;;

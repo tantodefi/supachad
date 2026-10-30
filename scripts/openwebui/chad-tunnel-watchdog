@@ -20,7 +20,7 @@
 #
 # Run via dev.nemoclaw.chad-tunnel-watchdog.plist (StartInterval=60).
 # Manual smoke test: `bash chad-tunnel-watchdog` then check
-# /tmp/chad-tunnel-watchdog.log.
+# ~/.nemoclaw/openwebui/chad-tunnel-watchdog.log.
 
 set -uo pipefail
 
@@ -31,7 +31,7 @@ FAILURE_THRESHOLD="${CHAD_TUNNEL_FAILURE_THRESHOLD:-2}"
 
 STATE_DIR="${TMPDIR:-/tmp}"
 COUNT_FILE="${STATE_DIR}/chad-tunnel-watchdog.fails"
-LOG_FILE="${CHAD_TUNNEL_WATCHDOG_LOG:-/tmp/chad-tunnel-watchdog.log}"
+LOG_FILE="${CHAD_TUNNEL_WATCHDOG_LOG:-$HOME/.nemoclaw/openwebui/chad-tunnel-watchdog.log}"
 
 log() {
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG_FILE"
