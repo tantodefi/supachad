@@ -8,7 +8,7 @@
 # never source), so run this after a fresh checkout before deploying the loader.
 #
 # It fetches the COMPLETE CheerpX tree cx_esm.js eagerly imports (see
-# ../../../docs/design/MASTER-REVIEW... and TERMINAL_INTEGRATION.md): miss one
+# MASTER-REVIEW in the private ops repo, and TERMINAL_INTEGRATION.md): miss one
 # and Linux.create() throws a 404 and the VM never boots.
 #
 #   usage: scripts/openwebui/browser-vm/vendor-populate.sh

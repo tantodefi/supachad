@@ -57,7 +57,7 @@ token.json
 .e2e/
 .gstack/
 
-# Chad runtime state + backups (never source — see docs/design/MASTER-REVIEW-2026-10.md §1b)
+# Chad runtime state + backups (never source — see the private ops repo, MASTER-REVIEW §1b)
 *.db.bak*
 mcp-health.db
 token-optimize.db

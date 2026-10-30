@@ -315,7 +315,7 @@ cur.update({"engine":"pglite","database_path":cur.get("database_path","/sandbox/
 # is the current successor but emits 2048d (no truncation), exceeding the pgvector HNSW
 # 2000-dim cap, so content_chunks.embedding is vector(2048) WITHOUT an hnsw index
 # (seq-scan; fine at this scale). A fresh gbrain init would fail the hnsw index on 2048;
-# the live brain was migrated in place (see docs MASTER-REVIEW gbrain section).
+# the live brain was migrated in place (see MASTER-REVIEW gbrain section, private ops repo).
 json.dump(cur,open(p,"w"),indent=2); os.chmod(p,0o600)
 print("key_set:",bool(key and key!="unused"))
 PY'
