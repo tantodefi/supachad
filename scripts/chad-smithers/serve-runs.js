@@ -158,7 +158,17 @@ function saveNotifyChannels(channels) {
 }
 const POD_SSH = process.env.CHAD_POD_SSH || "openshell-chad";
 const POD_WEBUI = process.env.CHAD_WEBUI_POD_BIN || "/sandbox/.openclaw-data/bin/chad-webui";
-const OPERATOR_EMAIL = process.env.CHAD_OPERATOR_EMAIL || "operator-1@example.com";
+// Where run notifications go: env, else CHAD_OPERATOR_EMAIL in host creds (kept
+// out of the public repo). Empty = notifications are skipped.
+const OPERATOR_EMAIL =
+  process.env.CHAD_OPERATOR_EMAIL ||
+  (() => {
+    try {
+      return JSON.parse(readFileSync(HOST_CREDS, "utf8")).CHAD_OPERATOR_EMAIL || "";
+    } catch {
+      return "";
+    }
+  })();
 const RUNS_PUBLIC_URL = process.env.CHAD_RUNS_PUBLIC_URL || "https://runs.supachad.com";
 // Machine auth for Chad: SMITHERS_API_KEY env, else SMITHERS_RUNS_API_KEY from
 // host credentials.json. Gates writes (alongside Cloudflare Access email). Empty
@@ -1878,7 +1888,7 @@ function dispatchApproval(p) {
     podRun(
       `CHAD_WEBUI_TRUSTED=1 ${POD_WEBUI} notes create --title ${shq(title)} --content ${shq(body)} --tags chad-approvals 2>/dev/null || true`,
     );
-  if (channels.includes("email"))
+  if (channels.includes("email") && OPERATOR_EMAIL)
     podRun(
       `chad-mail-send --to ${shq(OPERATOR_EMAIL)} --subject ${shq(title)} --body ${shq(body)} 2>/dev/null || true`,
     );

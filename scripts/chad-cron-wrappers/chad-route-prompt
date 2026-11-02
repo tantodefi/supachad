@@ -13,7 +13,7 @@
 # content (mail-check, issue-triage, dashboard prompt forwarder).
 #
 # AuthContext must already be set up by the caller (e.g. mail-check writes
-# one when From: is operator-1@example.com). chad-premium itself fail-closes
+# one when From: is a premium_auth sender). chad-premium itself fail-closes
 # if no context is present.
 
 set -uo pipefail

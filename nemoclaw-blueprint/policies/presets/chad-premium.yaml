@@ -12,7 +12,7 @@
 # Authorized invocation paths (all carry an AuthContext):
 #   - dashboard `/premium <prompt>` prefix → chad-route-prompt → chad-premium
 #   - terminal `chad-premium` (auto-detects NEMOCLAW_INVOKER_TOKEN)
-#   - mail-check cron when From: matches operator-1@example.com / supachad@proton.me
+#   - mail-check cron when From: matches a premium sender (state/email-senders.json)
 #   - issue-triage cron when an open issue mentions @supachad / @tantodefi
 #
 # Cron ticks with no inbound trigger have no AuthContext, so calls fail

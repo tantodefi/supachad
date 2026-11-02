@@ -145,7 +145,7 @@ _identity_cache: dict[str, tuple[float, str]] = {}
 
 
 def _slug_from_email(email: str) -> str:
-    """operator-1@example.com → 'tantodefi'. Restricted to a safe set to keep the
+    """alice@example.com → 'alice'. Restricted to a safe set to keep the
     path traversal-free even if a malicious header arrives."""
     local = (email or "").split("@", 1)[0].strip().lower()
     safe = re.sub(r"[^a-z0-9._-]", "", local)

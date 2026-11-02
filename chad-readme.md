@@ -688,7 +688,7 @@ can escalate to Claude Sonnet/Opus through a tightly gated wrapper.
 
 - Dashboard `/premium <prompt>` → `chad-route-prompt` → `chad-premium`
 - Terminal `chad-premium` (auto-detects `NEMOCLAW_INVOKER_TOKEN`)
-- `email-check` cron when From: matches `operator-1@example.com` / `supachad@proton.me`
+- `email-check` cron when From: matches a `premium` sender in `state/email-senders.json` (from host creds)
 - `issue-triage` cron when an open issue mentions `@supachad` / `@tantodefi`
 
 Cron ticks with no inbound trigger have **no AuthContext** — `chad-premium-client`

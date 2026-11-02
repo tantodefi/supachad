@@ -146,7 +146,7 @@ sensitive state, and no policy work.
 ## Tier model as of 2026-10-01 (current)
 
 - **Premium = the `chad` model** (full agent + gbrain + tools), gated by the shim
-  `CHAD_OPERATOR_ALLOWLIST` (`operator-1@example.com`, `<operator-2-email>`).
+  `CHAD_OPERATOR_ALLOWLIST` (`<operator-1-email>`, `<operator-2-email>`).
   Non-operators selecting `chad` get the polite refusal; the model is visible but
   refused (`BYPASS_MODEL_ACCESS_CONTROL=True`).
 - **Free = the `chad-lite` model** → **`nvidia/nemotron-3-nano-4b`** served by

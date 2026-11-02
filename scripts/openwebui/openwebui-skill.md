@@ -111,7 +111,7 @@ agent turn from open-webui, it exports:
 
 ```sh
 CHAD_OPERATOR_SLUG=tantodefi      # email local-part, sanitized
-CHAD_OPERATOR_EMAIL=operator-1@example.com
+CHAD_OPERATOR_EMAIL=operator@example.com
 CHAD_OPERATOR_ROLE=admin
 CHAD_OPERATOR_CHAT_ID=7f02...     # used as openclaw --session-id
 ```
@@ -215,7 +215,7 @@ Hits `GET /api/v1/auths/`. Returns the full user record:
   "id": "79495dc3-…",
   "name": "tantodefi",
   "role": "admin",
-  "email": "operator-1@example.com",
+  "email": "operator@example.com",
   "token": "sk-…"
 }
 ```

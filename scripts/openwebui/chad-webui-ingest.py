@@ -108,7 +108,7 @@ def iso(ts) -> str:
 
 
 def operator_slug(email: str) -> str:
-    """operator-1@example.com → tantodefi (gbrain people/<slug> entity page)."""
+    """alice@example.com → alice (gbrain people/<slug> entity page)."""
     local = (email or "").split("@", 1)[0].lower()
     return re.sub(r"[^a-z0-9-]+", "-", local).strip("-") or "unknown"
 

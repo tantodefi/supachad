@@ -37,7 +37,8 @@ class Worker:
 def run(tmp, worker, emails, **env):
     worker.emails = emails
     e = {**os.environ, "CHAD_HOST_CREDS": str(tmp / "creds.json"), "CHAD_PREMIUM_MANAGED": str(tmp / "managed.json"),
-         "PREMIUM_LIST_URL": worker.url, "PREMIUM_ADMIN_SECRET": "x", "CHAD_OPS_BIN": "true", **env}
+         "PREMIUM_LIST_URL": worker.url, "PREMIUM_ADMIN_SECRET": "x", "CHAD_OPS_BIN": "true",
+         "CHAD_PREMIUM_GRANTS_AGENT": "1", **env}
     r = subprocess.run(["bash", str(SCRIPT)], env=e, capture_output=True, text=True)
     allow = json.load(open(tmp / "creds.json"))["CHAD_OPERATOR_ALLOWLIST"]
     return r, sorted(allow)
@@ -80,3 +81,12 @@ def test_no_change_is_noop(tmp_path):
     run(tmp_path, w, ["a@x.co"])
     r, _ = run(tmp_path, w, ["a@x.co"])
     assert "NOCHANGE" in r.stdout
+
+
+def test_disabled_by_default(tmp_path):
+    # Premium is unlimited Chad Lite; without the override it must not touch the allowlist.
+    setup(tmp_path)
+    w = Worker()
+    r, allow = run(tmp_path, w, ["a@x.co"], CHAD_PREMIUM_GRANTS_AGENT="0")
+    assert "disabled" in r.stdout
+    assert allow == sorted(OPS)

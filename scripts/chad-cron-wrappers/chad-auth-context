@@ -19,7 +19,7 @@
 # Default ($CHAD_AUTH_CONTEXT_PATH unset): /tmp/chad-auth-context-$$.json
 #
 # Authorized sources today:
-#   operator-1@example.com  — inbound email From: header
+#   premium_auth senders — inbound email From: header (state/email-senders.json)
 #   tantodefi, supachad  — github @mention actors / mentioners
 #   <NEMOCLAW_INVOKER_TOKEN match> — terminal session presenting host token
 #   dashboard            — openclaw plugin verified senderId
@@ -38,7 +38,12 @@ set -uo pipefail
 
 CTX_PATH="${CHAD_AUTH_CONTEXT_PATH:-/tmp/chad-auth-context-$$.json}"
 CREDS_FILE="${CHAD_CREDS_FILE:-/sandbox/.nemoclaw/credentials.json}"
-ALLOWED_EMAIL_SENDERS="${CHAD_PREMIUM_EMAIL_ALLOW:-operator-1@example.com}"
+# Comma-separated. Default: `premium_auth` in the pod's email-senders.json, written
+# from the host's private creds by `chad-ops senders-sync` (no addresses in the repo).
+# Missing file = nobody is authorized (fail closed).
+ALLOWED_EMAIL_SENDERS="${CHAD_PREMIUM_EMAIL_ALLOW:-$(python3 -c 'import json,sys
+try: print(",".join(json.load(open(sys.argv[1])).get("premium_auth") or []))
+except Exception: print("")' "${CHAD_EMAIL_SENDERS_FILE:-/sandbox/.openclaw-data/state/email-senders.json}" 2>/dev/null)}"
 ALLOWED_GH_ACTORS="${CHAD_PREMIUM_GH_ALLOW:-tantodefi,supachad}"
 
 usage() {

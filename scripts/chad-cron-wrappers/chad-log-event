@@ -23,7 +23,7 @@
 #
 # Example:
 #   chad-log-event mail-in chad-mail-check \
-#     "operator-2@example.com: Squat depth question" \
+#     "operator@example.com: Squat depth question" \
 #     "msg-id:abc123"
 
 set -euo pipefail

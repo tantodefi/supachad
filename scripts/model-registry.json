@@ -60,7 +60,7 @@
       "tier": "frontier",
       "modality": ["text", "vision"],
       "requiresAuthContext": true,
-      "_note": "Premium endpoint. Hits Anthropic Messages API directly. Routed via chad-premium-client; access gated by chad-auth-context (dashboard senderId, terminal token, operator-1@example.com sender, or @supachad mention)."
+      "_note": "Premium endpoint. Hits Anthropic Messages API directly. Routed via chad-premium-client; access gated by chad-auth-context (dashboard senderId, terminal token, premium_auth email sender, or @supachad mention)."
     },
     "claude-sonnet-4-6": {
       "displayName": "Claude Sonnet 4.6",

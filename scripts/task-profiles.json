@@ -247,7 +247,7 @@
       "thinking": "high",
       "minBudgetTokens": 0,
       "requiresAuthContext": true,
-      "reason": "Premium variant of content-generation. Used when an inbound email from operator-1@example.com requests an article or when /premium write … is invoked. thinking=high so Sonnet can plan structure across long-form drafts before generating prose."
+      "reason": "Premium variant of content-generation. Used when an inbound email from a premium_auth sender requests an article or when /premium write … is invoked. thinking=high so Sonnet can plan structure across long-form drafts before generating prose."
     },
 
     "issue-triage-coder-subagent-premium": {
@@ -269,7 +269,7 @@
       "thinking": "high",
       "minBudgetTokens": 0,
       "requiresAuthContext": true,
-      "reason": "Premium variant of chad-bug-intake-orchestrator. Used when an inbound bug report email is from operator-1@example.com. thinking=high because dedup decisions across the full open-issue corpus are exactly the kind of multi-step reasoning Sonnet wins at."
+      "reason": "Premium variant of chad-bug-intake-orchestrator. Used when an inbound bug report email is from a premium_auth sender. thinking=high because dedup decisions across the full open-issue corpus are exactly the kind of multi-step reasoning Sonnet wins at."
     }
   }
 }
