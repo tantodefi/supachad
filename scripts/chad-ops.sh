@@ -789,7 +789,7 @@ cmd_doctor() {
   errs=$(sshp "grep \$(date -u +%Y-%m-%d) '$INBOX' 2>/dev/null | grep -c '\"severity\":\"error\"'")
   [[ "$errs" =~ ^[0-9]+$ ]] || errs=0
   [ "$errs" -gt 50 ] && warn "agent-inbox has ${errs} error events today (run: chad-ops inbox-prune)" || ok "agent-inbox clean (${errs:-0} errors today)"
-  # chad-state backup freshness (workspace-backup cron runs every 6h)
+  # chad-state backup freshness (host launchd dev.nemoclaw.chad-backup runs every 6h)
   local tok repo last
   tok=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('GITHUB_TOKEN',''))" 2>/dev/null)
   repo=$(python3 -c "import json;print(json.load(open('$HOST_CREDS')).get('CHAD_STATE_REPO','tantodefi/chad-state'))" 2>/dev/null)
@@ -798,7 +798,7 @@ cmd_doctor() {
   if ! [[ "$last" =~ ^[0-9]+$ ]]; then
     warn "chad-state backup age unknown (GitHub API unreachable or token lacks access)"
   elif [ "$last" -gt 12 ]; then
-    warn "last chad-state backup ${last}h ago (expect ≤6h) — workspace-backup cron not running?"
+    warn "last chad-state backup ${last}h ago (expect ≤6h) — host job dev.nemoclaw.chad-backup not running? see ~/.nemoclaw/openwebui/chad-backup.log"
   else
     ok "chad-state backup fresh (${last}h ago)"
   fi

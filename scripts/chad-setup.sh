@@ -919,12 +919,11 @@ The command detaches and finishes in the background; do not wait beyond the stdo
     register_cron_via_ssh "email-check" "0 2,6-23 * * *" "" "$email_check_message"
   fi
 
-  if echo "$existing_crons" | grep -q "workspace-backup"; then
-    warn "workspace-backup cron already registered — skipping"
-  else
-    info "Registering workspace-backup cron (every 6 hours)"
-    register_cron_via_ssh "workspace-backup" "0 */6 * * *" "" "$workspace_backup_message"
-  fi
+  # workspace-backup is no longer an in-pod LLM cron: from 2026-10-25 the model
+  # refused most runs (memory auto-recall), so the host launchd job
+  # dev.nemoclaw.chad-backup (scripts/openwebui/chad-backup-cron.sh) runs
+  # chad-backup-to-github every 6h instead. Don't re-register it here.
+  : "${workspace_backup_message:?}"
 
   if echo "$existing_crons" | grep -q "issue-triage"; then
     warn "issue-triage cron already registered — skipping"
@@ -1079,7 +1078,7 @@ Report its one-line summary (observed/evaluated/designed) and exit.'
     info "Patching existing crons to --no-deliver --best-effort-deliver"
     # shellcheck disable=SC2029
     ssh "$REMOTE_HOST" '
-      for name in email-check workspace-backup gbrain-dream issue-triage self-improve chad-budget-audit chad-proposal-apply chad-skill-watch; do
+      for name in email-check gbrain-dream issue-triage self-improve chad-budget-audit chad-proposal-apply chad-skill-watch; do
         id="$(openclaw cron list 2>/dev/null | awk -v n="$name" "\$2==n {print \$1}")"
         if [ -n "$id" ]; then
           openclaw cron edit "$id" --no-deliver --best-effort-deliver >/dev/null 2>&1 || true
